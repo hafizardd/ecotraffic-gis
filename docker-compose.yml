@@ -18,8 +18,8 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
-    env_file: .env
+      - "8080:8080"
+    env_file: ./backend/.env
     depends_on:
       - postgres
       - redis
@@ -27,7 +27,7 @@ services:
   worker:
     build: ./backend
     command: celery -A app.workers.inference_worker worker --loglevel=info
-    env_file: .env
+    env_file: ./backend/.env
     depends_on:
       - redis
       - postgres
@@ -36,6 +36,10 @@ services:
     build: ./frontend
     ports:
       - "3000:3000"
+    env_file:
+      - ./frontend/.env
+    environment:
+      - NODE_ENV=development
 
 volumes:
   pgdata:
