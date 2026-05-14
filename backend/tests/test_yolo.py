@@ -1,26 +1,35 @@
 from ultralytics import YOLO
 import cv2
-import requests
-import numpy as np
 import os
 
-# Load YOLOv8 model
+# Load model
 model = YOLO("yolo/yolov8l.pt")
 
-test_image_url = "https://cdn.antaranews.com/cache/1200x800/2025/04/08/Suasana-lalu-lintas-Jakarta-Setelah-Libur-Lebaran-Jakarta-080425-Rn-1.jpg"
+# Build absolute path safely
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+print(f"Base directory: {BASE_DIR}")  # Debug print to check base directory
 
-# Download image bytes and decode to array (cv2.imread can't read URLs)
-resp = requests.get(test_image_url, timeout=15)
-resp.raise_for_status()
-img_array = np.frombuffer(resp.content, np.uint8)
-img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+test_image_path = os.path.join(
+    BASE_DIR,
+    "tests",
+    "frames_playlist.m3u8",
+    "playlist.m3u8_8.jpg"
+)
+print(f"Constructed test image path: {test_image_path}")  # Debug print to check constructed path
+
+## backend\tests\frames_playlist.m3u8\playlist.m3u8_8.jpg
+
+print("Loading image:", test_image_path)
+
+# Read image
+img = cv2.imread(test_image_path)
+
 if img is None:
-    raise RuntimeError("Failed to load image from URL")
+    raise FileNotFoundError(f"Failed to load image: {test_image_path}")
 
-# Run detection on the image (pass image array to model)
+# Run YOLO
 results = model(img)
 
-# COCO vehicle classes we care about
 vehicle_classes = {
     2: "car",
     3: "motorcycle",
@@ -28,11 +37,8 @@ vehicle_classes = {
     7: "truck"
 }
 
-# Process detections
 for result in results:
-    boxes = result.boxes
-
-    for box in boxes:
+    for box in result.boxes:
         cls_id = int(box.cls[0])
         conf = float(box.conf[0])
 
@@ -41,14 +47,11 @@ for result in results:
 
             x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-            # Draw bounding box
             cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-            text = f"{label} {conf:.2f}"
 
             cv2.putText(
                 img,
-                text,
+                f"{label} {conf:.2f}",
                 (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
@@ -58,8 +61,9 @@ for result in results:
 
             print(f"Detected: {label} ({conf:.2f})")
 
-# Save output next to this test file
-out_path = os.path.join(os.path.dirname(__file__), "output.jpg")
-cv2.imwrite(out_path, img)
+# Save output
+output_path = os.path.join(os.path.dirname(__file__), "output.jpg")
 
-print(f"\nDone. Check {out_path}")
+cv2.imwrite(output_path, img)
+
+print(f"\nDone. Check {output_path}")
