@@ -1,0 +1,42 @@
+# ============================================================
+# EcoTraffic GIS — Backend Dependencies
+# Python 3.10+
+# ============================================================
+
+# --- Web Framework ---
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# --- WebSocket ---
+websockets==12.0
+
+# --- Database ---
+sqlalchemy==2.0.30
+asyncpg==0.29.0          # async PostgreSQL driver
+psycopg2-binary==2.9.9   # sync driver (used by Alembic)
+alembic==1.13.1
+geoalchemy2==0.15.1      # PostGIS geometry types for SQLAlchemy
+
+# --- Task Queue ---
+celery==5.4.0
+redis==5.0.4
+
+# --- Pydantic ---
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# --- HTTP / Streaming ---
+httpx==0.27.0
+aiohttp==3.9.5           # async HLS stream fetching
+
+# --- Computer Vision ---
+ultralytics==8.2.0       # YOLOv8
+opencv-python-headless==4.9.0.80  # headless — no GUI needed on server
+
+# --- Environment ---
+python-dotenv==1.0.1
+python-multipart==0.0.9  # multipart form data (file uploads)
+
+# --- Testing ---
+pytest==8.2.0
+pytest-asyncio==0.23.6
