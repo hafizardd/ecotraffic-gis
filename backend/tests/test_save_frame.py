@@ -2,7 +2,7 @@ import cv2
 import os
 from urllib.parse import urlparse
 
-url = "https://cctvjss.jogjakota.go.id/dprd-kota/depan-dprd-v-selatan.stream/playlist.m3u8"
+url = "https://cctvjss.jogjakota.go.id/atcs/ATCS_Utara-Timur_Gardena_Jl_Urip%20Sumoharjo_V_Timur.stream/chunklist_w760075980.m3u8"
 
 # Extract camera name from URL
 parsed = urlparse(url)
