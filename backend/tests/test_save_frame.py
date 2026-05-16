@@ -1,62 +1,96 @@
-import cv2
 import os
 from urllib.parse import urlparse
 
-url = "https://cctvjss.jogjakota.go.id/atcs/ATCS_Utara-Timur_Gardena_Jl_Urip%20Sumoharjo_V_Timur.stream/chunklist_w760075980.m3u8"
+import pytest
 
-# Extract camera name from URL
-parsed = urlparse(url)
-print(f"Parsed URL: {parsed}")  # Debug print to check URL parsing
 
-camera_name = os.path.basename(parsed.path).replace(".stream/playlist.m3u8", "")
-camera_name = camera_name.replace(".stream", "")
+STREAM_URL = (
+    "https://cctvjss.jogjakota.go.id/atcs/"
+    "ATCS_Utara-Timur_Gardena_Jl_Urip%20Sumoharjo_V_Timur.stream/"
+    "chunklist_w760075980.m3u8"
+)
 
-print(f"Camera name: {camera_name}")  # Debug print to check camera name extraction
 
-# Create output folder
-output_dir = f"frames_{camera_name}"
-os.makedirs(output_dir, exist_ok=True)
+def camera_name_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    camera_name = os.path.basename(parsed.path)
+    camera_name = camera_name.replace(".stream/playlist.m3u8", "")
+    camera_name = camera_name.replace(".stream", "")
+    return camera_name or "camera"
 
-# Open stream
-cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
 
-if not cap.isOpened():
-    print("Error: Could not open video stream")
-    exit()
+def save_frames_from_stream(
+    url: str,
+    output_dir: str,
+    *,
+    max_frames: int = 10,
+    skip_frames: int = 30,
+) -> list[str]:
+    """Save up to max_frames from the stream, writing every skip_frames-th frame."""
+    import cv2
 
-frame_count = 0
-saved_count = 0
+    os.makedirs(output_dir, exist_ok=True)
 
-# How many frames you want to save
-max_frames = 10
+    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    if not cap.isOpened():
+        raise RuntimeError("Could not open video stream")
 
-# Save every N-th frame
-skip_frames = 30
+    frame_count = 0
+    saved_count = 0
+    saved_paths: list[str] = []
 
-while saved_count < max_frames:
-    ret, frame = cap.read()
+    try:
+        while saved_count < max_frames:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-    if not ret:
-        print("Error: Could not read frame")
-        break
+            frame_count += 1
+            if skip_frames > 1 and (frame_count % skip_frames != 0):
+                continue
 
-    frame_count += 1
+            output_path = os.path.join(output_dir, f"frame_{saved_count + 1}.jpg")
+            if not cv2.imwrite(output_path, frame):
+                raise RuntimeError(f"Failed to write frame to {output_path}")
 
-    # Skip frames to avoid saving near-identical images
-    if frame_count % skip_frames != 0:
-        continue
+            saved_paths.append(output_path)
+            saved_count += 1
+    finally:
+        cap.release()
 
-    output_path = os.path.join(
-        output_dir,
-        f"{camera_name}_{saved_count + 1}.jpg"
+    return saved_paths
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_STREAM_TESTS") != "1",
+    reason="Integration test (network/ffmpeg). Set RUN_STREAM_TESTS=1 to enable.",
+)
+def test_can_save_single_frame(tmp_path):
+    out_dir = tmp_path / "frames"
+    saved = save_frames_from_stream(
+        STREAM_URL,
+        str(out_dir),
+        max_frames=1,
+        skip_frames=1,
     )
+    assert len(saved) == 1
+    assert os.path.exists(saved[0])
 
-    cv2.imwrite(output_path, frame)
 
-    print(f"Saved: {output_path}")
+def main() -> None:
+    camera = camera_name_from_url(STREAM_URL)
+    output_dir = f"frames_{camera}"
+    max_frames = int(os.getenv("SAVE_FRAME_MAX_FRAMES", "10"))
+    skip_frames = int(os.getenv("SAVE_FRAME_SKIP_FRAMES", "30"))
 
-    saved_count += 1
+    saved = save_frames_from_stream(
+        STREAM_URL,
+        output_dir,
+        max_frames=max_frames,
+        skip_frames=skip_frames,
+    )
+    print(f"Saved {len(saved)} frame(s) to {output_dir}")
 
-cap.release()
 
-print("Done extracting frames")
+if __name__ == "__main__":
+    main()

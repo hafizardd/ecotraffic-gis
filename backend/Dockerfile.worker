@@ -1,0 +1,15 @@
+FROM python:3.10-slim
+
+# System deps needed by OpenCV
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 libgl1-mesa-glx ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.cv.txt .
+RUN pip install --no-cache-dir -r requirements.cv.txt
+
+COPY . .
+
+CMD ["celery", "-A", "app.workers.inference_worker", "worker", "--loglevel=info"]

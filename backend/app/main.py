@@ -1,5 +1,38 @@
-from ultralytics import YOLO
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+ 
+from app.api.routes import cameras, emissions
+from app.core.config import settings
+ 
+app = FastAPI(
+    title="EcoTraffic GIS",
+    description="Real-time vehicle carbon emission monitoring for Yogyakarta",
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
-model = YOLO("yolov8n.pt")
+# ------------------------------------------------------------------
+# CORS — allow the React frontend (localhost:3000) to call the API
+# ------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",   
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-results = model.predict(source="https://cdn.antaranews.com/cache/1200x800/2025/04/08/Suasana-lalu-lintas-Jakarta-Setelah-Libur-Lebaran-Jakarta-080425-Rn-1.jpg", show=True)
+# ------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------
+app.include_router(cameras.router)
+app.include_router(emissions.router)
+ 
+ 
+@app.get("/health")
+async def health():
+    """Quick health check — used by Docker and monitoring."""
+    return {"status": "ok", "debug": settings.DEBUG}

@@ -4,6 +4,7 @@ import os
 import subprocess
 import time
 import argparse
+import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 

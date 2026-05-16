@@ -1,0 +1,62 @@
+import json
+ 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+ 
+from app.core.database import get_db
+from app.models.camera import Camera
+from app.schemas.camera import (
+    CameraFeature,
+    CameraFeatureCollection,
+    CameraProperties,
+    GeoJSONPoint,
+)
+ 
+router = APIRouter(prefix="/api/cameras", tags=["cameras"])
+
+@router.get("", response_model=CameraFeatureCollection)
+async def get_cameras(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(
+            Camera,
+            text("ST_AsGeoJSON(cameras.location)::json as geojson")
+        )
+        .where(Camera.is_active == True)
+        .order_by(Camera.created_at)
+    )
+    rows = result.all()
+
+    features = []
+    for camera, geojson in rows:
+        coords = geojson["coordinates"]  # [longitude, latitude]
+        features.append(
+            CameraFeature(
+                geometry=GeoJSONPoint(coordinates=coords),
+                properties=CameraProperties(
+                    id=camera.id,
+                    name=camera.name,
+                    camera_id=camera.camera_id,
+                    stream_url=camera.stream_url,
+                    is_active=camera.is_active,
+                    created_at=camera.created_at,
+                )
+            )
+        )
+
+    return CameraFeatureCollection(features=features)
+
+@router.get("/{camera_id}", response_model=CameraProperties)
+async def get_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Returns a single camera by its slug (camera_id).
+    """
+    result = await db.execute(
+        select(Camera).where(Camera.camera_id == camera_id)
+    )
+    camera = result.scalar_one_or_none()
+ 
+    if camera is None:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found.")
+ 
+    return camera
