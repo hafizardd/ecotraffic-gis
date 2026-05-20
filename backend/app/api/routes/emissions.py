@@ -66,15 +66,27 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
     if not cameras:
         return EmissionSummaryResponse(
             total_cameras_active=0,
-            total_g_per_min=0.0,
-            total_kg_per_hr=0.0,
+            total_co_g_per_min=0.0,
+            total_co_kg_per_hr=0.0,
+            total_nox_g_per_min=0.0,
+            total_nox_kg_per_hr=0.0,
+            total_pm_g_per_min=0.0,
+            total_pm_kg_per_hr=0.0,
+            total_nmvoc_g_per_min= 0.0,
+            total_nmvoc_kg_per_hr=0.0,
             by_vehicle=VehicleSummary(car=0, motorcycle=0, bus=0, truck=0),
             last_updated=None,
         )
  
     # For each camera, get its most recent emission row
-    total_g = 0.0
-    total_kg = 0.0
+    total_co_g = 0.0
+    total_co_kg = 0.0
+    total_nox_g = 0.0
+    total_nox_kg = 0.0
+    total_pm_g = 0.0
+    total_pm_kg = 0.0
+    total_nmvoc_g = 0.0
+    total_nmvoc_kg = 0.0
     total_car = 0
     total_motorcycle = 0
     total_bus = 0
@@ -91,8 +103,22 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
         emission = result.scalar_one_or_none()
  
         if emission:
-            total_g += emission.total_g_per_min
-            total_kg += emission.total_kg_per_hr
+            # Compute CO totals
+            total_co_g += emission.total_co_g_per_min
+            total_co_kg += emission.total_co_kg_per_hr
+
+            # Compute NOx totals
+            total_nox_g += emission.total_nox_g_per_min
+            total_nox_kg += emission.total_nox_kg_per_hr
+
+            # Compute PM totals
+            total_pm_g += emission.total_pm_g_per_min
+            total_pm_kg += emission.total_pm_kg_per_hr
+
+            # Compute NMVOC totals
+            total_nmvoc_g += emission.total_nmvoc_g_per_min
+            total_nmvoc_kg += emission.total_nmvoc_kg_per_hr
+
             total_car += emission.car
             total_motorcycle += emission.motorcycle
             total_bus += emission.bus
@@ -103,8 +129,14 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
  
     return EmissionSummaryResponse(
         total_cameras_active=len(cameras),
-        total_g_per_min=round(total_g, 2),
-        total_kg_per_hr=round(total_kg, 4),
+        total_co_g_per_min=round(total_co_g, 2),
+        total_co_kg_per_hr=round(total_co_kg, 4),
+        total_nox_g_per_min=round(total_nox_g, 2),
+        total_nox_kg_per_hr=round(total_nox_kg, 4),
+        total_pm_g_per_min=round(total_pm_kg),
+        total_pm_kg_per_hr=round(total_pm_kg),
+        total_nmvoc_g_per_min= round(total_nmvoc_kg),
+        total_nmvoc_kg_per_hr=round(total_nmvoc_kg),
         by_vehicle=VehicleSummary(
             car=total_car,
             motorcycle=total_motorcycle,

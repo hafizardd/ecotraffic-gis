@@ -82,8 +82,14 @@ def process_camera(self, camera_id:str) -> dict:
         "motorcycle": vehicle_counts["motorcycle"],
         "bus": vehicle_counts["bus"],
         "truck": vehicle_counts["truck"],
-        "total_g_per_min": emission["total_g_per_min"],
-        "total_kg_per_hr": emission["total_kg_per_hr"],
+        "total_co_g_per_min": emission["total_co_g_per_min"],
+        "total_co_kg_per_hr": emission["total_co_kg_per_hr"],
+        "total_nox_g_per_min": emission["total_nox_g_per_min"],
+        "total_nox_kg_per_hr": emission["total_nox_kg_per_hr"],
+        "total_pm_g_per_min": emission["total_pm_g_per_min"],
+        "total_pm_kg_per_hr": emission["total_pm_kg_per_hr"],
+        "total_nmvoc_g_per_min": emission["total_nmvoc_g_per_min"],
+        "total_nmvoc_kg_per_hr": emission["total_nmvoc_kg_per_hr"],
         "cycle_duration_s": round(cycle_duration, 2)
     }
         
@@ -96,8 +102,14 @@ def process_camera(self, camera_id:str) -> dict:
             motorcycle=vehicle_counts["motorcycle"],
             bus=vehicle_counts["bus"],
             truck=vehicle_counts["truck"],
-            total_g_per_min=emission["total_g_per_min"],
-            total_kg_per_hr=emission["total_kg_per_hr"],
+            total_co_g_per_min=emission["total_co_g_per_min"],
+            total_co_kg_per_hr=emission["total_co_kg_per_hr"],
+            total_nox_g_per_min=emission["total_nox_g_per_min"],
+            total_nox_kg_per_hr=emission["total_nox_kg_per_hr"],
+            total_pm_g_per_min=emission["total_pm_g_per_min"],
+            total_pm_kg_per_hr=emission["total_pm_kg_per_hr"],
+            total_nmvoc_g_per_min=emission["total_nmvoc_g_per_min"],
+            total_nmvoc_kg_per_hr=emission["total_nmvoc_kg_per_hr"],
             cycle_duration_s=round(cycle_duration, 2),
         ))
 
