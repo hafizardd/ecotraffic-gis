@@ -1,7 +1,10 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
  
 from app.api.routes import cameras, emissions
+from app.api.routes.websocket import router as websocket_router, redis_subscriber
 from app.core.config import settings
  
 app = FastAPI(
@@ -30,8 +33,12 @@ app.add_middleware(
 # ------------------------------------------------------------------
 app.include_router(cameras.router)
 app.include_router(emissions.router)
- 
- 
+app.include_router(websocket_router)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(redis_subscriber())
+
 @app.get("/health")
 async def health():
     """Quick health check — used by Docker and monitoring."""

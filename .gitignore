@@ -28,3 +28,5 @@ Thumbs.db
 
 backend/logs/*.csv
 backend/logs/spot_checks
+
+backend/celerybeat-schedule*

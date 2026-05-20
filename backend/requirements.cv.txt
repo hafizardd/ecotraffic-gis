@@ -6,8 +6,11 @@
 # ============================================================
 
 # --- Computer Vision ---
-ultralytics==8.2.0                   # YOLOv8 (pulls in PyTorch automatically)
-opencv-python-headless==4.9.0.80     # headless — no GUI needed on server
+ultralytics==8.2.0
+opencv-python-headless==4.9.0.80
+numpy<2                             
+torch==2.5.1                       
+torchvision==0.20.1                 
 
 # --- Task Queue ---
 celery==5.4.0

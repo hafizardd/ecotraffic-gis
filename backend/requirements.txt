@@ -10,6 +10,7 @@ uvicorn[standard]==0.30.1
 
 # --- WebSocket ---
 websockets==12.0
+redis[asyncio]==5.0.4
 
 # --- Database ---
 sqlalchemy==2.0.30
