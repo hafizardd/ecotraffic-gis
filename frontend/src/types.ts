@@ -20,3 +20,21 @@ export interface CameraFeatureCollection {
     type: "FeatureCollection";
     features: CameraFeature[];
 }
+
+export interface EmissionUpdate {
+    camera_id: string;
+    timestamp: string;
+    car: number;
+    motorcycle: number;
+    bus: number;
+    truck: number;
+    total_co_g_per_min: number;
+    total_co_kg_per_hr: number;
+    total_nox_g_per_min: number;
+    total_nox_kg_per_hr: number;
+    total_pm_g_per_min: number;
+    total_pm_kg_per_hr: number;
+    total_nmvoc_g_per_min: number;
+    total_nmvoc_kg_per_hr: number;
+    cycle_duration_s: number;
+}

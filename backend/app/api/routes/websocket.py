@@ -56,6 +56,7 @@ async def redis_subscriber():
     Runs forever as a background task.
     """
     logger.info("Starting Redis subscriber...")
+    print("🟡 Redis subscriber starting...")
     
     while True:
         try:
@@ -66,6 +67,7 @@ async def redis_subscriber():
             pubsub = client.pubsub()
             await pubsub.psubscribe("emissions:*")
             logger.info("Subscribed to Redis pattern: emissions:*")
+            print("✅ Subscribed to Redis pattern: emissions:*")
  
             async for message in pubsub.listen():
                 if message["type"] == "pmessage":
