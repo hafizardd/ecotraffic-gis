@@ -1,11 +1,11 @@
 FROM python:3.10-slim
 
-COPY requirements.txt ./
+WORKDIR /app
+
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /app
-COPY . /app
+COPY . .
 
-EXPOSE 8080
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

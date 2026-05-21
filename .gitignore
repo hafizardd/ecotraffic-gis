@@ -25,3 +25,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+backend/logs/*.csv
+backend/logs/spot_checks
+
+backend/celerybeat-schedule*
