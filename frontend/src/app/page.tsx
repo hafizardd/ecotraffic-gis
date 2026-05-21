@@ -1,6 +1,7 @@
 'use client'
 
 import dynamic from "next/dynamic";
+import { EmissionsProvider } from "@/context/EmissionsContext";
 
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
@@ -9,8 +10,10 @@ const MapView = dynamic(() => import('@/components/Map/MapView'), {
 
 export default function Home() {
   return (
-    <main style={{ height: '100vh', margin: 0, padding: 0 }}>
-      <MapView />
-    </main>
+    <EmissionsProvider>
+      <main style={{ height: '100vh', margin: 0, padding: 0 }}>
+        <MapView />
+      </main>
+    </EmissionsProvider>
   );
 }
