@@ -35,10 +35,13 @@ app.include_router(cameras.router)
 app.include_router(emissions.router)
 app.include_router(websocket_router)
 
+_background_tasks = set()
+
 @app.on_event("startup")
 async def startup_event():
-    print("🔴 Starting redis_subscriber...")
-    asyncio.create_task(redis_subscriber())
+    task = asyncio.create_task(redis_subscriber())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 @app.get("/health")
 async def health():

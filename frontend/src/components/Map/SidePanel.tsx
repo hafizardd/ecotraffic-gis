@@ -21,7 +21,7 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
 
     return (
         <div
-            className="fixed top-0 right-0 h-full w-100 bg-white dark:bg-zinc-900 shadow-2xl transform transition-transform duration-300 ease-in-out z-[9999]"
+            className="fixed top-0 right-0 h-full w-100 bg-white dark:bg-zinc-900 shadow-2xl transform transition-transform duration-300 ease-in-out z-9999"
         >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-700">
@@ -35,7 +35,7 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
                     </svg>
                 </button>
             </div>
-            
+
             {/* Content */}
             <div className="overflow-y-auto h-[calc(100%-60px)]">
                 {/* Section 1: Live Video */}
