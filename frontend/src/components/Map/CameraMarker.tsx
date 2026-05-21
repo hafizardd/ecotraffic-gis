@@ -1,4 +1,4 @@
-import { CameraFeature } from "@/services/api";
+import { CameraFeature } from "@/types";
 import { CircleMarker, Tooltip } from "react-leaflet";
 
 interface CameraMarkerProps {
