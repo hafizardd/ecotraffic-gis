@@ -37,6 +37,7 @@ app.include_router(websocket_router)
 
 @app.on_event("startup")
 async def startup_event():
+    print("🔴 Starting redis_subscriber...")
     asyncio.create_task(redis_subscriber())
 
 @app.get("/health")
