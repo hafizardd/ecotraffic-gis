@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { fetchCameras, CameraFeature } from "@/services/api";
+import { fetchCameras } from "@/services/api";
+import { CameraFeature } from "@/types";
 
 export default function useCameras() {
     const [cameras, setCameras] = useState<CameraFeature[]>([]);
