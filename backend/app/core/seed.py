@@ -17,33 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session_factory
 from app.core.config import settings
+from app.core.cctv import CAMERAS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-# Camera Data
-
-CAMERAS = [
-    {
-        "name": "ATCS UTARA-TIMUR GARDENA (JL. URIP SUMOHARJO) V. TIMUR",
-        "camera_id": "atcs_urip_sumoharjo",
-        "stream_url": "https://cctvjss.jogjakota.go.id/atcs/ATCS_Utara-Timur_Gardena_Jl_Urip%20Sumoharjo_V_Timur.stream/playlist.m3u8",
-        "referer": "https://cctv.jogjakota.go.id/",
-        "longitude": 110.381315,
-        "latitude": -7.782848,
-        "is_active": True,
-    },
-
-    # {
-    #     "name": "",
-    #     "camera_id": "",
-    #     "stream_url": "",
-    #     "referer": "",
-    #     "longitude": 0.0,
-    #     "latitude": 0.0,
-    #     "is_active": True,
-    # },
-]
 
 # Seed Logic
 async def seed_cameras(session: AsyncSession) -> None:
