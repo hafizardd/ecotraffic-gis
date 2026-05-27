@@ -62,3 +62,11 @@ export interface CameraEmissionsResponse {
     total_records: number;
     emissions: EmissionRow[];
 }
+
+export interface ChartPoint {
+    timestamp: string;
+    co: number;
+    nox: number;
+    pm: number;
+    nmvoc: number;
+}

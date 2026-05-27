@@ -6,7 +6,7 @@ import { MapContainer, TileLayer } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 import CameraMarker from "./CameraMarker";
-import SidePanel from "./SidePanel";
+import SidePanel from "../Panel/SidePanel";
 import { getMarkerColor } from "@/utils/markerColor";
 import useCameras from "@/hooks/useCameras";
 import { CameraFeature } from "@/types";

@@ -5,6 +5,7 @@ import VideoFeed from "./VideoFeed";
 import EmissionStats from "./EmissionStats";
 import VehicleCount from "./VehicleCount";
 import { useEmissionsContext } from "@/context/EmissionsContext";
+import EmissionChart from "./EmissionChart";
 
 interface SidePanelProps {
     camera: CameraFeature | null;
@@ -57,6 +58,17 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
                         Vehicle Count
                     </h3>
                     <VehicleCount emission={liveEmission} />
+                </div>
+
+                {/* Section 4: Emission Chart */}
+                <div className="border-b border-zinc-200 dark:border-zinc-700">
+                    <h3 className="px-4 pt-4 pb-4 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                        Emission Trend
+                    </h3>
+                    <EmissionChart 
+                        cameraId={camera.properties.camera_id}
+                        liveEmission={liveEmission}
+                    />
                 </div>
             </div>
         </div>
