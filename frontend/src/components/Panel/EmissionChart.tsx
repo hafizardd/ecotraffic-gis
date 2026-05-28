@@ -73,7 +73,16 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
                             tickLine={false}
                             width={40}
                         />
-                        <Tooltip labelFormatter={(ts) => formatTime(ts)} />
+                        <Tooltip
+                            labelFormatter={(ts) => formatTime(ts)}
+                            contentStyle={{
+                                backgroundColor: "#18181b",
+                                border: "1px solid #3f3f46",
+                                borderRadius: "6px",
+                            }}
+                            labelStyle={{ color: "#a1a1aa" }}  // ← timestamp color
+                            itemStyle={{ fontWeight: 500 }}
+                        />
                         <Legend />
                         {lines.map(({ key, color, name }) => (
                             <Line

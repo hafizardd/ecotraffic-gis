@@ -1,0 +1,285 @@
+{
+  "version": "2.11",
+  "children": [
+    {
+      "type": "frame",
+      "id": "G3zi9",
+      "x": 0,
+      "y": 0,
+      "name": "EcoTraffic GIS Logo",
+      "width": 580,
+      "gap": 28,
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "gvMI4",
+          "name": "Logo Icon",
+          "width": 140,
+          "height": 140,
+          "layout": "none",
+          "children": [
+            {
+              "type": "ellipse",
+              "id": "a6QJ2",
+              "x": 0,
+              "y": 0,
+              "name": "Outer Circle BG",
+              "fill": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "rotation": 135,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "#D8F3DC",
+                    "position": 0
+                  },
+                  {
+                    "color": "#B7E4C7",
+                    "position": 1
+                  }
+                ]
+              },
+              "width": 140,
+              "height": 140
+            },
+            {
+              "type": "ellipse",
+              "id": "n5K5Oh",
+              "x": 6,
+              "y": 6,
+              "name": "Inner Ring",
+              "fill": "#FFFFFF",
+              "width": 128,
+              "height": 128
+            },
+            {
+              "type": "path",
+              "id": "fxn9j",
+              "x": 35,
+              "y": 22,
+              "name": "Map Pin Base",
+              "geometry": "M12 2c-3.87 0-7 3.13-7 7 0 4.25 7 11 7 11s7-6.75 7-11c0-3.87-3.13-7-7-7z m0 8.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
+              "viewBox": [
+                0,
+                0,
+                24,
+                24
+              ],
+              "fill": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "rotation": 180,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "#2D6A4F",
+                    "position": 0
+                  },
+                  {
+                    "color": "#40916C",
+                    "position": 1
+                  }
+                ]
+              },
+              "width": 70,
+              "height": 90
+            },
+            {
+              "type": "ellipse",
+              "id": "Ljtjo",
+              "x": 58,
+              "y": 38,
+              "name": "Pin Dot",
+              "opacity": 0.9,
+              "fill": "#FFFFFF",
+              "width": 24,
+              "height": 24
+            },
+            {
+              "type": "path",
+              "id": "cVlvA",
+              "x": 46,
+              "y": 10,
+              "name": "Leaf Shape",
+              "geometry": "M12 2c0 0-9 6-7 12 2 6 9 4 11 1 2-3 0-7-4-13z",
+              "viewBox": [
+                0,
+                0,
+                24,
+                24
+              ],
+              "fill": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "rotation": 45,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "#52B788",
+                    "position": 0
+                  },
+                  {
+                    "color": "#40916C",
+                    "position": 1
+                  }
+                ]
+              },
+              "width": 56,
+              "height": 42
+            },
+            {
+              "type": "path",
+              "id": "tvqgt",
+              "x": 54,
+              "y": 14,
+              "name": "Leaf Vein",
+              "geometry": "M12 4c0 0-4 6-2 11 1 3 4 3 6 1",
+              "viewBox": [
+                0,
+                0,
+                24,
+                24
+              ],
+              "fill": "#00000000",
+              "width": 32,
+              "height": 30,
+              "stroke": {
+                "thickness": 1.5,
+                "cap": "round",
+                "fill": "#2D6A4F"
+              }
+            },
+            {
+              "type": "path",
+              "id": "O0cBt",
+              "x": 46,
+              "y": 82,
+              "name": "Road Line 1",
+              "geometry": "M3 12h18",
+              "viewBox": [
+                0,
+                0,
+                24,
+                24
+              ],
+              "fill": "#00000000",
+              "width": 48,
+              "height": 3,
+              "stroke": {
+                "thickness": 2.5,
+                "cap": "round",
+                "fill": "#E9C46A"
+              }
+            },
+            {
+              "type": "path",
+              "id": "X6QX8O",
+              "x": 46,
+              "y": 90,
+              "name": "Road Line 2",
+              "geometry": "M3 12h18",
+              "viewBox": [
+                0,
+                0,
+                24,
+                24
+              ],
+              "fill": "#00000000",
+              "width": 36,
+              "height": 3,
+              "stroke": {
+                "thickness": 2.5,
+                "cap": "round",
+                "fill": "#E9C46A"
+              }
+            },
+            {
+              "type": "path",
+              "id": "gzUim",
+              "x": 78,
+              "y": 79,
+              "name": "Vehicle Icon",
+              "geometry": "M6 16.5h12c1.1 0 2-0.9 2-2v-3l-3-4.5h-10l-3 4.5v3c0 1.1 0.9 2 2 2z m1-3c-0.55 0-1-0.45-1-1 0-0.55 0.45-1 1-1 0.55 0 1 0.45 1 1 0 0.55-0.45 1-1 1z m10 0c-0.55 0-1-0.45-1-1 0-0.55 0.45-1 1-1 0.55 0 1 0.45 1 1 0 0.55-0.45 1-1 1z m-1-4.5l1.5 2.5h-11l1.5-2.5h8z",
+              "viewBox": [
+                0,
+                0,
+                24,
+                24
+              ],
+              "fill": "#E76F51",
+              "width": 20,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "nSpWt",
+          "name": "Text Section",
+          "width": 400,
+          "layout": "vertical",
+          "gap": 2,
+          "children": [
+            {
+              "type": "text",
+              "id": "F3hp10",
+              "name": "EcoTraffic",
+              "fill": "#1B4332",
+              "content": "EcoTraffic",
+              "fontFamily": "Inter",
+              "fontSize": 44,
+              "fontWeight": "700",
+              "letterSpacing": -0.5
+            },
+            {
+              "type": "text",
+              "id": "JN66g",
+              "name": "GIS",
+              "fill": "#52B788",
+              "content": "GIS",
+              "fontFamily": "Inter",
+              "fontSize": 24,
+              "fontWeight": "500",
+              "letterSpacing": 4
+            },
+            {
+              "type": "path",
+              "id": "Bh9Ni",
+              "name": "Separator Line",
+              "geometry": "M0 1h40",
+              "fill": "#52B788",
+              "width": 40,
+              "height": 2,
+              "stroke": {
+                "thickness": 2,
+                "cap": "round",
+                "fill": "#52B788"
+              }
+            },
+            {
+              "type": "text",
+              "id": "IXEOM",
+              "name": "Tagline",
+              "fill": "#6B7280",
+              "content": "AI-Powered Carbon Emission Monitoring",
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "letterSpacing": 1.2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
