@@ -10,7 +10,6 @@ uvicorn[standard]==0.30.1
 
 # --- WebSocket ---
 websockets==12.0
-redis[asyncio]==5.0.4
 
 # --- Database ---
 sqlalchemy==2.0.30
@@ -21,10 +20,10 @@ geoalchemy2==0.15.1      # PostGIS geometry types for SQLAlchemy
 
 # --- Task Queue ---
 celery==5.4.0
-redis==5.0.4
+redis[asyncio]>=5.0.0,<6.0.0
 
 # --- Pydantic ---
-pydantic==2.7.1
+pydantic>=2.7.0,<3.0.0
 pydantic-settings==2.2.1
 
 # --- HTTP / Streaming ---

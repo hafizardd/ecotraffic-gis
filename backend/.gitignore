@@ -2,3 +2,5 @@ yolo
 
 tests/frames*
 .pytest*
+
+.env.local

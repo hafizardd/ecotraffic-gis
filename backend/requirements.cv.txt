@@ -23,7 +23,7 @@ psycopg2-binary==2.9.9
 geoalchemy2==0.15.1
 
 # --- Pydantic ---
-pydantic==2.7.1
+pydantic>=2.7.0,<3.0.0
 pydantic-settings==2.2.1
 
 # --- HTTP / Streaming ---
