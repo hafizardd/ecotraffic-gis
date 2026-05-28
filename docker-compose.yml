@@ -29,10 +29,12 @@ services:
       - redis
 
   worker:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    command: celery -A app.workers.inference_worker worker --loglevel=info
+    command: >
+      sh -c "celery -A app.workers.celery_app beat --loglevel=info &
+            celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=16"
     env_file: ./backend/.env
     depends_on:
       - redis
