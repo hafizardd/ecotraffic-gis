@@ -107,15 +107,30 @@ ecotraffic-gis/
 ```bash
 git clone https://github.com/YOUR_USERNAME/ecotraffic-gis.git
 cd ecotraffic-gis
+
+# Global .env
 cp .env.example .env       # fill in your values
-docker compose up --build
+
+# Backend .env
+cd backend                  # go to backend dir
+cp .env.example .env        # fill in your values
+cp .env.example .env.local  # fill in your values
+cd ..                       # back to root dir
+
+# Frontend .env
+cd frontend                 # go to frontend dir
+cp .env.example .env        # fill in your values
+cp .env.example .env.local  # fill in your values
+cd ..                       # back to root dir
+
+docker compose up --build   # make sure it's in root directory
 ```
 
-- Backend API: http://localhost:8000
-- Frontend: http://localhost:5173
-- API docs: http://localhost:8000/docs
+- Backend API: http://localhost:8080
+- Frontend: http://localhost:3000
+- API docs: http://localhost:8080/docs
 
-### Option B — Manual Setup
+### Option B — Manual Setup (Not Tested Yet)
 
 **1. Clone the repo**
 ```bash
@@ -145,11 +160,11 @@ celery -A app.workers.inference_worker worker --loglevel=info
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local     # set VITE_API_URL etc.
+cp .env.example .env.local     
 npm run dev
 ```
 
-Open http://localhost:5173
+Open http://localhost:3000
 
 ---
 
@@ -164,7 +179,7 @@ Open http://localhost:5173
 | Task queue | Celery + Redis | Background stream processing without blocking API |
 | Database | PostgreSQL + PostGIS | Native geospatial queries for CCTV coordinates |
 | ORM | SQLAlchemy + GeoAlchemy2 | Geospatial model support |
-| Map library | Leaflet.js + React-Leaflet | Lightweight, free tile layers (OpenStreetMap) |
+| Map library | Leaflet.js + React-Leaflet (should change it to GeoMapid maps later) | Lightweight, free tile layers (OpenStreetMap) |
 | Video streaming | HLS.js | Plays `.m3u8` CCTV streams natively in browser |
 | Charts | Recharts | React-native, clean time-series visualizations |
 | Frontend framework | React 18 + Vite | Fast dev server, component-based |
@@ -174,33 +189,19 @@ Open http://localhost:5173
 
 ## ⚙️ Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values. Never commit `.env`.
-
-```
-# Database
-DATABASE_URL=postgresql://postgres:password@localhost:5432/ecotraffic
-
-# Redis (for Celery)
-REDIS_URL=redis://localhost:6379/0
-
-# App
-SECRET_KEY=changeme
-DEBUG=true
-
-# YOLO
-YOLO_MODEL_PATH=yolov8n.pt
-CONFIDENCE_THRESHOLD=0.4
-```
+Copy `.env.example` to `.env` and `.env.local` if any and fill in your values. Never commit `.env`.
 
 ---
 
 ## 👥 Team & Collaboration
 
-| Role | Responsible for |
-|---|---|
-| ML / CV Engineer | `backend/cv/` — YOLOv8 pipeline, emission factor model |
-| Backend Engineer | `backend/app/` — API routes, WebSocket, DB models |
-| Frontend Engineer | `frontend/` — Map, UI components, charts |
+| No. | Name | Role in Team | Github Username |
+|---:|---|---|---|
+| 1 | Mohammad Radyt Fahrasya | Project Leader, Emission Analyst, Transport & Environmental Domain Expert |@fahrasyaa|
+| 2 | Muhammad Hafiz Ardiansyah | Technical Lead, Frontend Engineer, Computer Vision/ML Engineer, AI/LLM Engineer |@hafizardd|
+| 3 | Rayhan Firdaus Ardian | Backend Engineer, AI/LLM Engineer, DevOps/Infrastructure Engineer |@HappyRehund|
+| 4 | Fahmi Shampoerna | UI/UX Designer, Frontend Engineer |@shampoerna|
+| 5 | Reginald Maghfirot Rammadhani Guzherra | Emission Analyst, Transport & Environmental Domain Expert ||
 
 ### Branch Naming Convention
 

@@ -44,7 +44,7 @@ python -m app.core.seed
 ```
 
 ## How to Migrations After Modifying Tables
-1. Change Model in `backend\models\*`
+1. Change Model in `backend\app\models\*`
 2. Generate Migrations
 ```bash
 docker compose exec app alembic revision --autogenerate -m "migration message"
