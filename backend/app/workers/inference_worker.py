@@ -42,6 +42,7 @@ def publish_to_redis(camera_id: str, payload: dict) -> None:
     r.publish(channel, json.dumps(payload))
     r.close()
 
+detector = get_detector()  # Preload model for main thread
 
 @celery_app.task(bind=True, max_retries=3)
 def process_camera(self, camera_id: str) -> dict:
@@ -72,8 +73,7 @@ def process_camera(self, camera_id: str) -> dict:
         referer = camera.referer
         camera_slug = camera.camera_id
 
-    # Step 2 — Capture frame
-    detector = get_detector()
+    # Step 2 — Capture frame (already preloaded)
 
     try:
         frame = detector.capture_frame(stream_url, referer)
