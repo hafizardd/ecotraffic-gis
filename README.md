@@ -103,6 +103,7 @@ ecotraffic-gis/
 - Docker + Docker Compose (recommended — handles DB and Redis automatically)
 
 ### Option A — Docker (recommended for team)
+#### 1. Setup the Docker
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/ecotraffic-gis.git
@@ -125,6 +126,23 @@ cd ..                       # back to root dir
 
 docker compose up --build   # make sure it's in root directory
 ```
+
+#### 2. Seed the Data
+```bash
+# Open new terminal and go to root dir
+docker compose exec backend alembic upgrade head        # migrate data + add extension
+docker compose exec backend python -m app.core.seed     # seed data
+
+# Restart docker
+Ctrl + C
+docker compose up
+```
+
+#### 3. Configure the Worker
+1. Open `docker-compose.yml` in root dir
+2. See for this line of code
+`celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=16`
+3. Change the concurrency (can 2, 4, 8, etc)
 
 - Backend API: http://localhost:8080
 - Frontend: http://localhost:3000
