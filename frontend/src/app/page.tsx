@@ -1,21 +1,18 @@
 'use client'
 
-import GlobalCounter from "@/components/Dashboard/GlobalCounter";
 import dynamic from "next/dynamic";
 import { EmissionsProvider } from "@/context/EmissionsContext";
+import DashboardShell from "@/components/Dashboard/DashboardShell";
 
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
-  loading: () => <div>Loading map...</div>
+  loading: () => <div className="map-state"><span className="loading-spinner" />Memuat peta...</div>
 })
 
 export default function Home() {
   return (
     <EmissionsProvider>
-      <GlobalCounter />
-      <main style={{ height: '100vh', margin: 0, padding: '48px 0 0 0' }}>
-        <MapView />
-      </main>
+      <DashboardShell><MapView /></DashboardShell>
     </EmissionsProvider>
   );
 }

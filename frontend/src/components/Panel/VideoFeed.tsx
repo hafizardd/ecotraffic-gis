@@ -11,12 +11,15 @@ export default function VideoFeed({ streamUrl }: VideoFeedProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isMuted, setIsMuted] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
         let hls: Hls | null = null;
+        setError(null);
+        setIsLoading(true);
 
         if (Hls.isSupported()) {
             hls = new Hls({
@@ -56,24 +59,26 @@ export default function VideoFeed({ streamUrl }: VideoFeedProps) {
 
     if (error) {
         return (
-             <div className="flex items-center justify-center h-48 bg-zinc-900 text-zinc-400 text-sm">
-                {error}
+            <div className="flex items-center justify-center h-48 bg-zinc-900 text-zinc-400 text-sm">
+                <div className="video-error"><strong>Stream tidak tersedia</strong><span>{error}</span></div>
             </div>
         )
     }
 
     return (
-        <div className="relative bg-black">
+        <div className="video-frame">
+            {isLoading && <div className="video-loading"><span className="loading-spinner" />Menghubungkan ke kamera...</div>}
             <video
                 ref={videoRef}
-                className="w-full aspect-video"
+                className="video-element"
                 muted={isMuted}
                 autoPlay
                 playsInline
+                onPlaying={() => setIsLoading(false)}
             />
             <button
                 onClick={toggleMute}
-                className="absolute bottom-2 right-2 px-2 py-1 text-xs bg-black/60 text-white rounded hover:bg-black/80"
+                className="video-control"
             >
                 {isMuted ? "Unmute" : "Mute"}
             </button>

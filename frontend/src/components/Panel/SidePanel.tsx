@@ -1,6 +1,6 @@
 "use client";
 
-import { CameraFeature, EmissionUpdate } from "@/types";
+import { CameraFeature } from "@/types";
 import VideoFeed from "./VideoFeed";
 import EmissionStats from "./EmissionStats";
 import VehicleCount from "./VehicleCount";
@@ -21,15 +21,15 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
     if (!camera) return null;
 
     return (
-        <div
-            className="fixed top-0 right-0 h-full w-100 bg-white dark:bg-zinc-900 shadow-2xl transform transition-transform duration-300 ease-in-out z-9999"
-        >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-700">
-                <h2 className="text-lg font-semibold">{camera.properties.name}</h2>
+        <aside className="monitoring-panel">
+            <div className="panel-header">
+                <div className="panel-location-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+                <div className="panel-title"><span>LOKASI TERPILIH</span><h2>{camera.properties.name}</h2></div>
+                {camera.properties.is_active && <div className="panel-live"><i /> LIVE</div>}
                 <button
                     onClick={onClose}
-                    className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className="panel-close"
+                    aria-label="Tutup panel monitoring"
                 >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M18 6L6 18M6 6l12 12" />
@@ -37,40 +37,24 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
                 </button>
             </div>
 
-            {/* Content */}
-            <div className="overflow-y-auto h-[calc(100%-60px)]">
-                {/* Section 1: Live Video */}
-                <div className="border-b border-zinc-200 dark:border-zinc-700">
+            <div className="panel-content">
+                <section className="panel-section video-section">
+                    <div className="section-heading"><div><span>LIVE CAMERA</span><small>Streaming pemantauan lokasi</small></div></div>
                     <VideoFeed streamUrl={camera.properties.stream_url} />
-                </div>
-                {/* Section 2: Emission Stats */}
-                <div className="border-b border-zinc-200 dark:border-zinc-700">
-                    <h3 className="px-4 pt-4 pb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                        Current Emissions
-                    </h3>
-                    <EmissionStats
-                        cameraId={camera.properties.camera_id}
-                    />
-                </div>
-                {/* Section 3: Vehicle Count */}
-                <div>
-                    <h3 className="px-4 pt-4 pb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                        Vehicle Count
-                    </h3>
+                </section>
+                <section className="panel-section">
+                    <div className="section-heading"><div><span>CURRENT EMISSIONS</span><small>Emisi saat ini dalam g/min</small></div></div>
+                    <EmissionStats cameraId={camera.properties.camera_id} />
+                </section>
+                <section className="panel-section">
+                    <div className="section-heading"><div><span>VEHICLE COUNT</span><small>Deteksi kendaraan terkini</small></div></div>
                     <VehicleCount emission={liveEmission} />
-                </div>
-
-                {/* Section 4: Emission Chart */}
-                <div className="border-b border-zinc-200 dark:border-zinc-700">
-                    <h3 className="px-4 pt-4 pb-4 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                        Emission Trend
-                    </h3>
-                    <EmissionChart 
-                        cameraId={camera.properties.camera_id}
-                        liveEmission={liveEmission}
-                    />
-                </div>
+                </section>
+                <section className="panel-section chart-section">
+                    <div className="section-heading"><div><span>EMISSION TREND</span><small>Monitoring emisi real-time</small></div></div>
+                    <EmissionChart cameraId={camera.properties.camera_id} liveEmission={liveEmission} />
+                </section>
             </div>
-        </div>
+        </aside>
     );
 }
