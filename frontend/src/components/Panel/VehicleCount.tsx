@@ -50,7 +50,7 @@ function TruckIcon() {
 
 export default function VehicleCount({ emission }: VehicleCountProps) {
     if (!emission) {
-        return <div className="p-4 text-zinc-400 text-sm">No vehicle data available</div>;
+        return <div className="data-empty"><span className="loading-spinner small" />Menunggu data kendaraan...</div>;
     }
 
     const vehicles = [
@@ -61,20 +61,17 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
     ];
     
     return (
-        <div className="grid grid-cols-2 gap-3 p-4">
+        <div className="vehicle-grid">
             {vehicles.map(({ label, count, Icon }) => (
                 <div
                     key={label}
-                    className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-3"
+                    className="vehicle-card"
                 >
-                    <div className="text-zinc-600 dark:text-zinc-300">
+                    <div className="vehicle-icon">
                         <Icon />
                     </div>
-                    <div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                            {label}
-                        </div>
-                        <div className="text-lg font-semibold">{count}</div>
+                    <div className="vehicle-copy">
+                        <span>{label}</span><strong>{count}</strong>
                     </div>
                 </div>
             ))}

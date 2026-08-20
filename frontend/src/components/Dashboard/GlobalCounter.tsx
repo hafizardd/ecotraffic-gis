@@ -33,31 +33,27 @@ export default function GlobalCounter() {
 
     const hasData = emissionMap.size > 0;
     const cards = [
-        { label: "CO", gmin: totals.co, kghr: totalsKgHr.co, color: "text-red-500" },
-        { label: "NOx", gmin: totals.nox, kghr: totalsKgHr.nox, color: "text-amber-500" },
-        { label: "PM", gmin: totals.pm, kghr: totalsKgHr.pm, color: "text-violet-500" },
-        { label: "NMVOC", gmin: totals.nmvoc, kghr: totalsKgHr.nmvoc, color: "text-blue-500" },
+        { label: "CO", gmin: totals.co, kghr: totalsKgHr.co, tone: "co" },
+        { label: "NOx", gmin: totals.nox, kghr: totalsKgHr.nox, tone: "nox" },
+        { label: "PM", gmin: totals.pm, kghr: totalsKgHr.pm, tone: "pm" },
+        { label: "NMVOC", gmin: totals.nmvoc, kghr: totalsKgHr.nmvoc, tone: "nmvoc" },
     ];
     return (
-        <div className="fixed top-0 left-0 w-full z-1000 bg-white dark:bg-zinc-900 shadow-md">
-            <div className="flex items-center gap-6 px-6 py-3 max-w-screen-2xl justify-center">
+        <section className="emissions-bar" aria-label="Ringkasan emisi global">
+            <div className="emissions-bar-label"><span>GLOBAL</span><strong>Emisi Saat Ini</strong></div>
+            <div className="emissions-summary">
                 {hasData ? (
-                    cards.map(({ label, gmin, kghr, color }) => (
-                        <div key={label} className="flex items-baseline gap-2">
-                            <span className={`text-sm font-bold ${color}`}>{label}</span>
-                            <span className="text-lg font-semibold tabular-nums">
-                                {gmin.toFixed(1)}
-                            </span>
-                            <span className="text-xs text-zinc-400">g/min</span>
-                            <span className="text-xs text-zinc-500">
-                                ({kghr.toFixed(1)} kg/hr)
-                            </span>
+                    cards.map(({ label, gmin, kghr, tone }) => (
+                        <div key={label} className={`emission-total pollutant-${tone}`}>
+                            <span className="pollutant-dot" /><span className="emission-label">{label}</span>
+                            <strong>{gmin.toFixed(1)}</strong><span className="unit">g/min</span>
+                            <span className="hourly">{kghr.toFixed(1)} kg/hr</span>
                         </div>
                     ))
                 ) : (
-                    <span className="text-sm text-zinc-400">Waiting for live data...</span>
+                    <div className="empty-inline"><span className="loading-spinner small" />Menunggu data emisi real-time...</div>
                 )}
             </div>
-        </div>
+        </section>
     );
 }

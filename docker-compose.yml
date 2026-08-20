@@ -34,7 +34,7 @@ services:
       dockerfile: Dockerfile.worker
     command: >
       sh -c "celery -A app.workers.celery_app beat --loglevel=info &
-            celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=16"
+            celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=8"
     env_file: ./backend/.env
     depends_on:
       - redis

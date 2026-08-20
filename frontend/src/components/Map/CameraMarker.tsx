@@ -8,14 +8,14 @@ interface CameraMarkerProps {
     camera: CameraFeature;
     color: string;
     onClick: (camera: CameraFeature) => void;
-    isDark?: boolean;
+    selected?: boolean;
 }
 
 export default function CameraMarker({
     camera,
     color,
     onClick,
-    isDark = false,
+    selected = false,
 }: CameraMarkerProps) {
     const [showPopup, setShowPopup] = useState(false);
     const [longitude, latitude] = camera.geometry.coordinates;
@@ -27,37 +27,29 @@ export default function CameraMarker({
                 latitude={latitude}
                 onClick={() => onClick(camera)}
             >
-                <div
-                    onMouseEnter={(e) => {
+                <button
+                    type="button"
+                    aria-label={`Buka detail ${camera.properties.name}`}
+                    className={`camera-marker ${selected ? "selected" : ""}`}
+                    onMouseEnter={() => {
                         setShowPopup(true);
-                        e.currentTarget.style.transform = "scale(1.35)";
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={() => {
                         setShowPopup(false);
-                        e.currentTarget.style.transform = "scale(1)";
                     }}
-                    style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: "100%",
-                        backgroundColor: color,
-                        border: "2px solid white",
-                        boxShadow: "0 0 6px rgba(0,0,0,0.5)",
-                        cursor: "pointer",
-                        transition: "transform 0.15s",
-                    }}
-                />
+                    style={{ "--marker-color": color } as React.CSSProperties}
+                ><span /></button>
             </Marker>
-            {showPopup && (
+            {(showPopup || selected) && (
                 <Popup
                     longitude={longitude}
                     latitude={latitude}
                     closeButton={false}
                     closeOnClick={false}
-                    offset={{ bottom: [0, -10] } as any}
-                    className={isDark ? "popup-dark" : "popup-light"}
+                    offset={12}
+                    className="popup-dark"
                 >
-                    {camera.properties.name}
+                    <div className="marker-popup"><strong>{camera.properties.name}</strong>{camera.properties.is_active && <span><i /> Live</span>}<small>Klik untuk melihat detail</small></div>
                 </Popup>
             )}
         </>
