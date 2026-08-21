@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import uuid
 
 from app.services.inference_queue import ReservationStatus
+from app.services.camera_health import CameraFailureUpdate, CameraHealthStatus
+from cv.frame_sampler import FrameCaptureError
 from cv.frame_sampler import CapturedFrame
 from cv.frame_store import StoredFrame
 from app.workers import sampling_worker
@@ -51,6 +53,11 @@ def test_sampling_enqueues_metadata_without_frame_bytes(monkeypatch):
     monkeypatch.setattr(sampling_worker, "get_active_camera_source", lambda _id: _camera())
     monkeypatch.setattr(sampling_worker, "inference_queue", queue)
     monkeypatch.setattr(
+        sampling_worker.camera_health_service,
+        "record_capture_success",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
         sampling_worker.frame_sampler,
         "capture",
         lambda _url, _referer: captured,
@@ -79,6 +86,37 @@ def test_sampling_enqueues_metadata_without_frame_bytes(monkeypatch):
     assert payload["frame_size_bytes"] == 1234
     assert payload["frame_key"].startswith("inference:frame:")
     assert all(not isinstance(value, bytes) for value in payload.values())
+
+
+def test_capture_failure_records_backoff_without_task_retry(monkeypatch):
+    queue = _Queue()
+    updates = []
+    monkeypatch.setattr(sampling_worker, "get_active_camera_source", lambda _id: _camera())
+    monkeypatch.setattr(sampling_worker, "inference_queue", queue)
+    monkeypatch.setattr(
+        sampling_worker.frame_sampler,
+        "capture",
+        lambda *_args: (_ for _ in ()).throw(FrameCaptureError("stream unavailable")),
+    )
+    monkeypatch.setattr(
+        sampling_worker.camera_health_service,
+        "record_capture_failure",
+        lambda *_args: updates.append(True)
+        or CameraFailureUpdate(
+            failure_count=2,
+            status=CameraHealthStatus.DEGRADED,
+            retry_delay_seconds=10,
+            next_sample_at=datetime(2026, 8, 21, 0, 0, 10, tzinfo=timezone.utc),
+        ),
+    )
+
+    result = sampling_worker._sample_and_enqueue(_Task(), "camera-12")
+
+    assert updates == [True]
+    assert result["status"] == "capture_failed"
+    assert result["failure_count"] == 2
+    assert result["retry_delay_seconds"] == 10
+    assert len(queue.released) == 1
 
 
 def test_full_queue_skips_capture_explicitly(monkeypatch):

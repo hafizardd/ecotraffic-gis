@@ -69,6 +69,35 @@ class Camera(Base):
         nullable=True,
         comment="Next time the scheduler may enqueue camera processing",
     )
+    last_sample_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Most recent frame-capture attempt",
+    )
+    last_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Most recent successful frame capture",
+    )
+    last_error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Most recent failed frame-capture attempt",
+    )
+    failure_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+        comment="Consecutive frame-capture failures",
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        default="active",
+        server_default="active",
+        nullable=False,
+        comment="Capture health: active, degraded, or offline",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

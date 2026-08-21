@@ -5,6 +5,7 @@ import uuid
 import redis
 
 from app.core.config import settings
+from app.services.camera_health import CameraHealthPolicy, CameraHealthService
 from app.services.camera_management import get_active_camera_source
 from app.services.inference_jobs import InferenceJob, normalize_job_priority
 from app.services.inference_queue import InferenceQueue, ReservationStatus
@@ -36,6 +37,7 @@ frame_sampler = FrameSampler(
     read_timeout_seconds=settings.FRAME_CAPTURE_READ_TIMEOUT_SECONDS,
     ffmpeg_timeout_seconds=settings.FRAME_FFMPEG_TIMEOUT_SECONDS,
 )
+camera_health_service = CameraHealthService(CameraHealthPolicy.from_settings(settings))
 
 
 def _queue_depth_or_unknown() -> int:
@@ -78,6 +80,16 @@ def _sample_and_enqueue(task, camera_id: str) -> dict:
     stored_frame = None
     try:
         captured_frame = frame_sampler.capture(camera.stream_url, camera.referer)
+        try:
+            camera_health_service.record_capture_success(
+                camera.id,
+                captured_frame.captured_at,
+            )
+        except Exception:
+            logger.exception(
+                "camera_health_success_update_failed",
+                extra={"camera_id": camera.camera_id, "job_id": job_id},
+            )
         stored_frame = frame_store.store(job_id, captured_frame.frame)
         job = InferenceJob(
             job_id=job_id,
@@ -100,11 +112,41 @@ def _sample_and_enqueue(task, camera_id: str) -> dict:
         )
     except FrameCaptureError as exc:
         inference_queue.release(camera.camera_id, job_id)
+        health_update = None
+        try:
+            health_update = camera_health_service.record_capture_failure(
+                camera.id,
+                datetime.now(timezone.utc),
+            )
+        except Exception:
+            logger.exception(
+                "camera_health_failure_update_failed",
+                extra={"camera_id": camera.camera_id, "job_id": job_id},
+            )
         logger.warning(
             "camera_sampling_capture_failed",
-            extra={"camera_id": camera.camera_id, "job_id": job_id},
+            extra={
+                "camera_id": camera.camera_id,
+                "job_id": job_id,
+                "failure_count": (
+                    health_update.failure_count if health_update is not None else -1
+                ),
+                "retry_delay_seconds": (
+                    health_update.retry_delay_seconds if health_update is not None else -1
+                ),
+            },
         )
-        raise task.retry(exc=exc, countdown=15)
+        return {
+            "camera_id": camera.camera_id,
+            "job_id": job_id,
+            "status": "capture_failed",
+            "failure_count": (
+                health_update.failure_count if health_update is not None else None
+            ),
+            "retry_delay_seconds": (
+                health_update.retry_delay_seconds if health_update is not None else None
+            ),
+        }
     except FrameEncodingError:
         inference_queue.release(camera.camera_id, job_id)
         logger.exception(

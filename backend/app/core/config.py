@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     CAMERA_LOW_INTERVAL_SECONDS: int = Field(default=60, gt=0)
     CAMERA_SCHEDULER_TICK_SECONDS: int = Field(default=1, gt=0)
     CAMERA_SCHEDULER_MAX_DISPATCH_PER_TICK: int = Field(default=8, gt=0)
+    CAMERA_RETRY_BASE_SECONDS: int = Field(default=5, gt=0)
+    CAMERA_RETRY_MAX_SECONDS: int = Field(default=60, gt=0)
+    CAMERA_FAILURES_BEFORE_OFFLINE: int = Field(default=4, gt=0)
 
     FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
     FRAME_CAPTURE_READ_TIMEOUT_SECONDS: int = Field(default=10, gt=0)

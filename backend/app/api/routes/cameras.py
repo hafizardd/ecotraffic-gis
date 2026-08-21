@@ -39,6 +39,11 @@ async def get_cameras(db: AsyncSession = Depends(get_db)):
                     camera_id=camera.camera_id,
                     stream_url=camera.stream_url,
                     is_active=camera.is_active,
+                    status=camera.status,
+                    failure_count=camera.failure_count,
+                    last_sample_at=camera.last_sample_at,
+                    last_success_at=camera.last_success_at,
+                    last_error_at=camera.last_error_at,
                     created_at=camera.created_at,
                 )
             )
