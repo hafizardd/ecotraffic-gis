@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -16,16 +17,17 @@ class Settings(BaseSettings):
     CONFIDENCE_THRESHOLD: float = 0.4
 
     STREAM_REFERER: str = "https://cctv.jogjakota.go.id/"
+
+    # Legacy global interval retained for standalone CV utilities and existing
+    # deployments. Camera scheduling now uses the priority-specific settings.
     INTERVAL_SECONDS: int = 60
 
-    class Config:
-        env_file = ".env"
+    CAMERA_HIGH_INTERVAL_SECONDS: int = Field(default=10, gt=0)
+    CAMERA_MEDIUM_INTERVAL_SECONDS: int = Field(default=60, gt=0)
+    CAMERA_LOW_INTERVAL_SECONDS: int = Field(default=60, gt=0)
+    CAMERA_SCHEDULER_TICK_SECONDS: int = Field(default=1, gt=0)
+    CAMERA_SCHEDULER_MAX_DISPATCH_PER_TICK: int = Field(default=8, gt=0)
 
-    # model_config = SettingsConfigDict(
-    #     env_file=".env",
-    #     env_file_encoding="utf-8",
-    #     case_sensitive=False,
-    #     env_ignore_empty=True,
-    # )
+    model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

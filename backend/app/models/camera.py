@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, DateTime, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
  
@@ -12,6 +12,7 @@ class Camera(Base):
     __tablename__ = "cameras"
     __table_args__ = (
         UniqueConstraint("camera_id", name="uq_cameras_camera_id"),
+        Index("ix_cameras_next_sample_at", "next_sample_at"),
     )
 
     id:Mapped[uuid.UUID] = mapped_column(
@@ -50,6 +51,23 @@ class Camera(Base):
         default=True,
         nullable=False,
         comment="Set False to disable without deleting emission history",
+    )
+    priority: Mapped[str] = mapped_column(
+        String(10),
+        default="medium",
+        server_default="medium",
+        nullable=False,
+        comment="Processing tier: high, medium, or low",
+    )
+    sampling_interval_seconds: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Optional per-camera sampling interval; null uses the priority default",
+    )
+    next_sample_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Next time the scheduler may enqueue camera processing",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
