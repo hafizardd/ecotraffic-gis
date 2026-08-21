@@ -4,14 +4,11 @@ import json
 import logging
 import os
 import time
-import uuid
 
 import redis
 from celery.signals import worker_init, worker_shutdown
 
 from app.core.config import settings
-from app.core.database import get_sync_db
-from app.models.emission import Emission
 from app.services.detector_lifecycle import DetectorLifecycle
 from app.services.emission_aggregation import (
     AggregationUpdate,
@@ -21,6 +18,7 @@ from app.services.emission_aggregation import (
 from app.services.inference_batcher import InferenceBatcher
 from app.services.inference_jobs import InferenceJob
 from app.services.inference_queue import InferenceQueue
+from app.services.historical_emission_store import HistoricalEmissionStore
 from app.services.latest_emission_state import LatestEmissionStateStore
 from app.workers.celery_app import celery_app
 from cv.detector import VehicleDetector
@@ -119,6 +117,7 @@ latest_state_store = LatestEmissionStateStore(
     redis_client,
     ttl_seconds=settings.LATEST_EMISSION_STATE_TTL_SECONDS,
 )
+historical_emission_store = HistoricalEmissionStore()
 
 
 def publish_to_redis(camera_id: str, payload: dict) -> None:
@@ -194,8 +193,43 @@ def _record_aggregation(
                 "aggregation_latency_s": round(aggregation_latency_s, 6),
             }
         )
-        latest_state_store.save(update.current)
-        metadata["latest_state_status"] = "stored"
+        try:
+            latest_state_store.save(update.current)
+            metadata["latest_state_status"] = "stored"
+        except Exception:
+            metadata["latest_state_status"] = "failed"
+            logger.exception(
+                "latest_emission_state_store_failed",
+                extra={"camera_id": job.camera_id, "job_id": job.job_id},
+            )
+        if update.completed:
+            persistence_started_at = time.monotonic()
+            try:
+                persisted = historical_emission_store.save_many(update.completed)
+                metadata.update(
+                    {
+                        "historical_persistence_status": "stored",
+                        "historical_aggregates_persisted": persisted,
+                        "historical_persistence_latency_s": round(
+                            time.monotonic() - persistence_started_at,
+                            6,
+                        ),
+                    }
+                )
+            except Exception:
+                metadata["historical_persistence_status"] = "failed"
+                metadata["historical_aggregates_persisted"] = 0
+                logger.exception(
+                    "historical_emission_aggregate_store_failed",
+                    extra={"camera_id": job.camera_id, "job_id": job.job_id},
+                )
+        else:
+            metadata.update(
+                {
+                    "historical_persistence_status": "not_due",
+                    "historical_aggregates_persisted": 0,
+                }
+            )
         for completed in update.completed:
             logger.info(
                 "emission_aggregation_window_completed",
@@ -225,7 +259,7 @@ def _record_aggregation(
     reject_on_worker_lost=True,
 )
 def process_inference_job(self, job_payload: dict) -> dict:
-    """Decode one queued frame, run inference, persist, and publish its result."""
+    """Decode one queued frame, run inference, aggregate, and publish its result."""
 
     job = InferenceJob.from_payload(job_payload)
     inference_started_at = time.monotonic()
@@ -322,27 +356,6 @@ def process_inference_job(self, job_payload: dict) -> dict:
     }
 
     try:
-        with get_sync_db() as db:
-            db.add(
-                Emission(
-                    id=uuid.uuid4(),
-                    camera_id=uuid.UUID(job.camera_database_id),
-                    timestamp=processed_at,
-                    car=vehicle_counts["car"],
-                    motorcycle=vehicle_counts["motorcycle"],
-                    bus=vehicle_counts["bus"],
-                    truck=vehicle_counts["truck"],
-                    total_co_g_per_min=emission["total_co_g_per_min"],
-                    total_co_kg_per_hr=emission["total_co_kg_per_hr"],
-                    total_nox_g_per_min=emission["total_nox_g_per_min"],
-                    total_nox_kg_per_hr=emission["total_nox_kg_per_hr"],
-                    total_pm_g_per_min=emission["total_pm_g_per_min"],
-                    total_pm_kg_per_hr=emission["total_pm_kg_per_hr"],
-                    total_nmvoc_g_per_min=emission["total_nmvoc_g_per_min"],
-                    total_nmvoc_kg_per_hr=emission["total_nmvoc_kg_per_hr"],
-                    cycle_duration_s=round(cycle_duration_s, 2),
-                )
-            )
         publish_to_redis(job.camera_id, result)
     finally:
         _cleanup_job(job)

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.camera import Camera
 from app.models.emission import Emission
+from app.models.emission_aggregate import EmissionAggregate
 from app.schemas.emission import (
     CameraEmissionsResponse,
     EmissionRow,
@@ -34,14 +35,25 @@ async def get_camera_emissions(
     if camera is None:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found.")
  
-    # Fetch emissions — most recent first, then reverse for chart ordering
-    result = await db.execute(
+    # Read aggregated windows plus existing legacy rows. New worker output is
+    # aggregate-only, while rows created before this migration remain visible.
+    aggregate_result = await db.execute(
+        select(EmissionAggregate)
+        .where(EmissionAggregate.camera_id == camera.id)
+        .order_by(EmissionAggregate.period_end.desc())
+        .limit(limit)
+    )
+    legacy_result = await db.execute(
         select(Emission)
         .where(Emission.camera_id == camera.id)
         .order_by(Emission.timestamp.desc())
         .limit(limit)
     )
-    emissions = result.scalars().all()
+    emissions = list(aggregate_result.scalars().all()) + list(
+        legacy_result.scalars().all()
+    )
+    emissions.sort(key=_history_timestamp, reverse=True)
+    emissions = emissions[:limit]
     emissions = list(reversed(emissions))  # oldest first for chart
  
     return CameraEmissionsResponse(
@@ -145,3 +157,9 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
         ),
         last_updated=last_updated,
     )
+
+
+def _history_timestamp(emission: Emission | EmissionAggregate) -> datetime:
+    if isinstance(emission, EmissionAggregate):
+        return emission.period_end
+    return emission.timestamp

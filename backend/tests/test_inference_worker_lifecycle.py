@@ -189,3 +189,49 @@ def test_aggregation_stores_the_current_aggregate_as_latest_state(monkeypatch):
 
     assert saved == [aggregate]
     assert metadata["latest_state_status"] == "stored"
+
+
+def test_completed_aggregation_window_is_persisted_once(monkeypatch):
+    aggregator = EmissionWindowAggregator(window_seconds=60)
+    first = inference_worker.EmissionObservation(
+        camera_id="camera-12",
+        camera_database_id="12345678-1234-5678-1234-567812345678",
+        job_id="job-12",
+        captured_at=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc),
+        vehicle_counts={"car": 1, "motorcycle": 0, "bus": 0, "truck": 0},
+    )
+    second = inference_worker.EmissionObservation(
+        camera_id="camera-12",
+        camera_database_id="12345678-1234-5678-1234-567812345678",
+        job_id="job-13",
+        captured_at=datetime(2026, 8, 21, 12, 1, tzinfo=timezone.utc),
+        vehicle_counts={"car": 2, "motorcycle": 0, "bus": 0, "truck": 0},
+    )
+    aggregator.add(first)
+    update = aggregator.add(second)
+    monkeypatch.setattr(
+        inference_worker,
+        "_aggregate_observation",
+        lambda *_args, **_kwargs: update,
+    )
+    monkeypatch.setattr(inference_worker.latest_state_store, "save", lambda _current: None)
+    persisted = []
+    monkeypatch.setattr(
+        inference_worker.historical_emission_store,
+        "save_many",
+        lambda completed: persisted.append(tuple(completed)) or len(completed),
+    )
+    job = SimpleNamespace(camera_id="camera-12", job_id="job-13")
+
+    metadata = inference_worker._record_aggregation(
+        job,
+        {"car": 2, "motorcycle": 0, "bus": 0, "truck": 0},
+        queue_wait_s=1,
+        inference_latency_s=2,
+        cycle_duration_s=3,
+    )
+
+    assert len(persisted) == 1
+    assert persisted[0][0].period_start == first.captured_at
+    assert metadata["historical_persistence_status"] == "stored"
+    assert metadata["historical_aggregates_persisted"] == 1
