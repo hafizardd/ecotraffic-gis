@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.workers import inference_worker
+from app.services.emission_aggregation import AggregationUpdate, EmissionWindowAggregator
 
 
 def test_detector_factory_uses_inference_settings(monkeypatch):
@@ -153,3 +154,38 @@ def test_aggregation_failure_is_isolated_from_raw_result_processing(monkeypatch)
             inference_worker.settings.EMISSION_AGGREGATION_WINDOW_SECONDS
         ),
     }
+
+
+def test_aggregation_stores_the_current_aggregate_as_latest_state(monkeypatch):
+    aggregate = EmissionWindowAggregator(window_seconds=60).add(
+        inference_worker.EmissionObservation(
+            camera_id="camera-12",
+            camera_database_id="database-camera-12",
+            job_id="job-12",
+            captured_at=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc),
+            vehicle_counts={"car": 1, "motorcycle": 0, "bus": 0, "truck": 0},
+        )
+    ).current
+    monkeypatch.setattr(
+        inference_worker,
+        "_aggregate_observation",
+        lambda *_args, **_kwargs: AggregationUpdate(current=aggregate, completed=()),
+    )
+    saved = []
+    monkeypatch.setattr(
+        inference_worker.latest_state_store,
+        "save",
+        lambda current: saved.append(current),
+    )
+    job = SimpleNamespace(camera_id="camera-12", job_id="job-12")
+
+    metadata = inference_worker._record_aggregation(
+        job,
+        {"car": 1, "motorcycle": 0, "bus": 0, "truck": 0},
+        queue_wait_s=1,
+        inference_latency_s=2,
+        cycle_duration_s=3,
+    )
+
+    assert saved == [aggregate]
+    assert metadata["latest_state_status"] == "stored"

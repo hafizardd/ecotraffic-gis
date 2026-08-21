@@ -21,6 +21,7 @@ from app.services.emission_aggregation import (
 from app.services.inference_batcher import InferenceBatcher
 from app.services.inference_jobs import InferenceJob
 from app.services.inference_queue import InferenceQueue
+from app.services.latest_emission_state import LatestEmissionStateStore
 from app.workers.celery_app import celery_app
 from cv.detector import VehicleDetector
 from cv.emission_factors import calculate_emission
@@ -114,6 +115,10 @@ frame_store = RedisFrameStore(
     max_bytes=settings.INFERENCE_FRAME_MAX_BYTES,
     jpeg_quality=settings.INFERENCE_JPEG_QUALITY,
 )
+latest_state_store = LatestEmissionStateStore(
+    redis_client,
+    ttl_seconds=settings.LATEST_EMISSION_STATE_TTL_SECONDS,
+)
 
 
 def publish_to_redis(camera_id: str, payload: dict) -> None:
@@ -189,6 +194,8 @@ def _record_aggregation(
                 "aggregation_latency_s": round(aggregation_latency_s, 6),
             }
         )
+        latest_state_store.save(update.current)
+        metadata["latest_state_status"] = "stored"
         for completed in update.completed:
             logger.info(
                 "emission_aggregation_window_completed",

@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     INFERENCE_WORKER_CONCURRENCY: int = Field(default=8, gt=0)
 
     EMISSION_AGGREGATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
+    LATEST_EMISSION_STATE_TTL_SECONDS: int = Field(default=3600, gt=0)
 
     model_config = SettingsConfigDict(env_file=".env")
 
