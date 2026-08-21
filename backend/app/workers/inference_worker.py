@@ -1,113 +1,143 @@
-from app.workers.celery_app import celery_app
-
-from app.core.database import get_sync_db
-from app.models.emission import Emission
-from app.services.camera_management import get_active_camera_source
-
-from cv.detector import VehicleDetector
-from cv.emission_factors import calculate_emission
-from cv.frame_sampler import FrameCaptureError, FrameSampler
-
-import threading
-import uuid
-import time
 from datetime import datetime, timezone
-from app.core.config import settings
-
-import redis
 import json
 import logging
+import threading
+import time
+import uuid
+
+import redis
+
+from app.core.config import settings
+from app.core.database import get_sync_db
+from app.models.emission import Emission
+from app.services.inference_jobs import InferenceJob
+from app.services.inference_queue import InferenceQueue
+from app.workers.celery_app import celery_app
+from cv.detector import VehicleDetector
+from cv.emission_factors import calculate_emission
+from cv.frame_store import RedisFrameStore
+
 
 logger = logging.getLogger(__name__)
 
-# ------------------------------------------------------------------
-# Thread-local detector singleton
-# Each worker thread gets its own VehicleDetector instance — safe for
-# --pool=threads concurrency. Loads model once per thread, not per task.
-# ------------------------------------------------------------------
+INFERENCE_TASK = "app.workers.inference_worker.process_inference_job"
 
 _thread_local = threading.local()
 
 
 def get_detector() -> VehicleDetector:
-    if not hasattr(_thread_local, 'detector'):
-        logger.info("Loading YOLO model for thread...")
+    if not hasattr(_thread_local, "detector"):
+        logger.info("Loading YOLO model for inference worker...")
         _thread_local.detector = VehicleDetector()
     return _thread_local.detector
 
 
-def publish_to_redis(camera_id: str, payload: dict) -> None:
-    r = redis.Redis.from_url(settings.REDIS_URL)
-    channel = f"emissions:{camera_id}"
-    r.publish(channel, json.dumps(payload))
-    r.close()
-
-detector = get_detector()  # Preload model for main thread
-frame_sampler = FrameSampler(
-    open_timeout_seconds=settings.FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS,
-    read_timeout_seconds=settings.FRAME_CAPTURE_READ_TIMEOUT_SECONDS,
-    ffmpeg_timeout_seconds=settings.FRAME_FFMPEG_TIMEOUT_SECONDS,
+redis_client = redis.Redis.from_url(settings.REDIS_URL)
+inference_queue = InferenceQueue(
+    redis_client,
+    max_pending=settings.INFERENCE_QUEUE_MAX_PENDING,
+    reservation_ttl_seconds=settings.INFERENCE_RESERVATION_TTL_SECONDS,
 )
+frame_store = RedisFrameStore(
+    redis_client,
+    ttl_seconds=settings.INFERENCE_FRAME_TTL_SECONDS,
+    max_bytes=settings.INFERENCE_FRAME_MAX_BYTES,
+    jpeg_quality=settings.INFERENCE_JPEG_QUALITY,
+)
+detector = get_detector()
 
-@celery_app.task(bind=True, max_retries=3)
-def process_camera(self, camera_id: str) -> dict:
-    """
-    Step 1: Load camera from DB
-    Step 2: Capture frame
-    Step 3: Run detection
-    Step 4: Calculate emission
-    Step 5: Build result dict
-    Step 6: Write to DB
-    Step 7: Publish to Redis
-    Step 8: Return result
-    """
-    start_time = time.time()
 
-    # Step 1 — Resolve the camera source through the camera-management layer
-    camera = get_active_camera_source(camera_id)
-    if camera is None:
-        logger.warning(f"Camera '{camera_id}' not found or inactive.")
-        return
+def publish_to_redis(camera_id: str, payload: dict) -> None:
+    redis_client.publish(f"emissions:{camera_id}", json.dumps(payload))
 
-    # Step 2 — Capture one frame through the dedicated sampling layer
 
+def _cleanup_job(job: InferenceJob) -> None:
     try:
-        captured_frame = frame_sampler.capture(camera.stream_url, camera.referer)
-    except FrameCaptureError as exc:
-        logger.error(f"Frame capture failed for '{camera_id}': {exc}")
-        raise self.retry(exc=exc, countdown=15)
+        frame_store.delete(job.frame_key)
+    finally:
+        inference_queue.release(job.camera_id, job.job_id)
 
-    frame = captured_frame.frame
-    logger.info(
-        "camera_frame_captured",
-        extra={
-            "camera_id": camera.camera_id,
-            "captured_at": captured_frame.captured_at.isoformat(),
-            "frame_acquisition_latency_s": round(
-                captured_frame.acquisition_latency_s,
-                3,
-            ),
-            "frame_capture_method": captured_frame.method,
-        },
+
+def _queue_depth_or_unknown() -> int:
+    try:
+        return inference_queue.depth()
+    except Exception:
+        logger.warning("inference_queue_depth_unavailable", exc_info=True)
+        return -1
+
+
+@celery_app.task(
+    bind=True,
+    name=INFERENCE_TASK,
+    max_retries=settings.INFERENCE_MAX_RETRIES,
+    soft_time_limit=settings.INFERENCE_TASK_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=settings.INFERENCE_TASK_TIME_LIMIT_SECONDS,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def process_inference_job(self, job_payload: dict) -> dict:
+    """Decode one queued frame, run inference, persist, and publish its result."""
+
+    job = InferenceJob.from_payload(job_payload)
+    inference_started_at = time.monotonic()
+    queue_wait_s = max(
+        0.0,
+        (datetime.now(timezone.utc) - job.enqueued_at).total_seconds(),
     )
 
-    # Step 3 — Detect vehicles
-    vehicle_counts, _ = detector.detect(frame)
+    try:
+        frame = frame_store.load(job.frame_key)
+    except Exception:
+        _cleanup_job(job)
+        logger.exception(
+            "inference_frame_load_failed",
+            extra={"camera_id": job.camera_id, "job_id": job.job_id},
+        )
+        raise
 
-    # Step 4 — Calculate emissions
-    emission = calculate_emission(vehicle_counts)
+    try:
+        vehicle_counts, _ = detector.detect(frame)
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            retry_countdown = 2 ** (self.request.retries + 1)
+            logger.warning(
+                "inference_job_retrying",
+                extra={
+                    "camera_id": job.camera_id,
+                    "job_id": job.job_id,
+                    "retry_count": self.request.retries + 1,
+                    "retry_countdown_s": retry_countdown,
+                },
+            )
+            raise self.retry(exc=exc, countdown=retry_countdown)
 
-    cycle_duration = time.time() - start_time
+        _cleanup_job(job)
+        logger.exception(
+            "inference_job_failed",
+            extra={"camera_id": job.camera_id, "job_id": job.job_id},
+        )
+        raise
 
-    # Step 5 — Build result dict
+    try:
+        emission = calculate_emission(vehicle_counts)
+    except Exception:
+        _cleanup_job(job)
+        logger.exception(
+            "inference_emission_calculation_failed",
+            extra={"camera_id": job.camera_id, "job_id": job.job_id},
+        )
+        raise
+    inference_latency_s = time.monotonic() - inference_started_at
+    cycle_duration_s = job.frame_acquisition_latency_s + inference_latency_s
+    processed_at = datetime.now(timezone.utc)
     result = {
-        "camera_id": camera.camera_id,
-        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "captured_at": captured_frame.captured_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "frame_acquisition_latency_s": round(
-            captured_frame.acquisition_latency_s,
-            3,
-        ),
+        "camera_id": job.camera_id,
+        "timestamp": processed_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "captured_at": job.captured_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "frame_acquisition_latency_s": round(job.frame_acquisition_latency_s, 3),
+        "queue_wait_s": round(queue_wait_s, 3),
+        "inference_latency_s": round(inference_latency_s, 3),
+        "job_id": job.job_id,
         "car": vehicle_counts["car"],
         "motorcycle": vehicle_counts["motorcycle"],
         "bus": vehicle_counts["bus"],
@@ -120,31 +150,44 @@ def process_camera(self, camera_id: str) -> dict:
         "total_pm_kg_per_hr": emission["total_pm_kg_per_hr"],
         "total_nmvoc_g_per_min": emission["total_nmvoc_g_per_min"],
         "total_nmvoc_kg_per_hr": emission["total_nmvoc_kg_per_hr"],
-        "cycle_duration_s": round(cycle_duration, 2),
+        "cycle_duration_s": round(cycle_duration_s, 2),
     }
 
-    # Step 6 — Write to DB
-    with get_sync_db() as db:
-        db.add(Emission(
-            id=uuid.uuid4(),
-            camera_id=camera.id,
-            timestamp=datetime.now(timezone.utc),
-            car=vehicle_counts["car"],
-            motorcycle=vehicle_counts["motorcycle"],
-            bus=vehicle_counts["bus"],
-            truck=vehicle_counts["truck"],
-            total_co_g_per_min=emission["total_co_g_per_min"],
-            total_co_kg_per_hr=emission["total_co_kg_per_hr"],
-            total_nox_g_per_min=emission["total_nox_g_per_min"],
-            total_nox_kg_per_hr=emission["total_nox_kg_per_hr"],
-            total_pm_g_per_min=emission["total_pm_g_per_min"],
-            total_pm_kg_per_hr=emission["total_pm_kg_per_hr"],
-            total_nmvoc_g_per_min=emission["total_nmvoc_g_per_min"],
-            total_nmvoc_kg_per_hr=emission["total_nmvoc_kg_per_hr"],
-            cycle_duration_s=round(cycle_duration, 2),
-        ))
+    try:
+        with get_sync_db() as db:
+            db.add(
+                Emission(
+                    id=uuid.uuid4(),
+                    camera_id=uuid.UUID(job.camera_database_id),
+                    timestamp=processed_at,
+                    car=vehicle_counts["car"],
+                    motorcycle=vehicle_counts["motorcycle"],
+                    bus=vehicle_counts["bus"],
+                    truck=vehicle_counts["truck"],
+                    total_co_g_per_min=emission["total_co_g_per_min"],
+                    total_co_kg_per_hr=emission["total_co_kg_per_hr"],
+                    total_nox_g_per_min=emission["total_nox_g_per_min"],
+                    total_nox_kg_per_hr=emission["total_nox_kg_per_hr"],
+                    total_pm_g_per_min=emission["total_pm_g_per_min"],
+                    total_pm_kg_per_hr=emission["total_pm_kg_per_hr"],
+                    total_nmvoc_g_per_min=emission["total_nmvoc_g_per_min"],
+                    total_nmvoc_kg_per_hr=emission["total_nmvoc_kg_per_hr"],
+                    cycle_duration_s=round(cycle_duration_s, 2),
+                )
+            )
+        publish_to_redis(job.camera_id, result)
+    finally:
+        _cleanup_job(job)
 
-    # Step 7 — Publish to Redis
-    publish_to_redis(camera.camera_id, result)
-
+    logger.info(
+        "inference_job_completed",
+        extra={
+            "camera_id": job.camera_id,
+            "job_id": job.job_id,
+            "captured_at": job.captured_at.isoformat(),
+            "queue_wait_s": round(queue_wait_s, 3),
+            "inference_latency_s": round(inference_latency_s, 3),
+            "queue_depth": _queue_depth_or_unknown(),
+        },
+    )
     return result

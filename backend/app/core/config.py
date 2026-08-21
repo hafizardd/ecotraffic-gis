@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     FRAME_CAPTURE_READ_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
     FRAME_FFMPEG_TIMEOUT_SECONDS: int = Field(default=30, gt=0)
 
+    INFERENCE_QUEUE_MAX_PENDING: int = Field(default=64, gt=0)
+    INFERENCE_RESERVATION_TTL_SECONDS: int = Field(default=180, gt=0)
+    INFERENCE_FRAME_TTL_SECONDS: int = Field(default=180, gt=0)
+    INFERENCE_FRAME_MAX_BYTES: int = Field(default=2_000_000, gt=0)
+    INFERENCE_JPEG_QUALITY: int = Field(default=85, ge=1, le=100)
+    INFERENCE_TASK_SOFT_TIME_LIMIT_SECONDS: int = Field(default=90, gt=0)
+    INFERENCE_TASK_TIME_LIMIT_SECONDS: int = Field(default=120, gt=0)
+    INFERENCE_MAX_RETRIES: int = Field(default=2, ge=0)
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

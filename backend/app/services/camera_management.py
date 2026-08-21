@@ -15,6 +15,8 @@ class CameraSource:
     camera_id: str
     stream_url: str
     referer: str | None
+    priority: str
+    sampling_interval_seconds: int | None
 
 
 def get_active_camera_source(camera_id: str) -> CameraSource | None:
@@ -33,4 +35,6 @@ def get_active_camera_source(camera_id: str) -> CameraSource | None:
             camera_id=camera.camera_id,
             stream_url=camera.stream_url,
             referer=camera.referer,
+            priority=camera.priority,
+            sampling_interval_seconds=camera.sampling_interval_seconds,
         )

@@ -26,6 +26,9 @@ export interface EmissionUpdate {
     timestamp: string;
     captured_at?: string;
     frame_acquisition_latency_s?: number;
+    queue_wait_s?: number;
+    inference_latency_s?: number;
+    job_id?: string;
     car: number;
     motorcycle: number;
     bus: number;

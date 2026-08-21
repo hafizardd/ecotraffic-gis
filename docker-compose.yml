@@ -28,14 +28,31 @@ services:
       - postgres
       - redis
 
+  beat:
+    build: ./backend
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file: ./backend/.env
+    depends_on:
+      - redis
+
+  sampler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: celery -A app.workers.sampling_worker worker --loglevel=info --pool=threads --concurrency=8 -Q camera_sampling
+    env_file: ./backend/.env
+    depends_on:
+      - redis
+      - postgres
+
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    command: >
-      sh -c "celery -A app.workers.celery_app beat --loglevel=info &
-            celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=8"
+    command: celery -A app.workers.inference_worker worker --loglevel=info --pool=solo --concurrency=1 -Q inference
     env_file: ./backend/.env
+    volumes:
+      - ./backend/yolo:/app/yolo
     depends_on:
       - redis
       - postgres

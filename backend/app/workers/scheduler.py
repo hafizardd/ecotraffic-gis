@@ -12,7 +12,7 @@ from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-PROCESS_CAMERA_TASK = "app.workers.inference_worker.process_camera"
+SAMPLE_CAMERA_TASK = "app.workers.sampling_worker.sample_camera"
 
 
 def _mark_camera_due_again(camera_id: str, now: datetime) -> None:
@@ -54,7 +54,11 @@ def dispatch_due_cameras() -> dict[str, int]:
     failed_count = 0
     for scheduled_camera in plan.due_cameras:
         try:
-            celery_app.send_task(PROCESS_CAMERA_TASK, args=(scheduled_camera.camera_id,))
+            celery_app.send_task(
+                SAMPLE_CAMERA_TASK,
+                args=(scheduled_camera.camera_id,),
+                queue="camera_sampling",
+            )
             enqueued_count += 1
         except Exception:
             failed_count += 1
