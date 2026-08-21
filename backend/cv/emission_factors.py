@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+
+
 # Fuel consumption g/km
 FUEL_CONSUMPTION: dict[str, float] = {
     "motorcycle": 35.0,
@@ -46,24 +49,19 @@ FUEL_CONSUMPTION_PER_VEHICLE = {
     for vehicle in FUEL_CONSUMPTION
 }
 
-def calculate_emission(counts: dict[str, int]) -> dict:
+def calculate_emission(counts: Mapping[str, int | float]) -> dict:
     """
-    Calculate CO₂ emission estimate from vehicle counts.
+    Calculate multi-pollutant emission-rate estimates from snapshot counts.
 
     Args:
-        counts: {"car": int, "motorcycle": int, "bus": int, "truck": int}
-                Any extra keys are ignored; missing keys are treated as 0.
+        counts: Numeric observed counts for car, motorcycle, bus, and truck.
+                Fractional values are supported for temporal snapshot means.
+                Extra keys are ignored; missing keys are treated as zero.
 
     Returns:
         {
-            "total_g_per_min":  float,   # grams CO₂ per minute
-            "total_kg_per_hr":  float,   # kilograms CO₂ per hour
-            "breakdown": {
-                "car":        float,     # g CO₂/min contribution
-                "motorcycle": float,
-                "bus":        float,
-                "truck":      float,
-            }
+            Existing total CO, NOx, PM, and NMVOC rate fields plus the
+            per-vehicle breakdown.
         }
 
     Example:

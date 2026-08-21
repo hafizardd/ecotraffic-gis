@@ -31,6 +31,12 @@ export interface EmissionUpdate {
     batch_wait_s?: number;
     batch_inference_latency_s?: number;
     batch_size?: number;
+    aggregation_status?: "collecting" | "failed";
+    aggregation_window_seconds?: number;
+    aggregation_period_start?: string;
+    aggregation_period_end?: string;
+    aggregation_sample_count?: number;
+    aggregation_latency_s?: number;
     job_id?: string;
     car: number;
     motorcycle: number;

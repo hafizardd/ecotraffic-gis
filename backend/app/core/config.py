@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     INFERENCE_BATCH_RESULT_TIMEOUT_SECONDS: int = Field(default=80, gt=0)
     INFERENCE_WORKER_CONCURRENCY: int = Field(default=8, gt=0)
 
+    EMISSION_AGGREGATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

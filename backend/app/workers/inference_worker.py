@@ -13,6 +13,11 @@ from app.core.config import settings
 from app.core.database import get_sync_db
 from app.models.emission import Emission
 from app.services.detector_lifecycle import DetectorLifecycle
+from app.services.emission_aggregation import (
+    AggregationUpdate,
+    EmissionObservation,
+    EmissionWindowAggregator,
+)
 from app.services.inference_batcher import InferenceBatcher
 from app.services.inference_jobs import InferenceJob
 from app.services.inference_queue import InferenceQueue
@@ -47,6 +52,9 @@ inference_batcher = InferenceBatcher(
     _detect_batch,
     max_batch_size=settings.INFERENCE_MAX_BATCH_SIZE,
     max_wait_ms=settings.INFERENCE_MAX_BATCH_WAIT_MS,
+)
+emission_aggregator = EmissionWindowAggregator(
+    window_seconds=settings.EMISSION_AGGREGATION_WINDOW_SECONDS,
 )
 
 
@@ -127,6 +135,79 @@ def _queue_depth_or_unknown() -> int:
         return -1
 
 
+def _aggregate_observation(
+    job: InferenceJob,
+    vehicle_counts: dict[str, int],
+    *,
+    queue_wait_s: float,
+    inference_latency_s: float,
+    cycle_duration_s: float,
+) -> AggregationUpdate:
+    return emission_aggregator.add(
+        EmissionObservation(
+            camera_id=job.camera_id,
+            camera_database_id=job.camera_database_id,
+            job_id=job.job_id,
+            captured_at=job.captured_at,
+            vehicle_counts=vehicle_counts,
+            frame_acquisition_latency_s=job.frame_acquisition_latency_s,
+            queue_wait_s=queue_wait_s,
+            inference_latency_s=inference_latency_s,
+            cycle_duration_s=cycle_duration_s,
+        )
+    )
+
+
+def _record_aggregation(
+    job: InferenceJob,
+    vehicle_counts: dict[str, int],
+    *,
+    queue_wait_s: float,
+    inference_latency_s: float,
+    cycle_duration_s: float,
+) -> dict:
+    aggregation_started_at = time.monotonic()
+    metadata = {
+        "aggregation_status": "failed",
+        "aggregation_window_seconds": settings.EMISSION_AGGREGATION_WINDOW_SECONDS,
+    }
+    try:
+        update = _aggregate_observation(
+            job,
+            vehicle_counts,
+            queue_wait_s=queue_wait_s,
+            inference_latency_s=inference_latency_s,
+            cycle_duration_s=cycle_duration_s,
+        )
+        aggregation_latency_s = time.monotonic() - aggregation_started_at
+        metadata.update(
+            {
+                "aggregation_status": "collecting",
+                "aggregation_period_start": update.current.period_start.isoformat(),
+                "aggregation_period_end": update.current.period_end.isoformat(),
+                "aggregation_sample_count": update.current.sample_count,
+                "aggregation_latency_s": round(aggregation_latency_s, 6),
+            }
+        )
+        for completed in update.completed:
+            logger.info(
+                "emission_aggregation_window_completed",
+                extra={
+                    "camera_id": completed.camera_id,
+                    "period_start": completed.period_start.isoformat(),
+                    "period_end": completed.period_end.isoformat(),
+                    "sample_count": completed.sample_count,
+                    "aggregation_latency_s": round(aggregation_latency_s, 6),
+                },
+            )
+    except Exception:
+        logger.exception(
+            "emission_aggregation_failed",
+            extra={"camera_id": job.camera_id, "job_id": job.job_id},
+        )
+    return metadata
+
+
 @celery_app.task(
     bind=True,
     name=INFERENCE_TASK,
@@ -194,6 +275,14 @@ def process_inference_job(self, job_payload: dict) -> dict:
         raise
     inference_latency_s = time.monotonic() - inference_started_at
     cycle_duration_s = job.frame_acquisition_latency_s + inference_latency_s
+    aggregation_metadata = _record_aggregation(
+        job,
+        vehicle_counts,
+        queue_wait_s=queue_wait_s,
+        inference_latency_s=inference_latency_s,
+        cycle_duration_s=cycle_duration_s,
+    )
+
     processed_at = datetime.now(timezone.utc)
     result = {
         "camera_id": job.camera_id,
@@ -222,6 +311,7 @@ def process_inference_job(self, job_payload: dict) -> dict:
         "total_nmvoc_g_per_min": emission["total_nmvoc_g_per_min"],
         "total_nmvoc_kg_per_hr": emission["total_nmvoc_kg_per_hr"],
         "cycle_duration_s": round(cycle_duration_s, 2),
+        **aggregation_metadata,
     }
 
     try:
@@ -264,6 +354,15 @@ def process_inference_job(self, job_payload: dict) -> dict:
                 3,
             ),
             "batch_size": batch_outcome.batch_size,
+            "aggregation_status": aggregation_metadata["aggregation_status"],
+            "aggregation_sample_count": aggregation_metadata.get(
+                "aggregation_sample_count",
+                0,
+            ),
+            "aggregation_latency_s": aggregation_metadata.get(
+                "aggregation_latency_s",
+                -1,
+            ),
             "queue_depth": _queue_depth_or_unknown(),
         },
     )
