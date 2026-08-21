@@ -1,15 +1,17 @@
 from datetime import datetime, timezone
 import json
 import logging
-import threading
+import os
 import time
 import uuid
 
 import redis
+from celery.signals import worker_init, worker_shutdown
 
 from app.core.config import settings
 from app.core.database import get_sync_db
 from app.models.emission import Emission
+from app.services.detector_lifecycle import DetectorLifecycle
 from app.services.inference_jobs import InferenceJob
 from app.services.inference_queue import InferenceQueue
 from app.workers.celery_app import celery_app
@@ -22,14 +24,52 @@ logger = logging.getLogger(__name__)
 
 INFERENCE_TASK = "app.workers.inference_worker.process_inference_job"
 
-_thread_local = threading.local()
+
+def _build_detector() -> VehicleDetector:
+    return VehicleDetector(
+        model_path=settings.YOLO_MODEL_PATH,
+        confidence_threshold=settings.CONFIDENCE_THRESHOLD,
+        device=settings.YOLO_DEVICE,
+        image_size=settings.YOLO_IMAGE_SIZE,
+    )
 
 
-def get_detector() -> VehicleDetector:
-    if not hasattr(_thread_local, "detector"):
-        logger.info("Loading YOLO model for inference worker...")
-        _thread_local.detector = VehicleDetector()
-    return _thread_local.detector
+detector_lifecycle = DetectorLifecycle(_build_detector)
+
+
+def _uses_solo_pool(sender) -> bool:
+    pool_class = getattr(sender, "pool_cls", None)
+    if isinstance(pool_class, str):
+        return pool_class.lower().split(".")[-1] == "solo"
+
+    pool_module = getattr(pool_class, "__module__", "").lower()
+    return pool_module == "celery.concurrency.solo"
+
+
+@worker_init.connect(weak=False)
+def initialize_inference_worker_detector(sender=None, **_kwargs) -> None:
+    """Eagerly load one model in the deployed solo inference process."""
+    if not _uses_solo_pool(sender):
+        logger.info(
+            "yolo_model_initialization_deferred",
+            extra={"process_id": os.getpid()},
+        )
+        return
+
+    detector_lifecycle.start()
+    logger.info(
+        "inference_worker_detector_ready",
+        extra={"process_id": os.getpid()},
+    )
+
+
+@worker_shutdown.connect(weak=False)
+def shutdown_inference_worker_detector(**_kwargs) -> None:
+    detector_lifecycle.stop()
+    logger.info(
+        "inference_worker_detector_released",
+        extra={"process_id": os.getpid()},
+    )
 
 
 redis_client = redis.Redis.from_url(settings.REDIS_URL)
@@ -44,7 +84,6 @@ frame_store = RedisFrameStore(
     max_bytes=settings.INFERENCE_FRAME_MAX_BYTES,
     jpeg_quality=settings.INFERENCE_JPEG_QUALITY,
 )
-detector = get_detector()
 
 
 def publish_to_redis(camera_id: str, payload: dict) -> None:
@@ -96,7 +135,7 @@ def process_inference_job(self, job_payload: dict) -> dict:
         raise
 
     try:
-        vehicle_counts, _ = detector.detect(frame)
+        vehicle_counts, _ = detector_lifecycle.detect(frame)
     except Exception as exc:
         if self.request.retries < self.max_retries:
             retry_countdown = 2 ** (self.request.retries + 1)

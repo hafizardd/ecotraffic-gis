@@ -1,9 +1,10 @@
-import cv2
-import os
-
-from ultralytics import YOLO
-import numpy as np
+from collections.abc import Callable
 import logging
+import os
+from typing import Any
+
+import cv2
+import numpy as np
 
 from cv.frame_sampler import FrameSampler
 
@@ -20,18 +21,45 @@ DEFAULT_MODEL_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "yolo", "yolov8l.pt")
 )
 
+
+def _load_yolo_model(model_path: str) -> Any:
+    """Import the heavy runtime only in the process that owns the model."""
+    from ultralytics import YOLO
+
+    return YOLO(model_path)
+
+
 class VehicleDetector:
     def __init__(
             self,
             model_path: str = DEFAULT_MODEL_PATH,
-            confidence_threshold: float = 0.25
+            confidence_threshold: float = 0.25,
+            device: str | None = None,
+            image_size: int = 640,
+            model_factory: Callable[[str], Any] = _load_yolo_model,
     ): 
         self.model_path = model_path
         self.confidence_threshold = float(confidence_threshold)
+        normalized_device = "" if device is None else str(device).strip()
+        self.device = (
+            None if normalized_device.lower() in ("", "auto") else normalized_device
+        )
+        self.image_size = int(image_size)
 
-        logger.info(f"Loading YOLO model from {self.model_path}")
-        self.model = YOLO(self.model_path)
-        logger.info("Model loaded successfully")
+        logger.info(
+            "yolo_model_loading",
+            extra={
+                "model_path": self.model_path,
+                "device": self.device or "auto",
+                "confidence_threshold": self.confidence_threshold,
+                "image_size": self.image_size,
+            },
+        )
+        self.model = model_factory(self.model_path)
+        logger.info(
+            "yolo_model_loaded",
+            extra={"model_path": self.model_path, "device": self.device or "auto"},
+        )
     
     def detect(self, frame:np.ndarray) -> tuple[dict, np.ndarray]:
         """
@@ -53,7 +81,15 @@ class VehicleDetector:
         counts = {label: 0 for label in VEHICLE_CLASSES.values()}
         annotated_frame = frame.copy()
 
-        results = self.model(frame, verbose=False, conf=self.confidence_threshold)
+        inference_options = {
+            "verbose": False,
+            "conf": self.confidence_threshold,
+            "imgsz": self.image_size,
+        }
+        if self.device is not None:
+            inference_options["device"] = self.device
+
+        results = self.model(frame, **inference_options)
 
         for result in results:
             for box in result.boxes:

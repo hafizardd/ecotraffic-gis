@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str 
 
     YOLO_MODEL_PATH: str = "yolo/yolov8l.pt"
-    CONFIDENCE_THRESHOLD: float = 0.4
+    YOLO_DEVICE: str = "auto"
+    YOLO_IMAGE_SIZE: int = Field(default=640, gt=0)
+    CONFIDENCE_THRESHOLD: float = Field(default=0.25, ge=0.0, le=1.0)
 
     STREAM_REFERER: str = "https://cctv.jogjakota.go.id/"
 
