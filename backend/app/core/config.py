@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     CAMERA_RETRY_BASE_SECONDS: int = Field(default=5, gt=0)
     CAMERA_RETRY_MAX_SECONDS: int = Field(default=60, gt=0)
     CAMERA_FAILURES_BEFORE_OFFLINE: int = Field(default=4, gt=0)
+    DATA_FRESH_THRESHOLD_SECONDS: int = Field(default=30, ge=0)
+    DATA_AGING_THRESHOLD_SECONDS: int = Field(default=90, ge=0)
 
     FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
     FRAME_CAPTURE_READ_TIMEOUT_SECONDS: int = Field(default=10, gt=0)

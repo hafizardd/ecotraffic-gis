@@ -10,6 +10,7 @@ from celery.signals import worker_init, worker_shutdown
 
 from app.core.config import settings
 from app.services.detector_lifecycle import DetectorLifecycle
+from app.services.data_freshness import FreshnessPolicy
 from app.services.emission_aggregation import (
     AggregationUpdate,
     EmissionObservation,
@@ -116,6 +117,7 @@ frame_store = RedisFrameStore(
 latest_state_store = LatestEmissionStateStore(
     redis_client,
     ttl_seconds=settings.LATEST_EMISSION_STATE_TTL_SECONDS,
+    freshness_policy=FreshnessPolicy.from_settings(settings),
 )
 historical_emission_store = HistoricalEmissionStore()
 

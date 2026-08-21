@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import get_session_factory
 from app.models.camera import Camera
 from app.models.emission import Emission
+from app.services.data_freshness import FreshnessPolicy, add_freshness
 from app.services.latest_emission_state import AsyncLatestEmissionStateStore
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,10 @@ async def send_initial_state(websocket: WebSocket) -> None:
             client = None
             try:
                 client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-                cached = await AsyncLatestEmissionStateStore(client).get_many(camera_ids)
+                cached = await AsyncLatestEmissionStateStore(
+                    client,
+                    freshness_policy=FreshnessPolicy.from_settings(settings),
+                ).get_many(camera_ids)
             except Exception:
                 logger.warning("latest_emission_state_unavailable", exc_info=True)
             finally:
@@ -105,7 +109,7 @@ async def send_initial_state(websocket: WebSocket) -> None:
 
 
 def _legacy_emission_payload(camera_id: str, emission: Emission) -> dict:
-    return {
+    payload = {
         "camera_id": camera_id,
         "timestamp": emission.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "car": emission.car,
@@ -122,6 +126,12 @@ def _legacy_emission_payload(camera_id: str, emission: Emission) -> dict:
         "total_nmvoc_kg_per_hr": emission.total_nmvoc_kg_per_hr,
         "cycle_duration_s": emission.cycle_duration_s,
     }
+    return add_freshness(
+        payload,
+        observed_at=emission.timestamp,
+        now=datetime.now(timezone.utc),
+        policy=FreshnessPolicy.from_settings(settings),
+    )
 
 
 # ------------------------------------------------------------------

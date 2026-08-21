@@ -15,6 +15,8 @@ class CameraProperties(BaseModel):
     last_sample_at: datetime | None
     last_success_at: datetime | None
     last_error_at: datetime | None
+    freshness_status: str
+    data_age_seconds: int | None
     created_at: datetime
  
     model_config = {"from_attributes": True}

@@ -5,17 +5,29 @@ from datetime import datetime, timezone
 import json
 from typing import Any
 
+from app.services.data_freshness import (
+    FreshnessPolicy,
+    add_freshness,
+    parse_observed_at,
+)
 from app.services.emission_aggregation import AggregatedEmission, EMISSION_RATE_FIELDS, VEHICLE_TYPES
 
 
 class LatestEmissionStateStore:
     """Store the latest aggregated emission state for each camera."""
 
-    def __init__(self, redis_client: Any, *, ttl_seconds: int) -> None:
+    def __init__(
+        self,
+        redis_client: Any,
+        *,
+        ttl_seconds: int,
+        freshness_policy: FreshnessPolicy | None = None,
+    ) -> None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be greater than zero")
         self.redis = redis_client
         self.ttl_seconds = ttl_seconds
+        self.freshness_policy = freshness_policy
 
     def save(self, emission: AggregatedEmission) -> dict[str, Any]:
         payload = self.payload_for(emission)
@@ -33,13 +45,12 @@ class LatestEmissionStateStore:
     def key_for(camera_id: str) -> str:
         return f"emission:camera:{camera_id}"
 
-    @staticmethod
-    def payload_for(emission: AggregatedEmission) -> dict[str, Any]:
+    def payload_for(self, emission: AggregatedEmission) -> dict[str, Any]:
         aggregate = emission.to_payload()
         vehicle_count = aggregate["vehicle_count"]
         emission_values = aggregate["emission"]
         last_captured_at = aggregate["last_captured_at"]
-        return {
+        payload = {
             "camera_id": emission.camera_id,
             "camera_database_id": emission.camera_database_id,
             "timestamp": last_captured_at,
@@ -59,6 +70,14 @@ class LatestEmissionStateStore:
             "inference_latency_s": aggregate["mean_inference_latency_s"],
             "cycle_duration_s": aggregate["mean_cycle_duration_s"],
         }
+        if self.freshness_policy is None:
+            return payload
+        return add_freshness(
+            payload,
+            observed_at=emission.last_captured_at,
+            now=datetime.now(timezone.utc),
+            policy=self.freshness_policy,
+        )
 
     @staticmethod
     def decode(value: str | bytes | None) -> dict[str, Any] | None:
@@ -75,8 +94,14 @@ class LatestEmissionStateStore:
 class AsyncLatestEmissionStateStore:
     """Async counterpart used by request handlers without blocking the event loop."""
 
-    def __init__(self, redis_client: Any) -> None:
+    def __init__(
+        self,
+        redis_client: Any,
+        *,
+        freshness_policy: FreshnessPolicy | None = None,
+    ) -> None:
         self.redis = redis_client
+        self.freshness_policy = freshness_policy
 
     async def get_many(self, camera_ids: list[str]) -> dict[str, dict[str, Any]]:
         if not camera_ids:
@@ -88,6 +113,15 @@ class AsyncLatestEmissionStateStore:
         for camera_id, value in zip(camera_ids, values, strict=True):
             try:
                 state = LatestEmissionStateStore.decode(value)
+                if state is not None and self.freshness_policy is not None:
+                    state = add_freshness(
+                        state,
+                        observed_at=parse_observed_at(
+                            state.get("captured_at") or state.get("timestamp")
+                        ),
+                        now=datetime.now(timezone.utc),
+                        policy=self.freshness_policy,
+                    )
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
                 continue
             if state is not None:
