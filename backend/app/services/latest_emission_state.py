@@ -1,6 +1,6 @@
 """Redis-backed current emission state for low-latency reads."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 import json
 from typing import Any
@@ -99,9 +99,11 @@ class AsyncLatestEmissionStateStore:
         redis_client: Any,
         *,
         freshness_policy: FreshnessPolicy | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self.redis = redis_client
         self.freshness_policy = freshness_policy
+        self.now = now or (lambda: datetime.now(timezone.utc))
 
     async def get_many(self, camera_ids: list[str]) -> dict[str, dict[str, Any]]:
         if not camera_ids:
@@ -119,7 +121,7 @@ class AsyncLatestEmissionStateStore:
                         observed_at=parse_observed_at(
                             state.get("captured_at") or state.get("timestamp")
                         ),
-                        now=datetime.now(timezone.utc),
+                        now=self.now(),
                         policy=self.freshness_policy,
                     )
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError):

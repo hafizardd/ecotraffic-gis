@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 
 from app.services.emission_aggregation import EmissionObservation, EmissionWindowAggregator
+from app.services.data_freshness import FreshnessPolicy
 from app.services.latest_emission_state import (
     AsyncLatestEmissionStateStore,
     LatestEmissionStateStore,
@@ -86,3 +87,27 @@ def test_async_latest_state_store_reads_all_cameras_in_one_mget_and_skips_bad_da
     )
 
     assert states == {"camera-1": {"camera_id": "camera-1"}}
+
+
+def test_async_latest_state_recalculates_freshness_when_cache_is_read():
+    redis_client = FakeRedis()
+    now = datetime(2026, 8, 21, 12, 2, tzinfo=timezone.utc)
+    redis_client.values = {
+        "emission:camera:camera-1": json.dumps(
+            {"camera_id": "camera-1", "captured_at": "2026-08-21T12:00:00+00:00"}
+        )
+    }
+
+    states = asyncio.run(
+        AsyncLatestEmissionStateStore(
+            redis_client,
+            freshness_policy=FreshnessPolicy(
+                fresh_threshold_seconds=30,
+                aging_threshold_seconds=90,
+            ),
+            now=lambda: now,
+        ).get_many(["camera-1"])
+    )
+
+    assert states["camera-1"]["freshness_status"] == "stale"
+    assert states["camera-1"]["data_age_seconds"] == 120
