@@ -6,6 +6,7 @@ from app.services.camera_management import get_active_camera_source
 
 from cv.detector import VehicleDetector
 from cv.emission_factors import calculate_emission
+from cv.frame_sampler import FrameCaptureError, FrameSampler
 
 import threading
 import uuid
@@ -42,6 +43,11 @@ def publish_to_redis(camera_id: str, payload: dict) -> None:
     r.close()
 
 detector = get_detector()  # Preload model for main thread
+frame_sampler = FrameSampler(
+    open_timeout_seconds=settings.FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS,
+    read_timeout_seconds=settings.FRAME_CAPTURE_READ_TIMEOUT_SECONDS,
+    ffmpeg_timeout_seconds=settings.FRAME_FFMPEG_TIMEOUT_SECONDS,
+)
 
 @celery_app.task(bind=True, max_retries=3)
 def process_camera(self, camera_id: str) -> dict:
@@ -63,13 +69,27 @@ def process_camera(self, camera_id: str) -> dict:
         logger.warning(f"Camera '{camera_id}' not found or inactive.")
         return
 
-    # Step 2 — Capture frame (already preloaded)
+    # Step 2 — Capture one frame through the dedicated sampling layer
 
     try:
-        frame = detector.capture_frame(camera.stream_url, camera.referer)
-    except RuntimeError as exc:
+        captured_frame = frame_sampler.capture(camera.stream_url, camera.referer)
+    except FrameCaptureError as exc:
         logger.error(f"Frame capture failed for '{camera_id}': {exc}")
         raise self.retry(exc=exc, countdown=15)
+
+    frame = captured_frame.frame
+    logger.info(
+        "camera_frame_captured",
+        extra={
+            "camera_id": camera.camera_id,
+            "captured_at": captured_frame.captured_at.isoformat(),
+            "frame_acquisition_latency_s": round(
+                captured_frame.acquisition_latency_s,
+                3,
+            ),
+            "frame_capture_method": captured_frame.method,
+        },
+    )
 
     # Step 3 — Detect vehicles
     vehicle_counts, _ = detector.detect(frame)
@@ -83,6 +103,11 @@ def process_camera(self, camera_id: str) -> dict:
     result = {
         "camera_id": camera.camera_id,
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "captured_at": captured_frame.captured_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "frame_acquisition_latency_s": round(
+            captured_frame.acquisition_latency_s,
+            3,
+        ),
         "car": vehicle_counts["car"],
         "motorcycle": vehicle_counts["motorcycle"],
         "bus": vehicle_counts["bus"],

@@ -24,6 +24,8 @@ export interface CameraFeatureCollection {
 export interface EmissionUpdate {
     camera_id: string;
     timestamp: string;
+    captured_at?: string;
+    frame_acquisition_latency_s?: number;
     car: number;
     motorcycle: number;
     bus: number;

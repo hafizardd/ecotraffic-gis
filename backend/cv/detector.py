@@ -1,11 +1,11 @@
 import cv2
 import os
-import subprocess
 
 from ultralytics import YOLO
 import numpy as np
 import logging
-import time
+
+from cv.frame_sampler import FrameSampler
 
 logger = logging.getLogger(__name__)
 
@@ -75,72 +75,10 @@ class VehicleDetector:
         return counts, annotated_frame
     
     def capture_frame(self, stream_url: str, referer: str = None) -> np.ndarray:
-        """
-        Capture a single frame from an HLS stream.
-        Tries OpenCV first, falls back to ffmpeg if needed.
- 
-        Args:
-            stream_url: HLS .m3u8 URL.
-            referer: HTTP Referer header value (required by some CCTV portals).
- 
-        Returns:
-            frame: np.ndarray (BGR).
- 
-        Raises:
-            RuntimeError: if both capture methods fail.
-        """
-        frame = self._capture_opencv(stream_url)
- 
-        if frame is None:
-            logger.warning("OpenCV capture failed, falling back to ffmpeg.")
-            frame = self._capture_ffmpeg(stream_url, referer or "")
- 
-        if frame is None:
-            raise RuntimeError(
-                f"Failed to capture frame from stream: {stream_url}"
-            )
- 
-        logger.info(f"Captured frame — shape: {frame.shape}")
-        return frame
-    
-    def _capture_opencv(self, url: str, timeout: int = 10) -> np.ndarray | None:
-        """Attempt frame capture using cv2.VideoCapture."""
-        cap = cv2.VideoCapture(url)
-        start = time.time()
- 
-        while not cap.isOpened():
-            if time.time() - start > timeout:
-                cap.release()
-                return None
-            time.sleep(0.5)
- 
-        ret, frame = cap.read()
-        cap.release()
- 
-        return frame if (ret and frame is not None) else None
- 
-    def _capture_ffmpeg(self, url: str, referer: str) -> np.ndarray | None:
-        """Fallback frame capture using ffmpeg subprocess → pipe → numpy."""
-        cmd = [
-            "ffmpeg", "-y",
-            "-headers", f"Referer: {referer}",
-            "-i", url,
-            "-frames:v", "1",
-            "-f", "image2pipe",
-            "-vcodec", "png",
-            "-",
-        ]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=30)
-            if proc.returncode == 0 and proc.stdout:
-                arr = np.frombuffer(proc.stdout, np.uint8)
-                return cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        except subprocess.TimeoutExpired:
-            logger.error("ffmpeg timed out.")
-        except Exception as e:
-            logger.error(f"ffmpeg error: {e}")
- 
-        return None
+        """Compatibility wrapper; new processing code uses FrameSampler directly."""
+        captured_frame = FrameSampler().capture(stream_url, referer)
+        logger.info("Captured frame — shape: %s", captured_frame.frame.shape)
+        return captured_frame.frame
  
     def _draw_box(
         self,

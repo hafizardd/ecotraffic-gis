@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     CAMERA_SCHEDULER_TICK_SECONDS: int = Field(default=1, gt=0)
     CAMERA_SCHEDULER_MAX_DISPATCH_PER_TICK: int = Field(default=8, gt=0)
 
+    FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+    FRAME_CAPTURE_READ_TIMEOUT_SECONDS: int = Field(default=10, gt=0)
+    FRAME_FFMPEG_TIMEOUT_SECONDS: int = Field(default=30, gt=0)
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()
