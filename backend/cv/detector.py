@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 import logging
 import os
 from typing import Any
@@ -61,7 +61,7 @@ class VehicleDetector:
             extra={"model_path": self.model_path, "device": self.device or "auto"},
         )
     
-    def detect(self, frame:np.ndarray) -> tuple[dict, np.ndarray]:
+    def detect(self, frame: np.ndarray) -> tuple[dict[str, int], np.ndarray]:
         """
         Run vehicle detection on a single BGR frame (OpenCV format).
  
@@ -75,38 +75,77 @@ class VehicleDetector:
         Raises:
             ValueError: if frame is None or empty.
         """
-        if frame is None or frame.size == 0:
-            raise ValueError("Input frame is empty or None")
-            
-        counts = {label: 0 for label in VEHICLE_CLASSES.values()}
-        annotated_frame = frame.copy()
+        self._validate_frame(frame)
+        results = list(self.model(frame, **self._inference_options()))
+        if len(results) != 1:
+            raise RuntimeError(
+                f"YOLO returned {len(results)} results for one input frame"
+            )
+        return self._parse_result(frame, results[0], annotate=True)
 
-        inference_options = {
+    def detect_batch(
+        self,
+        frames: Sequence[np.ndarray],
+        *,
+        annotate: bool = True,
+    ) -> list[tuple[dict[str, int], np.ndarray]]:
+        """Run one ordered YOLO call for multiple BGR frames."""
+        batch = list(frames)
+        if not batch:
+            raise ValueError("Inference batch must contain at least one frame")
+        for frame in batch:
+            self._validate_frame(frame)
+
+        results = list(self.model(batch, **self._inference_options()))
+        if len(results) != len(batch):
+            raise RuntimeError(
+                f"YOLO returned {len(results)} results for {len(batch)} frames"
+            )
+
+        return [
+            self._parse_result(frame, result, annotate=annotate)
+            for frame, result in zip(batch, results)
+        ]
+
+    def _inference_options(self) -> dict[str, Any]:
+        options: dict[str, Any] = {
             "verbose": False,
             "conf": self.confidence_threshold,
             "imgsz": self.image_size,
         }
         if self.device is not None:
-            inference_options["device"] = self.device
+            options["device"] = self.device
+        return options
 
-        results = self.model(frame, **inference_options)
+    @staticmethod
+    def _validate_frame(frame: np.ndarray) -> None:
+        if frame is None or frame.size == 0:
+            raise ValueError("Input frame is empty or None")
 
-        for result in results:
-            for box in result.boxes:
-                cls_id = int(box.cls[0])
-                conf = float(box.conf[0])
+    def _parse_result(
+        self,
+        frame: np.ndarray,
+        result: Any,
+        *,
+        annotate: bool,
+    ) -> tuple[dict[str, int], np.ndarray]:
+        counts = {label: 0 for label in VEHICLE_CLASSES.values()}
+        annotated_frame = frame.copy() if annotate else frame
 
-                if cls_id not in VEHICLE_CLASSES:
-                    continue
+        for box in result.boxes:
+            cls_id = int(box.cls[0])
+            confidence = float(box.conf[0])
 
-                if conf < self.confidence_threshold:
-                    continue
+            if cls_id not in VEHICLE_CLASSES:
+                continue
+            if confidence < self.confidence_threshold:
+                continue
 
-                label = VEHICLE_CLASSES[cls_id]
-                counts[label] += 1
-
-                self._draw_box(annotated_frame, box, label, conf)
-                logger.debug(f"Detected {label} with confidence {conf:.2f}")
+            label = VEHICLE_CLASSES[cls_id]
+            counts[label] += 1
+            if annotate:
+                self._draw_box(annotated_frame, box, label, confidence)
+            logger.debug("Detected %s with confidence %.2f", label, confidence)
 
         return counts, annotated_frame
     

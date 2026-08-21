@@ -15,6 +15,7 @@ celery_app.conf.enable_utc = True
 celery_app.conf.broker_connection_retry_on_startup = True
 celery_app.conf.task_track_started = True
 celery_app.conf.result_expires = 3600
+celery_app.conf.worker_concurrency = settings.INFERENCE_WORKER_CONCURRENCY
 celery_app.conf.task_queue_max_priority = 9
 celery_app.conf.task_default_priority = 5
 celery_app.conf.broker_transport_options = {

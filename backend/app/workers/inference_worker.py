@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime, timezone
 import json
 import logging
@@ -12,6 +13,7 @@ from app.core.config import settings
 from app.core.database import get_sync_db
 from app.models.emission import Emission
 from app.services.detector_lifecycle import DetectorLifecycle
+from app.services.inference_batcher import InferenceBatcher
 from app.services.inference_jobs import InferenceJob
 from app.services.inference_queue import InferenceQueue
 from app.workers.celery_app import celery_app
@@ -37,19 +39,33 @@ def _build_detector() -> VehicleDetector:
 detector_lifecycle = DetectorLifecycle(_build_detector)
 
 
-def _uses_solo_pool(sender) -> bool:
+def _detect_batch(frames: Sequence):
+    return detector_lifecycle.detect_batch(frames, annotate=False)
+
+
+inference_batcher = InferenceBatcher(
+    _detect_batch,
+    max_batch_size=settings.INFERENCE_MAX_BATCH_SIZE,
+    max_wait_ms=settings.INFERENCE_MAX_BATCH_WAIT_MS,
+)
+
+
+def _uses_in_process_pool(sender) -> bool:
     pool_class = getattr(sender, "pool_cls", None)
     if isinstance(pool_class, str):
-        return pool_class.lower().split(".")[-1] == "solo"
+        return pool_class.lower().split(".")[-1] in {"solo", "threads"}
 
     pool_module = getattr(pool_class, "__module__", "").lower()
-    return pool_module == "celery.concurrency.solo"
+    return pool_module in {
+        "celery.concurrency.solo",
+        "celery.concurrency.thread",
+    }
 
 
 @worker_init.connect(weak=False)
 def initialize_inference_worker_detector(sender=None, **_kwargs) -> None:
-    """Eagerly load one model in the deployed solo inference process."""
-    if not _uses_solo_pool(sender):
+    """Eagerly start the model and micro-batcher for in-process pools."""
+    if not _uses_in_process_pool(sender):
         logger.info(
             "yolo_model_initialization_deferred",
             extra={"process_id": os.getpid()},
@@ -57,14 +73,20 @@ def initialize_inference_worker_detector(sender=None, **_kwargs) -> None:
         return
 
     detector_lifecycle.start()
+    inference_batcher.start()
     logger.info(
         "inference_worker_detector_ready",
-        extra={"process_id": os.getpid()},
+        extra={
+            "process_id": os.getpid(),
+            "max_batch_size": settings.INFERENCE_MAX_BATCH_SIZE,
+            "max_batch_wait_ms": settings.INFERENCE_MAX_BATCH_WAIT_MS,
+        },
     )
 
 
 @worker_shutdown.connect(weak=False)
 def shutdown_inference_worker_detector(**_kwargs) -> None:
+    inference_batcher.stop()
     detector_lifecycle.stop()
     logger.info(
         "inference_worker_detector_released",
@@ -135,7 +157,11 @@ def process_inference_job(self, job_payload: dict) -> dict:
         raise
 
     try:
-        vehicle_counts, _ = detector_lifecycle.detect(frame)
+        batch_outcome = inference_batcher.submit(
+            frame,
+            timeout_s=settings.INFERENCE_BATCH_RESULT_TIMEOUT_SECONDS,
+        )
+        vehicle_counts, _ = batch_outcome.result
     except Exception as exc:
         if self.request.retries < self.max_retries:
             retry_countdown = 2 ** (self.request.retries + 1)
@@ -176,6 +202,12 @@ def process_inference_job(self, job_payload: dict) -> dict:
         "frame_acquisition_latency_s": round(job.frame_acquisition_latency_s, 3),
         "queue_wait_s": round(queue_wait_s, 3),
         "inference_latency_s": round(inference_latency_s, 3),
+        "batch_wait_s": round(batch_outcome.batch_wait_s, 3),
+        "batch_inference_latency_s": round(
+            batch_outcome.batch_inference_latency_s,
+            3,
+        ),
+        "batch_size": batch_outcome.batch_size,
         "job_id": job.job_id,
         "car": vehicle_counts["car"],
         "motorcycle": vehicle_counts["motorcycle"],
@@ -226,6 +258,12 @@ def process_inference_job(self, job_payload: dict) -> dict:
             "captured_at": job.captured_at.isoformat(),
             "queue_wait_s": round(queue_wait_s, 3),
             "inference_latency_s": round(inference_latency_s, 3),
+            "batch_wait_s": round(batch_outcome.batch_wait_s, 3),
+            "batch_inference_latency_s": round(
+                batch_outcome.batch_inference_latency_s,
+                3,
+            ),
+            "batch_size": batch_outcome.batch_size,
             "queue_depth": _queue_depth_or_unknown(),
         },
     )

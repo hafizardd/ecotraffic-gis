@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     INFERENCE_TASK_SOFT_TIME_LIMIT_SECONDS: int = Field(default=90, gt=0)
     INFERENCE_TASK_TIME_LIMIT_SECONDS: int = Field(default=120, gt=0)
     INFERENCE_MAX_RETRIES: int = Field(default=2, ge=0)
+    INFERENCE_MAX_BATCH_SIZE: int = Field(default=8, gt=0)
+    INFERENCE_MAX_BATCH_WAIT_MS: int = Field(default=200, ge=0)
+    INFERENCE_BATCH_RESULT_TIMEOUT_SECONDS: int = Field(default=80, gt=0)
+    INFERENCE_WORKER_CONCURRENCY: int = Field(default=8, gt=0)
 
     model_config = SettingsConfigDict(env_file=".env")
 

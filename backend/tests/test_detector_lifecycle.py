@@ -4,6 +4,7 @@ import threading
 import time
 
 import numpy as np
+import pytest
 
 from app.services.detector_lifecycle import DetectorLifecycle
 from cv.detector import VehicleDetector
@@ -134,3 +135,46 @@ def test_detector_leaves_device_selection_automatic_by_default():
     detector.detect(np.zeros((2, 2, 3), dtype=np.uint8))
 
     assert "device" not in options_seen[0]
+
+
+def test_detector_batches_frames_once_and_preserves_result_order():
+    model_inputs = []
+
+    def box(class_id):
+        return SimpleNamespace(
+            cls=np.array([class_id]),
+            conf=np.array([0.9]),
+        )
+
+    def model(frames, **_options):
+        model_inputs.append(frames)
+        return [
+            SimpleNamespace(boxes=[box(2)]),
+            SimpleNamespace(boxes=[box(7), box(7)]),
+        ]
+
+    detector = VehicleDetector(model_factory=lambda _path: model)
+    first_frame = np.zeros((2, 2, 3), dtype=np.uint8)
+    second_frame = np.ones((2, 2, 3), dtype=np.uint8)
+
+    results = detector.detect_batch(
+        [first_frame, second_frame],
+        annotate=False,
+    )
+
+    assert len(model_inputs) == 1
+    assert model_inputs[0][0] is first_frame
+    assert model_inputs[0][1] is second_frame
+    assert results[0][0]["car"] == 1
+    assert results[0][0]["truck"] == 0
+    assert results[1][0]["car"] == 0
+    assert results[1][0]["truck"] == 2
+    assert results[0][1] is first_frame
+    assert results[1][1] is second_frame
+
+
+def test_detector_rejects_incomplete_batch_results():
+    detector = VehicleDetector(model_factory=lambda _path: lambda *_args, **_kwargs: [])
+
+    with pytest.raises(RuntimeError, match="0 results for 1 frames"):
+        detector.detect_batch([np.zeros((2, 2, 3), dtype=np.uint8)])

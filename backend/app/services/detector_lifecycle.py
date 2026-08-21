@@ -6,6 +6,8 @@ from typing import Generic, Protocol, TypeVar
 class Detector(Protocol):
     def detect(self, frame): ...
 
+    def detect_batch(self, frames, **kwargs): ...
+
 
 DetectorType = TypeVar("DetectorType", bound=Detector)
 
@@ -41,6 +43,11 @@ class DetectorLifecycle(Generic[DetectorType]):
         """Serialize access so one process never drives its model concurrently."""
         with self._inference_lock:
             return self.get().detect(frame)
+
+    def detect_batch(self, frames, **kwargs):
+        """Run one ordered batch against the process-owned model."""
+        with self._inference_lock:
+            return self.get().detect_batch(frames, **kwargs)
 
     def stop(self) -> None:
         with self._lock:

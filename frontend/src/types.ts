@@ -28,6 +28,9 @@ export interface EmissionUpdate {
     frame_acquisition_latency_s?: number;
     queue_wait_s?: number;
     inference_latency_s?: number;
+    batch_wait_s?: number;
+    batch_inference_latency_s?: number;
+    batch_size?: number;
     job_id?: string;
     car: number;
     motorcycle: number;

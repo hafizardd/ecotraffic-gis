@@ -49,7 +49,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    command: celery -A app.workers.inference_worker worker --loglevel=info --pool=solo --concurrency=1 -Q inference
+    command: celery -A app.workers.inference_worker worker --loglevel=info --pool=threads -Q inference
     env_file: ./backend/.env
     volumes:
       - ./backend/yolo:/app/yolo
