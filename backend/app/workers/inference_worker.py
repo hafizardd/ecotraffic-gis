@@ -122,7 +122,8 @@ latest_state_store = LatestEmissionStateStore(
 historical_emission_store = HistoricalEmissionStore()
 
 
-def publish_to_redis(camera_id: str, payload: dict) -> None:
+def publish_latest_state(camera_id: str, payload: dict) -> None:
+    """Publish the compact latest aggregate state to WebSocket subscribers."""
     redis_client.publish(f"emissions:{camera_id}", json.dumps(payload))
 
 
@@ -196,8 +197,19 @@ def _record_aggregation(
             }
         )
         try:
-            latest_state_store.save(update.current)
+            latest_state = latest_state_store.save(update.current)
             metadata["latest_state_status"] = "stored"
+            if not isinstance(latest_state, dict):
+                raise TypeError("latest state store returned a non-object payload")
+            try:
+                publish_latest_state(job.camera_id, latest_state)
+                metadata["realtime_status"] = "published"
+            except Exception:
+                metadata["realtime_status"] = "failed"
+                logger.exception(
+                    "latest_emission_realtime_publish_failed",
+                    extra={"camera_id": job.camera_id, "job_id": job.job_id},
+                )
         except Exception:
             metadata["latest_state_status"] = "failed"
             logger.exception(
@@ -261,7 +273,7 @@ def _record_aggregation(
     reject_on_worker_lost=True,
 )
 def process_inference_job(self, job_payload: dict) -> dict:
-    """Decode one queued frame, run inference, aggregate, and publish its result."""
+    """Decode one queued frame, run inference, aggregate, and publish latest state."""
 
     job = InferenceJob.from_payload(job_payload)
     inference_started_at = time.monotonic()
@@ -357,10 +369,7 @@ def process_inference_job(self, job_payload: dict) -> dict:
         **aggregation_metadata,
     }
 
-    try:
-        publish_to_redis(job.camera_id, result)
-    finally:
-        _cleanup_job(job)
+    _cleanup_job(job)
 
     logger.info(
         "inference_job_completed",

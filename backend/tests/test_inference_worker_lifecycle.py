@@ -175,7 +175,14 @@ def test_aggregation_stores_the_current_aggregate_as_latest_state(monkeypatch):
     monkeypatch.setattr(
         inference_worker.latest_state_store,
         "save",
-        lambda current: saved.append(current),
+        lambda current: saved.append(current)
+        or {"camera_id": current.camera_id, "sample_count": current.sample_count},
+    )
+    published = []
+    monkeypatch.setattr(
+        inference_worker,
+        "publish_latest_state",
+        lambda camera_id, payload: published.append((camera_id, payload)),
     )
     job = SimpleNamespace(camera_id="camera-12", job_id="job-12")
 
@@ -189,6 +196,8 @@ def test_aggregation_stores_the_current_aggregate_as_latest_state(monkeypatch):
 
     assert saved == [aggregate]
     assert metadata["latest_state_status"] == "stored"
+    assert metadata["realtime_status"] == "published"
+    assert published == [("camera-12", {"camera_id": "camera-12", "sample_count": 1})]
 
 
 def test_completed_aggregation_window_is_persisted_once(monkeypatch):
@@ -214,7 +223,12 @@ def test_completed_aggregation_window_is_persisted_once(monkeypatch):
         "_aggregate_observation",
         lambda *_args, **_kwargs: update,
     )
-    monkeypatch.setattr(inference_worker.latest_state_store, "save", lambda _current: None)
+    monkeypatch.setattr(
+        inference_worker.latest_state_store,
+        "save",
+        lambda current: {"camera_id": current.camera_id},
+    )
+    monkeypatch.setattr(inference_worker, "publish_latest_state", lambda *_args: None)
     persisted = []
     monkeypatch.setattr(
         inference_worker.historical_emission_store,

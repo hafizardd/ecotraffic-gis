@@ -25,6 +25,14 @@ export interface EmissionUpdate {
     camera_id: string;
     timestamp: string;
     captured_at?: string;
+    updated_at?: string;
+    period_start?: string;
+    period_end?: string;
+    sample_count?: number;
+    aggregation_method?: "arithmetic_mean_of_snapshot_counts";
+    vehicle_count_semantics?: "mean_observed_snapshot_count";
+    freshness_status?: "fresh" | "aging" | "stale" | "unknown";
+    data_age_seconds?: number | null;
     frame_acquisition_latency_s?: number;
     queue_wait_s?: number;
     inference_latency_s?: number;

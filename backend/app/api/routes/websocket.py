@@ -153,7 +153,8 @@ async def websocket_emissions(websocket: WebSocket):
 
 
 # ------------------------------------------------------------------
-# Redis subscriber — runs as background task on app startup
+# Redis subscriber — fans out compact latest-state payloads from the worker.
+# The channel intentionally carries no frames, bounding boxes, or raw YOLO data.
 # ------------------------------------------------------------------
 
 async def redis_subscriber():
@@ -167,7 +168,7 @@ async def redis_subscriber():
             )
             pubsub = client.pubsub()
             await pubsub.psubscribe("emissions:*")
-            logger.info("Subscribed to Redis pattern: emissions:*")
+            logger.info("Subscribed to latest emission pattern: emissions:*")
 
             async for message in pubsub.listen():
                 if message["type"] == "pmessage":
