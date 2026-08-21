@@ -4,6 +4,13 @@ export interface CameraProperties {
     camera_id: string;
     stream_url: string;
     is_active: boolean;
+    status: "active" | "degraded" | "offline";
+    failure_count: number;
+    last_sample_at: string | null;
+    last_success_at: string | null;
+    last_error_at: string | null;
+    freshness_status: "fresh" | "aging" | "stale" | "unknown";
+    data_age_seconds: number | null;
     created_at: string;
 }
 

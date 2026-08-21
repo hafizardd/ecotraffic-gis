@@ -71,7 +71,7 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
                         <Icon />
                     </div>
                     <div className="vehicle-copy">
-                        <span>{label}</span><strong>{count}</strong>
+                        <span>{label}</span><strong>{Number.isInteger(count) ? count : count.toFixed(1)}</strong>
                     </div>
                 </div>
             ))}
