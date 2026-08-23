@@ -13,10 +13,11 @@ export default function MapView() {
     const { cameras, loading, error } = useCameras();
     const emissionMap = useEmissionsContext();
     const [selectedCamera, setSelectedCamera] = useState<CameraFeature | null>(null);
-    const [style, setStyle] = useState<"liberty" | "dark">("liberty");
+    const [style, setStyle] = useState<"street-2d-building" | "dark">("street-2d-building");
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
+    const geoMapidApiKey = process.env.NEXT_PUBLIC_GEOMAPID_API_KEY;
 
     useEffect(() => {
         const area = mapAreaRef.current;
@@ -41,7 +42,7 @@ export default function MapView() {
     return (
         <div className={`map-panel-layout ${selectedCamera ? "has-panel" : ""}`}>
         <div className="map-area" ref={mapAreaRef}>
-        <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://tiles.openfreemap.org/styles/${style}`}
+        <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }}>
             <NavigationControl position="bottom-right" showCompass={false} />
             {cameras.map((camera) => {
@@ -61,7 +62,7 @@ export default function MapView() {
                 );
             })}
             <button
-                onClick={() => setStyle(s => s === "liberty" ? "dark" : "liberty")}
+                onClick={() => setStyle(s => s === "street-2d-building" ? "dark" : "street-2d-building")}
                 className="map-style-toggle"
             >
                 {isDark ? (
