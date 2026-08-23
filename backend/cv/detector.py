@@ -1,11 +1,12 @@
-import cv2
-import os
-import subprocess
-
-from ultralytics import YOLO
-import numpy as np
+from collections.abc import Callable, Sequence
 import logging
-import time
+import os
+from typing import Any
+
+import cv2
+import numpy as np
+
+from cv.frame_sampler import FrameSampler
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +21,47 @@ DEFAULT_MODEL_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "yolo", "yolov8l.pt")
 )
 
+
+def _load_yolo_model(model_path: str) -> Any:
+    """Import the heavy runtime only in the process that owns the model."""
+    from ultralytics import YOLO
+
+    return YOLO(model_path)
+
+
 class VehicleDetector:
     def __init__(
             self,
             model_path: str = DEFAULT_MODEL_PATH,
-            confidence_threshold: float = 0.25
+            confidence_threshold: float = 0.25,
+            device: str | None = None,
+            image_size: int = 640,
+            model_factory: Callable[[str], Any] = _load_yolo_model,
     ): 
         self.model_path = model_path
         self.confidence_threshold = float(confidence_threshold)
+        normalized_device = "" if device is None else str(device).strip()
+        self.device = (
+            None if normalized_device.lower() in ("", "auto") else normalized_device
+        )
+        self.image_size = int(image_size)
 
-        logger.info(f"Loading YOLO model from {self.model_path}")
-        self.model = YOLO(self.model_path)
-        logger.info("Model loaded successfully")
+        logger.info(
+            "yolo_model_loading",
+            extra={
+                "model_path": self.model_path,
+                "device": self.device or "auto",
+                "confidence_threshold": self.confidence_threshold,
+                "image_size": self.image_size,
+            },
+        )
+        self.model = model_factory(self.model_path)
+        logger.info(
+            "yolo_model_loaded",
+            extra={"model_path": self.model_path, "device": self.device or "auto"},
+        )
     
-    def detect(self, frame:np.ndarray) -> tuple[dict, np.ndarray]:
+    def detect(self, frame: np.ndarray) -> tuple[dict[str, int], np.ndarray]:
         """
         Run vehicle detection on a single BGR frame (OpenCV format).
  
@@ -47,100 +75,85 @@ class VehicleDetector:
         Raises:
             ValueError: if frame is None or empty.
         """
+        self._validate_frame(frame)
+        results = list(self.model(frame, **self._inference_options()))
+        if len(results) != 1:
+            raise RuntimeError(
+                f"YOLO returned {len(results)} results for one input frame"
+            )
+        return self._parse_result(frame, results[0], annotate=True)
+
+    def detect_batch(
+        self,
+        frames: Sequence[np.ndarray],
+        *,
+        annotate: bool = True,
+    ) -> list[tuple[dict[str, int], np.ndarray]]:
+        """Run one ordered YOLO call for multiple BGR frames."""
+        batch = list(frames)
+        if not batch:
+            raise ValueError("Inference batch must contain at least one frame")
+        for frame in batch:
+            self._validate_frame(frame)
+
+        results = list(self.model(batch, **self._inference_options()))
+        if len(results) != len(batch):
+            raise RuntimeError(
+                f"YOLO returned {len(results)} results for {len(batch)} frames"
+            )
+
+        return [
+            self._parse_result(frame, result, annotate=annotate)
+            for frame, result in zip(batch, results)
+        ]
+
+    def _inference_options(self) -> dict[str, Any]:
+        options: dict[str, Any] = {
+            "verbose": False,
+            "conf": self.confidence_threshold,
+            "imgsz": self.image_size,
+        }
+        if self.device is not None:
+            options["device"] = self.device
+        return options
+
+    @staticmethod
+    def _validate_frame(frame: np.ndarray) -> None:
         if frame is None or frame.size == 0:
             raise ValueError("Input frame is empty or None")
-            
+
+    def _parse_result(
+        self,
+        frame: np.ndarray,
+        result: Any,
+        *,
+        annotate: bool,
+    ) -> tuple[dict[str, int], np.ndarray]:
         counts = {label: 0 for label in VEHICLE_CLASSES.values()}
-        annotated_frame = frame.copy()
+        annotated_frame = frame.copy() if annotate else frame
 
-        results = self.model(frame, verbose=False, conf=self.confidence_threshold)
+        for box in result.boxes:
+            cls_id = int(box.cls[0])
+            confidence = float(box.conf[0])
 
-        for result in results:
-            for box in result.boxes:
-                cls_id = int(box.cls[0])
-                conf = float(box.conf[0])
+            if cls_id not in VEHICLE_CLASSES:
+                continue
+            if confidence < self.confidence_threshold:
+                continue
 
-                if cls_id not in VEHICLE_CLASSES:
-                    continue
-
-                if conf < self.confidence_threshold:
-                    continue
-
-                label = VEHICLE_CLASSES[cls_id]
-                counts[label] += 1
-
-                self._draw_box(annotated_frame, box, label, conf)
-                logger.debug(f"Detected {label} with confidence {conf:.2f}")
+            label = VEHICLE_CLASSES[cls_id]
+            counts[label] += 1
+            if annotate:
+                self._draw_box(annotated_frame, box, label, confidence)
+            logger.debug("Detected %s with confidence %.2f", label, confidence)
 
         return counts, annotated_frame
     
     def capture_frame(self, stream_url: str, referer: str = None) -> np.ndarray:
-        """
-        Capture a single frame from an HLS stream.
-        Tries OpenCV first, falls back to ffmpeg if needed.
- 
-        Args:
-            stream_url: HLS .m3u8 URL.
-            referer: HTTP Referer header value (required by some CCTV portals).
- 
-        Returns:
-            frame: np.ndarray (BGR).
- 
-        Raises:
-            RuntimeError: if both capture methods fail.
-        """
-        frame = self._capture_opencv(stream_url)
- 
-        if frame is None:
-            logger.warning("OpenCV capture failed, falling back to ffmpeg.")
-            frame = self._capture_ffmpeg(stream_url, referer or "")
- 
-        if frame is None:
-            raise RuntimeError(
-                f"Failed to capture frame from stream: {stream_url}"
-            )
- 
-        logger.info(f"Captured frame — shape: {frame.shape}")
-        return frame
-    
-    def _capture_opencv(self, url: str, timeout: int = 10) -> np.ndarray | None:
-        """Attempt frame capture using cv2.VideoCapture."""
-        cap = cv2.VideoCapture(url)
-        start = time.time()
- 
-        while not cap.isOpened():
-            if time.time() - start > timeout:
-                cap.release()
-                return None
-            time.sleep(0.5)
- 
-        ret, frame = cap.read()
-        cap.release()
- 
-        return frame if (ret and frame is not None) else None
- 
-    def _capture_ffmpeg(self, url: str, referer: str) -> np.ndarray | None:
-        """Fallback frame capture using ffmpeg subprocess → pipe → numpy."""
-        cmd = [
-            "ffmpeg", "-y",
-            "-headers", f"Referer: {referer}",
-            "-i", url,
-            "-frames:v", "1",
-            "-f", "image2pipe",
-            "-vcodec", "png",
-            "-",
-        ]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=30)
-            if proc.returncode == 0 and proc.stdout:
-                arr = np.frombuffer(proc.stdout, np.uint8)
-                return cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        except subprocess.TimeoutExpired:
-            logger.error("ffmpeg timed out.")
-        except Exception as e:
-            logger.error(f"ffmpeg error: {e}")
- 
-        return None
+        """Compatibility wrapper; new processing code uses FrameSampler directly."""
+        captured_frame = FrameSampler().capture(stream_url, referer)
+        logger.info("Captured frame — shape: %s", captured_frame.frame.shape)
+        return captured_frame.frame
  
     def _draw_box(
         self,

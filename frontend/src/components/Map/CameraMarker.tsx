@@ -49,7 +49,7 @@ export default function CameraMarker({
                     offset={12}
                     className="popup-dark"
                 >
-                    <div className="marker-popup"><strong>{camera.properties.name}</strong>{camera.properties.is_active && <span><i /> Live</span>}<small>Klik untuk melihat detail</small></div>
+                    <div className="marker-popup"><strong>{camera.properties.name}</strong><span className={`marker-health-${camera.properties.status}`}><i /> {camera.properties.status}</span><small>Data: {camera.properties.freshness_status}</small><small>Klik untuk melihat detail</small></div>
                 </Popup>
             )}
         </>

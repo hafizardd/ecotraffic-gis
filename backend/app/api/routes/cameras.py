@@ -1,11 +1,13 @@
-import json
+from datetime import datetime, timezone
  
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
  
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.camera import Camera
+from app.services.data_freshness import FreshnessPolicy, classify_freshness
 from app.schemas.camera import (
     CameraFeature,
     CameraFeatureCollection,
@@ -26,6 +28,7 @@ async def get_cameras(db: AsyncSession = Depends(get_db)):
         .order_by(Camera.created_at)
     )
     rows = result.all()
+    now = datetime.now(timezone.utc)
 
     features = []
     for camera, geojson in rows:
@@ -33,14 +36,7 @@ async def get_cameras(db: AsyncSession = Depends(get_db)):
         features.append(
             CameraFeature(
                 geometry=GeoJSONPoint(coordinates=coords),
-                properties=CameraProperties(
-                    id=camera.id,
-                    name=camera.name,
-                    camera_id=camera.camera_id,
-                    stream_url=camera.stream_url,
-                    is_active=camera.is_active,
-                    created_at=camera.created_at,
-                )
+                properties=_camera_properties(camera, now)
             )
         )
 
@@ -59,4 +55,27 @@ async def get_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
     if camera is None:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found.")
  
-    return camera
+    return _camera_properties(camera, datetime.now(timezone.utc))
+
+
+def _camera_properties(camera: Camera, now: datetime) -> CameraProperties:
+    freshness = classify_freshness(
+        camera.last_success_at,
+        now=now,
+        policy=FreshnessPolicy.from_settings(settings),
+    )
+    return CameraProperties(
+        id=camera.id,
+        name=camera.name,
+        camera_id=camera.camera_id,
+        stream_url=camera.stream_url,
+        is_active=camera.is_active,
+        status=camera.status,
+        failure_count=camera.failure_count,
+        last_sample_at=camera.last_sample_at,
+        last_success_at=camera.last_success_at,
+        last_error_at=camera.last_error_at,
+        freshness_status=freshness.status.value,
+        data_age_seconds=freshness.age_seconds,
+        created_at=camera.created_at,
+    )

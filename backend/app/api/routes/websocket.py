@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -10,6 +11,8 @@ from app.core.config import settings
 from app.core.database import get_session_factory
 from app.models.camera import Camera
 from app.models.emission import Emission
+from app.services.data_freshness import FreshnessPolicy, add_freshness
+from app.services.latest_emission_state import AsyncLatestEmissionStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +55,9 @@ manager = ConnectionManager()
 
 async def send_initial_state(websocket: WebSocket) -> None:
     """
-    On new client connect, immediately send the latest emission row
-    for each active camera. Fixes the blank state on page refresh.
+    On new client connect, immediately send cached latest state for each active
+    camera. History is queried once only for cache misses during a deployment
+    transition or after state expiry.
     """
     try:
         factory = get_session_factory()
@@ -62,38 +66,73 @@ async def send_initial_state(websocket: WebSocket) -> None:
                 select(Camera).where(Camera.is_active == True)  # noqa: E712
             )
             cameras = cam_result.scalars().all()
+            camera_ids = [camera.camera_id for camera in cameras]
+
+            cached = {}
+            client = None
+            try:
+                client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+                cached = await AsyncLatestEmissionStateStore(
+                    client,
+                    freshness_policy=FreshnessPolicy.from_settings(settings),
+                ).get_many(camera_ids)
+            except Exception:
+                logger.warning("latest_emission_state_unavailable", exc_info=True)
+            finally:
+                if client is not None:
+                    await client.aclose()
+
+            missing = [camera for camera in cameras if camera.camera_id not in cached]
+            fallback_by_database_id = {}
+            if missing:
+                fallback_result = await db.execute(
+                    select(Emission)
+                    .where(Emission.camera_id.in_([camera.id for camera in missing]))
+                    .order_by(Emission.camera_id, Emission.timestamp.desc())
+                    .distinct(Emission.camera_id)
+                )
+                fallback_by_database_id = {
+                    emission.camera_id: emission
+                    for emission in fallback_result.scalars().all()
+                }
 
             for camera in cameras:
-                result = await db.execute(
-                    select(Emission)
-                    .where(Emission.camera_id == camera.id)
-                    .order_by(Emission.timestamp.desc())
-                    .limit(1)
-                )
-                emission = result.scalar_one_or_none()
-
-                if emission:
-                    payload = {
-                        "camera_id": camera.camera_id,
-                        "timestamp": emission.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "car": emission.car,
-                        "motorcycle": emission.motorcycle,
-                        "bus": emission.bus,
-                        "truck": emission.truck,
-                        "total_co_g_per_min": emission.total_co_g_per_min,
-                        "total_co_kg_per_hr": emission.total_co_kg_per_hr,
-                        "total_nox_g_per_min": emission.total_nox_g_per_min,
-                        "total_nox_kg_per_hr": emission.total_nox_kg_per_hr,
-                        "total_pm_g_per_min": emission.total_pm_g_per_min,
-                        "total_pm_kg_per_hr": emission.total_pm_kg_per_hr,
-                        "total_nmvoc_g_per_min": emission.total_nmvoc_g_per_min,
-                        "total_nmvoc_kg_per_hr": emission.total_nmvoc_kg_per_hr,
-                        "cycle_duration_s": emission.cycle_duration_s,
-                    }
-                    await websocket.send_text(json.dumps(payload))
+                payload = cached.get(camera.camera_id)
+                if payload is None:
+                    emission = fallback_by_database_id.get(camera.id)
+                    if emission is None:
+                        continue
+                    payload = _legacy_emission_payload(camera.camera_id, emission)
+                await websocket.send_text(json.dumps(payload))
 
     except Exception as e:
         logger.error(f"send_initial_state failed: {e}")
+
+
+def _legacy_emission_payload(camera_id: str, emission: Emission) -> dict:
+    payload = {
+        "camera_id": camera_id,
+        "timestamp": emission.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "car": emission.car,
+        "motorcycle": emission.motorcycle,
+        "bus": emission.bus,
+        "truck": emission.truck,
+        "total_co_g_per_min": emission.total_co_g_per_min,
+        "total_co_kg_per_hr": emission.total_co_kg_per_hr,
+        "total_nox_g_per_min": emission.total_nox_g_per_min,
+        "total_nox_kg_per_hr": emission.total_nox_kg_per_hr,
+        "total_pm_g_per_min": emission.total_pm_g_per_min,
+        "total_pm_kg_per_hr": emission.total_pm_kg_per_hr,
+        "total_nmvoc_g_per_min": emission.total_nmvoc_g_per_min,
+        "total_nmvoc_kg_per_hr": emission.total_nmvoc_kg_per_hr,
+        "cycle_duration_s": emission.cycle_duration_s,
+    }
+    return add_freshness(
+        payload,
+        observed_at=emission.timestamp,
+        now=datetime.now(timezone.utc),
+        policy=FreshnessPolicy.from_settings(settings),
+    )
 
 
 # ------------------------------------------------------------------
@@ -115,7 +154,8 @@ async def websocket_emissions(websocket: WebSocket):
 
 
 # ------------------------------------------------------------------
-# Redis subscriber — runs as background task on app startup
+# Redis subscriber — fans out compact latest-state payloads from the worker.
+# The channel intentionally carries no frames, bounding boxes, or raw YOLO data.
 # ------------------------------------------------------------------
 
 async def redis_subscriber():
@@ -129,7 +169,7 @@ async def redis_subscriber():
             )
             pubsub = client.pubsub()
             await pubsub.psubscribe("emissions:*")
-            logger.info("Subscribed to Redis pattern: emissions:*")
+            logger.info("Subscribed to latest emission pattern: emissions:*")
 
             async for message in pubsub.listen():
                 if message["type"] == "pmessage":

@@ -4,6 +4,10 @@ A real-time WebGIS platform that monitors vehicle-based carbon emissions across 
 
 Built for the AI Innovation Competition — combining **YOLOv8 vehicle detection**, **FastAPI**, **PostGIS**, and **React + Leaflet.js** into a single live dashboard targeting urban traffic corridors in Yogyakarta.
 
+The current scalable scheduler, bounded inference pipeline, aggregation
+semantics, configuration, and synthetic load-test results are documented in
+[Scalable CCTV Processing Pipeline](docs/scalable-cctv-pipeline.md).
+
 ---
 
 ## 📸 What It Does

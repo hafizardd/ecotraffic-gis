@@ -20,12 +20,18 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
 
     if (!camera) return null;
 
+    const healthStatus = camera.properties.status;
+    const freshnessStatus = liveEmission?.freshness_status ?? camera.properties.freshness_status;
+    const ageSeconds = liveEmission?.data_age_seconds ?? camera.properties.data_age_seconds;
+
     return (
         <aside className="monitoring-panel">
             <div className="panel-header">
                 <div className="panel-location-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
                 <div className="panel-title"><span>LOKASI TERPILIH</span><h2>{camera.properties.name}</h2></div>
-                {camera.properties.is_active && <div className="panel-live"><i /> LIVE</div>}
+                <div className={`panel-live panel-health-${healthStatus}`}>
+                    <i /> {healthStatus.toUpperCase()}
+                </div>
                 <button
                     onClick={onClose}
                     className="panel-close"
@@ -38,6 +44,10 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
             </div>
 
             <div className="panel-content">
+                <div className="panel-data-status" aria-live="polite">
+                    <span>DATA {freshnessStatus.toUpperCase()}</span>
+                    <small>{ageSeconds == null ? "Belum ada data" : `${ageSeconds}s sejak capture terakhir`}</small>
+                </div>
                 <section className="panel-section video-section">
                     <div className="section-heading"><div><span>LIVE CAMERA</span><small>Streaming pemantauan lokasi</small></div></div>
                     <VideoFeed streamUrl={camera.properties.stream_url} />

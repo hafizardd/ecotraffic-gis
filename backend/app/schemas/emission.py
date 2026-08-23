@@ -7,10 +7,10 @@ class EmissionRow(BaseModel):
     """Single emission record — one detection cycle."""
     id: uuid.UUID
     timestamp: datetime
-    car: int
-    motorcycle: int
-    bus: int
-    truck: int
+    car: float
+    motorcycle: float
+    bus: float
+    truck: float
     total_co_g_per_min: float
     total_co_kg_per_hr: float
     total_nox_g_per_min: float
