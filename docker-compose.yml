@@ -23,6 +23,7 @@ services:
       - "8080:8000"
     volumes:
       - ./backend/yolo:/app/yolo
+      - ./backend/data:/app/data
     env_file: ./backend/.env
     depends_on:
       - postgres
