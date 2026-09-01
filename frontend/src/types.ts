@@ -57,14 +57,22 @@ export interface EmissionUpdate {
     motorcycle: number;
     bus: number;
     truck: number;
-    total_co_g_per_min: number;
-    total_co_kg_per_hr: number;
+    total_tsp_g_per_min: number;
+    total_tsp_kg_per_hr: number;
     total_nox_g_per_min: number;
     total_nox_kg_per_hr: number;
-    total_pm_g_per_min: number;
-    total_pm_kg_per_hr: number;
-    total_nmvoc_g_per_min: number;
-    total_nmvoc_kg_per_hr: number;
+    total_so2_g_per_min: number;
+    total_so2_kg_per_hr: number;
+    total_hc_g_per_min: number;
+    total_hc_kg_per_hr: number;
+    total_co_g_per_min: number;
+    total_co_kg_per_hr: number;
+    total_co2_g_per_min: number;
+    total_co2_kg_per_hr: number;
+    total_ch4_g_per_min: number;
+    total_ch4_kg_per_hr: number;
+    total_n2o_g_per_min: number;
+    total_n2o_kg_per_hr: number;
     cycle_duration_s: number;
 }
 
@@ -75,14 +83,22 @@ export interface EmissionRow {
     motorcycle: number;
     bus: number;
     truck: number; 
-    total_co_g_per_min: number;
-    total_co_kg_per_hr: number;
+    total_tsp_g_per_min: number;
+    total_tsp_kg_per_hr: number;
     total_nox_g_per_min: number;
     total_nox_kg_per_hr: number;
-    total_pm_g_per_min: number;
-    total_pm_kg_per_hr: number;
-    total_nmvoc_g_per_min: number;
-    total_nmvoc_kg_per_hr: number;
+    total_so2_g_per_min: number;
+    total_so2_kg_per_hr: number;
+    total_hc_g_per_min: number;
+    total_hc_kg_per_hr: number;
+    total_co_g_per_min: number;
+    total_co_kg_per_hr: number;
+    total_co2_g_per_min: number;
+    total_co2_kg_per_hr: number;
+    total_ch4_g_per_min: number;
+    total_ch4_kg_per_hr: number;
+    total_n2o_g_per_min: number;
+    total_n2o_kg_per_hr: number;
     cycle_duration_s: number;
 }
 
@@ -94,8 +110,12 @@ export interface CameraEmissionsResponse {
 
 export interface ChartPoint {
     timestamp: string;
-    co: number;
+    tsp: number;
     nox: number;
-    pm: number;
-    nmvoc: number;
+    so2: number;
+    hc: number;
+    co: number;
+    co2: number;
+    ch4: number;
+    n2o: number;
 }

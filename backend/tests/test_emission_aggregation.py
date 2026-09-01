@@ -83,8 +83,8 @@ def test_aggregate_rate_is_recalculated_from_mean_snapshot_counts():
     assert update.current.emission["total_nox_g_per_min"] == expected[
         "total_nox_g_per_min"
     ]
-    assert update.current.emission["total_pm_kg_per_hr"] == expected[
-        "total_pm_kg_per_hr"
+    assert update.current.emission["total_tsp_kg_per_hr"] == expected[
+        "total_tsp_kg_per_hr"
     ]
 
 
@@ -167,14 +167,22 @@ def test_normalized_payload_documents_snapshot_mean_semantics():
     assert payload["vehicle_count_semantics"] == "mean_observed_snapshot_count"
     assert payload["vehicle_count"]["car"] == 3
     assert set(payload["emission"]) == {
-        "total_co_g_per_min",
-        "total_co_kg_per_hr",
+        "total_tsp_g_per_min",
+        "total_tsp_kg_per_hr",
         "total_nox_g_per_min",
         "total_nox_kg_per_hr",
-        "total_pm_g_per_min",
-        "total_pm_kg_per_hr",
-        "total_nmvoc_g_per_min",
-        "total_nmvoc_kg_per_hr",
+        "total_so2_g_per_min",
+        "total_so2_kg_per_hr",
+        "total_hc_g_per_min",
+        "total_hc_kg_per_hr",
+        "total_co_g_per_min",
+        "total_co_kg_per_hr",
+        "total_co2_g_per_min",
+        "total_co2_kg_per_hr",
+        "total_ch4_g_per_min",
+        "total_ch4_kg_per_hr",
+        "total_n2o_g_per_min",
+        "total_n2o_kg_per_hr",
     }
     assert payload["mean_queue_wait_s"] == 2
     assert payload["mean_inference_latency_s"] == 3

@@ -10,14 +10,22 @@ from cv.emission_factors import calculate_emission
 
 VEHICLE_TYPES = ("car", "motorcycle", "bus", "truck")
 EMISSION_RATE_FIELDS = (
-    "total_co_g_per_min",
-    "total_co_kg_per_hr",
+    "total_tsp_g_per_min",
+    "total_tsp_kg_per_hr",
     "total_nox_g_per_min",
     "total_nox_kg_per_hr",
-    "total_pm_g_per_min",
-    "total_pm_kg_per_hr",
-    "total_nmvoc_g_per_min",
-    "total_nmvoc_kg_per_hr",
+    "total_so2_g_per_min",
+    "total_so2_kg_per_hr",
+    "total_hc_g_per_min",
+    "total_hc_kg_per_hr",
+    "total_co_g_per_min",
+    "total_co_kg_per_hr",
+    "total_co2_g_per_min",
+    "total_co2_kg_per_hr",
+    "total_ch4_g_per_min",
+    "total_ch4_kg_per_hr",
+    "total_n2o_g_per_min",
+    "total_n2o_kg_per_hr",
 )
 
 

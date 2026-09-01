@@ -57,8 +57,22 @@ CSV_HEADERS = [
     "motorcycle",
     "bus",
     "truck",
-    "total_g_per_min",
-    "total_kg_per_hr",
+    "total_tsp_g_per_min",
+    "total_tsp_kg_per_hr",
+    "total_nox_g_per_min",
+    "total_nox_kg_per_hr",
+    "total_so2_g_per_min",
+    "total_so2_kg_per_hr",
+    "total_hc_g_per_min",
+    "total_hc_kg_per_hr",
+    "total_co_g_per_min",
+    "total_co_kg_per_hr",
+    "total_co2_g_per_min",
+    "total_co2_kg_per_hr",
+    "total_ch4_g_per_min",
+    "total_ch4_kg_per_hr",
+    "total_n2o_g_per_min",
+    "total_n2o_kg_per_hr",
     "cycle_duration_s",
 ]
 
@@ -102,8 +116,7 @@ def write_row(writer, camera_id: str, counts: dict, emission: dict, duration: fl
         "motorcycle":      counts.get("motorcycle", 0),
         "bus":             counts.get("bus", 0),
         "truck":           counts.get("truck", 0),
-        "total_g_per_min": emission["total_g_per_min"],
-        "total_kg_per_hr": emission["total_kg_per_hr"],
+        **{key: emission[key] for key in CSV_HEADERS if key.startswith("total_")},
         "cycle_duration_s": round(duration, 2),
     })
 
@@ -146,8 +159,8 @@ def run_cycle(
         f"[{camera_id}] "
         f"car={counts['car']} moto={counts['motorcycle']} "
         f"bus={counts['bus']} truck={counts['truck']} | "
-        f"{emission['total_g_per_min']} g CO₂/min "
-        f"({emission['total_kg_per_hr']} kg/hr) | "
+        f"{emission['total_co2_g_per_min']} g CO₂/min "
+        f"({emission['total_co2_kg_per_hr']} kg/hr) | "
         f"cycle={cycle_duration:.1f}s"
     )
 
@@ -251,7 +264,7 @@ def main(
                 csv_file.flush()  # write to disk immediately, don't buffer
 
                 # Update stats
-                g = result["emission"]["total_g_per_min"]
+                g = result["emission"]["total_co2_g_per_min"]
                 stats["cycles"] += 1
                 stats["total_g"] += g
                 stats["peak_g"] = max(stats["peak_g"], g)
