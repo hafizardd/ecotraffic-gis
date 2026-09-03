@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 import logging
 import os
 from typing import Any
@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from cv.frame_sampler import FrameSampler
+from cv.proposal_emission_factors import VEHICLE_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,13 @@ VEHICLE_CLASSES = {
     3: "motorcycle",
     5: "bus",
     7: "truck"
+}
+
+DEFAULT_YOLO_CATEGORY_MAPPING = {
+    "motorcycle": "motorcycle",
+    "car": "gasoline_car",
+    "bus": "bus",
+    "truck": "truck",
 }
 
 DEFAULT_MODEL_PATH = os.path.abspath(
@@ -36,6 +44,7 @@ class VehicleDetector:
             confidence_threshold: float = 0.25,
             device: str | None = None,
             image_size: int = 640,
+            category_mapping: Mapping[str, str] | None = None,
             model_factory: Callable[[str], Any] = _load_yolo_model,
     ): 
         self.model_path = model_path
@@ -45,6 +54,9 @@ class VehicleDetector:
             None if normalized_device.lower() in ("", "auto") else normalized_device
         )
         self.image_size = int(image_size)
+        self.category_mapping = dict(
+            DEFAULT_YOLO_CATEGORY_MAPPING if category_mapping is None else category_mapping
+        )
 
         logger.info(
             "yolo_model_loading",
@@ -129,7 +141,7 @@ class VehicleDetector:
         *,
         annotate: bool,
     ) -> tuple[dict[str, int], np.ndarray]:
-        counts = {label: 0 for label in VEHICLE_CLASSES.values()}
+        counts = {category: 0 for category in VEHICLE_CATEGORIES}
         annotated_frame = frame.copy() if annotate else frame
 
         for box in result.boxes:
@@ -141,11 +153,14 @@ class VehicleDetector:
             if confidence < self.confidence_threshold:
                 continue
 
-            label = VEHICLE_CLASSES[cls_id]
-            counts[label] += 1
+            yolo_label = VEHICLE_CLASSES[cls_id]
+            category = self.category_mapping.get(yolo_label)
+            if category is None:
+                continue
+            counts[category] += 1
             if annotate:
-                self._draw_box(annotated_frame, box, label, confidence)
-            logger.debug("Detected %s with confidence %.2f", label, confidence)
+                self._draw_box(annotated_frame, box, category, confidence)
+            logger.debug("Detected %s with confidence %.2f", category, confidence)
 
         return counts, annotated_frame
     

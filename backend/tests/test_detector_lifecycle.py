@@ -113,7 +113,13 @@ def test_detector_passes_explicit_model_configuration():
     counts, annotated = detector.detect(frame)
 
     assert loaded_paths == ["models/traffic.pt"]
-    assert counts == {"car": 0, "motorcycle": 0, "bus": 0, "truck": 0}
+    assert counts == {
+        "motorcycle": 0,
+        "gasoline_car": 0,
+        "diesel_car": 0,
+        "bus": 0,
+        "truck": 0,
+    }
     assert annotated is not frame
     assert model_calls[0][0] is frame
     assert model_calls[0][1] == {
@@ -165,9 +171,9 @@ def test_detector_batches_frames_once_and_preserves_result_order():
     assert len(model_inputs) == 1
     assert model_inputs[0][0] is first_frame
     assert model_inputs[0][1] is second_frame
-    assert results[0][0]["car"] == 1
+    assert results[0][0]["gasoline_car"] == 1
     assert results[0][0]["truck"] == 0
-    assert results[1][0]["car"] == 0
+    assert results[1][0]["gasoline_car"] == 0
     assert results[1][0]["truck"] == 2
     assert results[0][1] is first_frame
     assert results[1][1] is second_frame
