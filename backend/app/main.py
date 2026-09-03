@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
  
-from app.api.routes import cameras, emissions
+from app.api.routes import cameras, emissions, segment_emissions
 from app.api.routes.websocket import router as websocket_router, redis_subscriber
 from app.core.config import settings
  
@@ -33,6 +33,7 @@ app.add_middleware(
 # ------------------------------------------------------------------
 app.include_router(cameras.router)
 app.include_router(emissions.router)
+app.include_router(segment_emissions.router)
 app.include_router(websocket_router)
 
 _background_tasks = set()
