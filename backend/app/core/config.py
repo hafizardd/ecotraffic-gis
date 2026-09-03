@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     EMISSION_AGGREGATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
     LATEST_EMISSION_STATE_TTL_SECONDS: int = Field(default=3600, gt=0)
 
-    model_config = SettingsConfigDict(env_file=".env")
+    # Deployments may define settings for adjacent services; they should not
+    # prevent this application from starting when those keys are unrelated.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
