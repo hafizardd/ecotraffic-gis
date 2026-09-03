@@ -4,16 +4,10 @@ import { useEffect, useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchCameraEmissions } from "@/services/api";
 import { ChartPoint, EmissionUpdate } from "@/types";
+import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 
 interface EmissionChartProps { cameraId: string; liveEmission: EmissionUpdate | null; }
 const formatTime = (ts: string) => ts.slice(11, 19);
-const lines = [
-    { key: "co", color: "#f05252", name: "CO" },
-    { key: "nmvoc", color: "#4c8dff", name: "NMVOC" },
-    { key: "nox", color: "#f5a524", name: "NOx" },
-    { key: "pm", color: "#a87bff", name: "PM" },
-] as const;
-
 export default function EmissionChart({ cameraId, liveEmission }: EmissionChartProps) {
     const [chartData, setChartData] = useState<ChartPoint[]>([]);
     const [loading, setLoading] = useState(true);
@@ -24,7 +18,10 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
         const stateTimer = window.setTimeout(() => { if (active) { setLoading(true); setError(false); } }, 0);
         fetchCameraEmissions(cameraId, 50).then((res) => {
             if (!active) return;
-            setChartData(res.emissions.map((row) => ({ timestamp: row.timestamp, co: row.total_co_g_per_min, nox: row.total_nox_g_per_min, pm: row.total_pm_g_per_min, nmvoc: row.total_nmvoc_g_per_min })).sort((a, b) => a.timestamp.localeCompare(b.timestamp)));
+            setChartData(res.emissions.map((row) => ({
+                timestamp: row.timestamp,
+                ...Object.fromEntries(EMISSION_DEFINITIONS.map(({ key, field }) => [key, Number(row[field] ?? 0)])),
+            }) as ChartPoint).sort((a, b) => a.timestamp.localeCompare(b.timestamp)));
         }).catch(() => active && setError(true)).finally(() => active && setLoading(false));
         return () => { active = false; window.clearTimeout(stateTimer); };
     }, [cameraId]);
@@ -32,7 +29,10 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
     useEffect(() => {
         if (!liveEmission) return;
         const timer = window.setTimeout(() => setChartData((prev) => {
-                const point: ChartPoint = { timestamp: liveEmission.timestamp, co: liveEmission.total_co_g_per_min, nox: liveEmission.total_nox_g_per_min, pm: liveEmission.total_pm_g_per_min, nmvoc: liveEmission.total_nmvoc_g_per_min };
+                const point = {
+                    timestamp: liveEmission.timestamp,
+                    ...Object.fromEntries(EMISSION_DEFINITIONS.map(({ key, field }) => [key, Number(liveEmission[field] ?? 0)])),
+                } as ChartPoint;
                 return [...prev.filter((item) => item.timestamp !== point.timestamp), point].sort((a, b) => a.timestamp.localeCompare(b.timestamp)).slice(-50);
             }), 0);
         return () => window.clearTimeout(timer);
@@ -50,8 +50,8 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
                 <XAxis dataKey="timestamp" tickFormatter={formatTime} minTickGap={34} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "#27364a" }} />
                 <YAxis width={44} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} label={{ value: "g/min", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 10 }} />
                 <Tooltip labelFormatter={(value) => formatTime(String(value))} contentStyle={{ backgroundColor: "#091625", border: "1px solid #26364b", borderRadius: "10px", boxShadow: "0 14px 35px rgba(0,0,0,.35)", fontSize: "12px" }} labelStyle={{ color: "#94a3b8", marginBottom: 6 }} formatter={(value, name) => [`${Number(value).toFixed(2)} g/min`, name]} />
-                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: "11px", color: "#94a3b8", paddingTop: 8 }} />
-                {lines.map(({ key, color, name }) => <Line key={key} type="monotone" dataKey={key} name={name} stroke={color} strokeWidth={2} dot={chartData.length === 1 ? { r: 4, fill: color, strokeWidth: 0 } : { r: 2, fill: color, strokeWidth: 0 }} activeDot={{ r: 4 }} isAnimationActive={false} />)}
+                <Legend iconType="circle" iconSize={7} wrapperStyle={{ width: "100%", fontSize: "10px", color: "#94a3b8", paddingTop: 8, lineHeight: "20px" }} />
+                {EMISSION_DEFINITIONS.map(({ key, color, label }) => <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={2} dot={chartData.length === 1 ? { r: 4, fill: color, strokeWidth: 0 } : { r: 2, fill: color, strokeWidth: 0 }} activeDot={{ r: 4 }} isAnimationActive={false} />)}
             </LineChart>
         </ResponsiveContainer>
     </div>;

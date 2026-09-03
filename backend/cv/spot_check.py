@@ -44,8 +44,8 @@ def run_spot_check(
     # Print counts + emission to terminal
     print(f"  car={counts['car']}  motorcycle={counts['motorcycle']}  "
           f"bus={counts['bus']}  truck={counts['truck']}")
-    print(f"  CO₂: {emission['total_g_per_min']} g/min  "
-          f"({emission['total_kg_per_hr']} kg/hr)")
+    print(f"  CO₂: {emission['total_co2_g_per_min']} g/min  "
+          f"({emission['total_co2_kg_per_hr']} kg/hr)")
 
     # Save annotated frame
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")

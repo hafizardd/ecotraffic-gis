@@ -14,6 +14,7 @@ from app.schemas.emission import (
     EmissionSummaryResponse,
     VehicleSummary,
 )
+from app.services.emission_aggregation import EMISSION_RATE_FIELDS
  
 router = APIRouter(tags=["emissions"])
 
@@ -78,27 +79,13 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
     if not cameras:
         return EmissionSummaryResponse(
             total_cameras_active=0,
-            total_co_g_per_min=0.0,
-            total_co_kg_per_hr=0.0,
-            total_nox_g_per_min=0.0,
-            total_nox_kg_per_hr=0.0,
-            total_pm_g_per_min=0.0,
-            total_pm_kg_per_hr=0.0,
-            total_nmvoc_g_per_min= 0.0,
-            total_nmvoc_kg_per_hr=0.0,
+            **{field: 0.0 for field in EMISSION_RATE_FIELDS},
             by_vehicle=VehicleSummary(car=0, motorcycle=0, bus=0, truck=0),
             last_updated=None,
         )
  
     # For each camera, get its most recent emission row
-    total_co_g = 0.0
-    total_co_kg = 0.0
-    total_nox_g = 0.0
-    total_nox_kg = 0.0
-    total_pm_g = 0.0
-    total_pm_kg = 0.0
-    total_nmvoc_g = 0.0
-    total_nmvoc_kg = 0.0
+    emission_totals = {field: 0.0 for field in EMISSION_RATE_FIELDS}
     total_car = 0
     total_motorcycle = 0
     total_bus = 0
@@ -115,21 +102,8 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
         emission = result.scalar_one_or_none()
  
         if emission:
-            # Compute CO totals
-            total_co_g += emission.total_co_g_per_min
-            total_co_kg += emission.total_co_kg_per_hr
-
-            # Compute NOx totals
-            total_nox_g += emission.total_nox_g_per_min
-            total_nox_kg += emission.total_nox_kg_per_hr
-
-            # Compute PM totals
-            total_pm_g += emission.total_pm_g_per_min
-            total_pm_kg += emission.total_pm_kg_per_hr
-
-            # Compute NMVOC totals
-            total_nmvoc_g += emission.total_nmvoc_g_per_min
-            total_nmvoc_kg += emission.total_nmvoc_kg_per_hr
+            for field in EMISSION_RATE_FIELDS:
+                emission_totals[field] += getattr(emission, field)
 
             total_car += emission.car
             total_motorcycle += emission.motorcycle
@@ -141,14 +115,10 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
  
     return EmissionSummaryResponse(
         total_cameras_active=len(cameras),
-        total_co_g_per_min=round(total_co_g, 2),
-        total_co_kg_per_hr=round(total_co_kg, 4),
-        total_nox_g_per_min=round(total_nox_g, 2),
-        total_nox_kg_per_hr=round(total_nox_kg, 4),
-        total_pm_g_per_min=round(total_pm_kg),
-        total_pm_kg_per_hr=round(total_pm_kg),
-        total_nmvoc_g_per_min= round(total_nmvoc_kg),
-        total_nmvoc_kg_per_hr=round(total_nmvoc_kg),
+        **{
+            field: round(value, 2 if field.endswith("g_per_min") else 4)
+            for field, value in emission_totals.items()
+        },
         by_vehicle=VehicleSummary(
             car=total_car,
             motorcycle=total_motorcycle,
