@@ -6,6 +6,7 @@ import math
 
 CRITERIA = ("K1", "K2", "K3", "K4", "K5")
 DIRECT_CRITERIA = ("K1", "K2", "K4", "K5")
+POLLUTANTS = ("TSP", "NOx", "SO2", "HC", "CO", "CO2", "CH4", "N2O")
 PAIRWISE_MATRIX = (
     (1.00, 1.00, 3.00, 5.00, 7.00),
     (1.00, 1.00, 3.00, 5.00, 7.00),
@@ -51,6 +52,24 @@ def normalize_criteria(
         normalized = 0.0 if high == low else (result[criterion] - low) / (high - low)
         result[criterion] = 1.0 - normalized if criterion == "K3" else normalized
     return result
+
+
+def aggregate_emission_criterion(
+    pollutant_totals: Mapping[str, float],
+    pollutant_ranges: Mapping[str, tuple[float, float]],
+) -> float:
+    """Aggregate pollutant burdens after independently normalizing each one."""
+    normalized = []
+    for pollutant in POLLUTANTS:
+        value = float(pollutant_totals[pollutant])
+        low, high = pollutant_ranges[pollutant]
+        if not math.isfinite(value) or not math.isfinite(float(low)) or not math.isfinite(float(high)):
+            raise ValueError(f"{pollutant} values must be finite")
+        if high == low:
+            normalized.append(0.0)
+        else:
+            normalized.append((value - low) / (high - low))
+    return sum(normalized) / len(normalized)
 
 
 def decision_score(normalized: Mapping[str, float], weights: Mapping[str, float] | None = None) -> float:

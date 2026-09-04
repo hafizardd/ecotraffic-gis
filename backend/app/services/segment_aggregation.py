@@ -22,6 +22,8 @@ class SegmentAggregation:
     source_streams: tuple[str, ...]
     observation_count: int
     aggregation_policy: str
+    observation_duration_seconds: float
+    vehicle_count_semantics: str
 
 
 def aggregate_segment_observations(
@@ -39,6 +41,15 @@ def aggregate_segment_observations(
         raise SegmentAggregationError("observations must belong to one road segment")
     if aggregation_policy not in {"sum_independent_streams", "authoritative_camera"}:
         raise SegmentAggregationError(f"unsupported aggregation policy: {aggregation_policy}")
+
+    durations = {item.observation_duration_seconds for item in observations}
+    if len(durations) != 1:
+        raise SegmentAggregationError("observations must use one duration per calculation period")
+    semantics = {item.vehicle_count_semantics.value for item in observations}
+    if semantics != {"interval_count"} and semantics != {"vehicles_per_hour"}:
+        raise SegmentAggregationError("only interval_count or vehicles_per_hour observations can be scored")
+    if len(semantics) != 1:
+        raise SegmentAggregationError("observations must use one count semantics per calculation period")
 
     by_stream: dict[str, list[SegmentTrafficObservation]] = defaultdict(list)
     for item in observations:
@@ -66,4 +77,6 @@ def aggregate_segment_observations(
         source_streams=tuple(sorted({item.lane_or_stream_id for item in selected})),
         observation_count=len(selected),
         aggregation_policy=aggregation_policy,
+        observation_duration_seconds=next(iter(durations)),
+        vehicle_count_semantics=next(iter(semantics)),
     )

@@ -32,7 +32,7 @@ class SegmentEmission(Base):
     pollutant_totals_g_h: Mapped[dict] = mapped_column(JSONB, nullable=False)
     category_pollutant_breakdown_g_h: Mapped[dict] = mapped_column(JSONB, nullable=False)
     raw_criteria: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    normalized_criteria: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    normalized_criteria: Mapped[dict] = mapped_column(JSONB, nullable=True)
     decision_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     priority: Mapped[str | None] = mapped_column(String(20), nullable=True)
     spatial_criteria_status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")

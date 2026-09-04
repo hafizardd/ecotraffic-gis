@@ -17,7 +17,7 @@ class SegmentEmissionResponse(BaseModel):
     pollutant_totals_g_h: dict[str, Any]
     category_pollutant_breakdown_g_h: dict[str, Any]
     raw_criteria: dict[str, Any]
-    normalized_criteria: dict[str, Any]
+    normalized_criteria: dict[str, Any] | None
     decision_score: float | None
     priority: str | None
     spatial_criteria_status: str

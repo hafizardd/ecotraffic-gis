@@ -10,6 +10,26 @@ from app.schemas.segment_emission import SegmentEmissionMapItem, SegmentEmission
 router = APIRouter(tags=["segment-emissions"])
 
 
+@router.get("/api/emissions/map", response_model=list[SegmentEmissionMapItem])
+async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(RoadSegment, SegmentEmission)
+        .join(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
+        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc())
+    )
+    latest = {}
+    for segment, emission in result:
+        latest.setdefault(segment.road_segment_id, (segment, emission))
+    return [
+        SegmentEmissionMapItem(
+            road_segment_id=segment.road_segment_id, decision_score=emission.decision_score,
+            priority=emission.priority, total_emission=sum(emission.pollutant_totals_g_h.values()),
+            calculated_at=emission.calculated_at,
+        )
+        for segment, emission in latest.values()
+    ]
+
+
 @router.get("/api/emissions/{road_segment_id}", response_model=SegmentEmissionResponse)
 async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -34,22 +54,3 @@ async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(
         ahp_metadata=emission.ahp_metadata,
     )
 
-
-@router.get("/api/emissions/map", response_model=list[SegmentEmissionMapItem])
-async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(RoadSegment, SegmentEmission)
-        .join(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
-        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc())
-    )
-    latest = {}
-    for segment, emission in result:
-        latest.setdefault(segment.road_segment_id, (segment, emission))
-    return [
-        SegmentEmissionMapItem(
-            road_segment_id=segment.road_segment_id, decision_score=emission.decision_score,
-            priority=emission.priority, total_emission=sum(emission.pollutant_totals_g_h.values()),
-            calculated_at=emission.calculated_at,
-        )
-        for segment, emission in latest.values()
-    ]
