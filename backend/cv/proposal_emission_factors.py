@@ -8,13 +8,24 @@ from collections.abc import Mapping
 import math
 
 
-VEHICLE_CATEGORIES = (
-    "motorcycle",
-    "gasoline_car",
-    "diesel_car",
-    "bus",
-    "truck",
-)
+# Public application contract. Fuel-specific car factors remain internal.
+VEHICLE_CATEGORIES = ("car", "motorcycle", "bus", "truck")
+INTERNAL_VEHICLE_CATEGORIES = ("motorcycle", "gasoline_car", "diesel_car", "bus", "truck")
+
+VEHICLE_CATEGORY_ALIASES = {
+    "gasoline_car": "car",
+    "diesel_car": "car",
+}
+
+
+def normalize_vehicle_counts(counts: Mapping[str, int | float]) -> dict[str, float]:
+    """Normalize detector and Tier-2 categories at the application boundary."""
+    normalized = {category: 0.0 for category in VEHICLE_CATEGORIES}
+    for category, value in counts.items():
+        public_category = VEHICLE_CATEGORY_ALIASES.get(category, category)
+        if public_category in normalized:
+            normalized[public_category] += float(value)
+    return normalized
 
 POLLUTANTS = (
     "TSP",

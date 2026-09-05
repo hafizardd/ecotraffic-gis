@@ -15,6 +15,8 @@ from app.schemas.emission import (
     VehicleSummary,
 )
 from app.services.emission_aggregation import EMISSION_RATE_FIELDS
+from app.services.data_freshness import FreshnessPolicy, classify_freshness
+from app.core.config import settings
  
 router = APIRouter(tags=["emissions"])
 
@@ -70,51 +72,69 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
     emission row from each active camera.
     Used by the global counter at the top of the dashboard.
     """
-    # Get all active cameras
-    cam_result = await db.execute(
-        select(Camera).where(Camera.is_active == True)  # noqa: E712
+    camera_result = await db.execute(
+        select(
+            Camera.id, Camera.data_source, Camera.is_active,
+            func.count(EmissionAggregate.id).label("aggregate_count"),
+            func.max(EmissionAggregate.period_end).label("latest_observation_at"),
+            func.max(EmissionAggregate.period_end).label("latest_processing_at"),
+        )
+        .outerjoin(EmissionAggregate, EmissionAggregate.camera_id == Camera.id)
+        .where(Camera.is_active.is_(True))
+        .group_by(Camera.id, Camera.data_source, Camera.is_active)
     )
-    cameras = cam_result.scalars().all()
- 
-    if not cameras:
+    camera_rows = camera_result.all()
+
+    if not camera_rows:
         return EmissionSummaryResponse(
             total_cameras_active=0,
             **{field: 0.0 for field in EMISSION_RATE_FIELDS},
             by_vehicle=VehicleSummary(car=0, motorcycle=0, bus=0, truck=0),
-            last_updated=None,
+            last_updated=None, active_cameras=0,
         )
- 
-    # For each camera, get its most recent emission row
+
+    # Read current persisted windows in one grouped/window query. Legacy rows are
+    # deliberately excluded from the current summary.
+    latest_rows = await db.execute(
+        select(EmissionAggregate).where(
+            EmissionAggregate.id.in_(
+                select(func.max(EmissionAggregate.id))
+                .group_by(EmissionAggregate.camera_id)
+            )
+        )
+    )
+    aggregates = list(latest_rows.scalars().all())
     emission_totals = {field: 0.0 for field in EMISSION_RATE_FIELDS}
     total_car = 0
     total_motorcycle = 0
     total_bus = 0
     total_truck = 0
-    last_updated = None
- 
-    for camera in cameras:
-        result = await db.execute(
-            select(Emission)
-            .where(Emission.camera_id == camera.id)
-            .order_by(Emission.timestamp.desc())
-            .limit(1)
-        )
-        emission = result.scalar_one_or_none()
- 
-        if emission:
-            for field in EMISSION_RATE_FIELDS:
-                emission_totals[field] += getattr(emission, field)
+    last_updated = max((item.period_end for item in aggregates), default=None)
+    for emission in aggregates:
+        for field in EMISSION_RATE_FIELDS:
+            emission_totals[field] += getattr(emission, field)
+        total_car += emission.car
+        total_motorcycle += emission.motorcycle
+        total_bus += emission.bus
+        total_truck += emission.truck
 
-            total_car += emission.car
-            total_motorcycle += emission.motorcycle
-            total_bus += emission.bus
-            total_truck += emission.truck
- 
-            if last_updated is None or emission.timestamp > last_updated:
-                last_updated = emission.timestamp
+    now = datetime.now(timezone.utc)
+    freshness = classify_freshness(last_updated, now=now, policy=FreshnessPolicy.from_settings(settings))
+    live_cameras = sum(row.data_source == "LIVE" for row in camera_rows)
+    historical_cameras = len(camera_rows) - live_cameras
+    fresh_states = sum(
+        row.latest_observation_at is not None and classify_freshness(
+            row.latest_observation_at, now=now, policy=FreshnessPolicy.from_settings(settings)
+        ).status.value == "fresh" for row in camera_rows
+    )
+    stale_states = sum(
+        row.latest_observation_at is not None and classify_freshness(
+            row.latest_observation_at, now=now, policy=FreshnessPolicy.from_settings(settings)
+        ).status.value == "stale" for row in camera_rows
+    )
  
     return EmissionSummaryResponse(
-        total_cameras_active=len(cameras),
+        total_cameras_active=len(camera_rows),
         **{
             field: round(value, 2 if field.endswith("g_per_min") else 4)
             for field, value in emission_totals.items()
@@ -126,6 +146,11 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
             truck=total_truck,
         ),
         last_updated=last_updated,
+        active_cameras=len(camera_rows), live_cameras=live_cameras,
+        historical_cameras=historical_cameras,
+        fresh_camera_states=fresh_states, stale_camera_states=stale_states,
+        latest_observation_at=last_updated, latest_processing_at=last_updated,
+        freshness_status=freshness.status.value,
     )
 
 

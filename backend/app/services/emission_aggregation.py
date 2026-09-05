@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 from cv.emission_factors import calculate_emission
+from cv.proposal_emission_factors import normalize_vehicle_counts
 
 
 VEHICLE_TYPES = ("car", "motorcycle", "bus", "truck")
@@ -52,9 +53,9 @@ class EmissionObservation:
 
     def __post_init__(self) -> None:
         _require_aware(self.captured_at, "captured_at")
-        normalized_counts = {}
+        normalized_counts = normalize_vehicle_counts(self.vehicle_counts)
         for vehicle_type in VEHICLE_TYPES:
-            count = float(self.vehicle_counts.get(vehicle_type, 0))
+            count = float(normalized_counts.get(vehicle_type, 0))
             if not math.isfinite(count) or count < 0:
                 raise ValueError(
                     f"vehicle count for {vehicle_type} must be finite and non-negative"

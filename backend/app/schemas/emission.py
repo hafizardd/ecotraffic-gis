@@ -69,3 +69,12 @@ class EmissionSummaryResponse(BaseModel):
     total_n2o_kg_per_hr: float
     by_vehicle: VehicleSummary
     last_updated: datetime | None
+    active_cameras: int = 0
+    live_cameras: int = 0
+    historical_cameras: int = 0
+    fresh_camera_states: int = 0
+    stale_camera_states: int = 0
+    latest_observation_at: datetime | None = None
+    latest_processing_at: datetime | None = None
+    source: str = "emission_aggregates"
+    freshness_status: str = "unknown"

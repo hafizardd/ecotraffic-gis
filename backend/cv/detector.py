@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 from cv.frame_sampler import FrameSampler
-from cv.proposal_emission_factors import VEHICLE_CATEGORIES
+from cv.proposal_emission_factors import VEHICLE_CATEGORIES, normalize_vehicle_counts
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ VEHICLE_CLASSES = {
 
 DEFAULT_YOLO_CATEGORY_MAPPING = {
     "motorcycle": "motorcycle",
-    "car": "gasoline_car",
+    "car": "car",
     "bus": "bus",
     "truck": "truck",
 }
@@ -157,7 +157,9 @@ class VehicleDetector:
             category = self.category_mapping.get(yolo_label)
             if category is None:
                 continue
-            counts[category] += 1
+            normalized = normalize_vehicle_counts({category: 1})
+            for public_category, value in normalized.items():
+                counts[public_category] += int(value)
             if annotate:
                 self._draw_box(annotated_frame, box, category, confidence)
             logger.debug("Detected %s with confidence %.2f", category, confidence)

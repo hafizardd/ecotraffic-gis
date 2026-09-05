@@ -16,32 +16,33 @@ def calculate_segment_emission(
 ):
     aggregation = aggregate_segment_observations(observations, period_start=period_start, period_end=period_end)
     duration = aggregation.observation_duration_seconds
-    volume = volume_per_hour(
-        aggregation.raw_counts,
-        duration,
+    occupancy = aggregation.vehicle_count_semantics == VehicleCountSemantics.SNAPSHOT_OCCUPANCY.value
+    volume = None if occupancy else volume_per_hour(
+        aggregation.raw_counts, duration,
         already_hourly=aggregation.vehicle_count_semantics == VehicleCountSemantics.VEHICLES_PER_HOUR.value,
     )
-    vkt = vkt_by_category(volume, road_length_km)
-    emissions = calculate_tier2_emissions(vkt, control_efficiency=control_efficiency)
+    vkt = None if occupancy else vkt_by_category(volume, road_length_km)
+    emissions = None if occupancy else calculate_tier2_emissions(vkt, control_efficiency=control_efficiency)
     raw = {
         "K1": (
             aggregate_emission_criterion(emissions["totals_g_h"], pollutant_ranges)
             if pollutant_ranges is not None
             else sum(emissions["totals_g_h"].values())
-        ),
-        "K2": sum(volume.values()),
+        ) if emissions is not None else None,
+        "K2": sum(volume.values()) if volume is not None else None,
         "K3": None if spatial_criteria is None else spatial_criteria.get("K3"),
         "K4": None if spatial_criteria is None else spatial_criteria.get("K4"),
         "K5": None if spatial_criteria is None else spatial_criteria.get("K5"),
     }
-    spatial_pending = any(raw[key] is None for key in ("K3", "K4", "K5"))
+    spatial_pending = occupancy or any(raw[key] is None for key in ("K3", "K4", "K5"))
     result = {
         "road_segment_id": aggregation.road_segment_id, "period_start": period_start,
         "period_end": period_end, "calculated_at": datetime.now(timezone.utc),
         "raw_counts": aggregation.raw_counts, "observation_duration_seconds": duration,
         "vehicle_count_semantics": aggregation.vehicle_count_semantics,
         "volume_per_hour": volume,
-        "vkt_km_h": vkt, "emissions": emissions, "raw_criteria": raw,
+        "volume_status": "unavailable" if occupancy else "calculated",
+        "vkt_km_h": vkt, "emissions": emissions or {"totals_g_h": {}, "by_category_g_h": {}}, "raw_criteria": raw,
         "spatial_criteria_status": "pending" if spatial_pending else "complete",
         "provenance": {"source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams, "source_observation_count": aggregation.observation_count, "aggregation_policy": aggregation.aggregation_policy},
     }

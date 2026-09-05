@@ -12,8 +12,8 @@ class SegmentEmissionResponse(BaseModel):
     period_end: datetime
     calculated_at: datetime
     raw_counts: dict[str, Any]
-    volume_per_hour: dict[str, Any]
-    vkt_km_h: dict[str, Any]
+    volume_per_hour: dict[str, Any] | None
+    vkt_km_h: dict[str, Any] | None
     pollutant_totals_g_h: dict[str, Any]
     category_pollutant_breakdown_g_h: dict[str, Any]
     raw_criteria: dict[str, Any]
@@ -23,6 +23,9 @@ class SegmentEmissionResponse(BaseModel):
     spatial_criteria_status: str
     provenance: dict[str, Any]
     ahp_metadata: dict[str, Any]
+    volume_status: str = "calculated"
+    vehicle_count_semantics: str = "interval_count"
+    freshness_status: str = "unknown"
 
 
 class SegmentEmissionMapItem(BaseModel):

@@ -66,9 +66,8 @@ def aggregate_segment_observations(
 
     counts = {category: 0.0 for category in VEHICLE_CATEGORIES}
     if semantics == {"snapshot_occupancy"}:
-        # A live frame is a point-in-time occupancy sample, not a new vehicle
-        # count for the whole observation window. Average samples per stream
-        # before converting the result to an hourly interval estimate.
+        # A live frame is a point-in-time occupancy sample. Average samples per
+        # stream for display, but preserve the occupancy semantics downstream.
         stream_totals: dict[str, dict[str, float]] = defaultdict(
             lambda: {category: 0.0 for category in VEHICLE_CATEGORIES}
         )
@@ -94,5 +93,5 @@ def aggregate_segment_observations(
         observation_count=len(selected),
         aggregation_policy=aggregation_policy,
         observation_duration_seconds=next(iter(durations)),
-        vehicle_count_semantics=("interval_count" if semantics == {"snapshot_occupancy"} else next(iter(semantics))),
+        vehicle_count_semantics=next(iter(semantics)),
     )
