@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export default function TopHeader({ onMenuClick }: { onMenuClick: () => void }) {
+export default function TopHeader({ onMenuClick, section, title }: { onMenuClick: () => void; section: string; title: string }) {
     const [now, setNow] = useState<Date | null>(null);
     useEffect(() => {
         const initialTimer = window.setTimeout(() => setNow(new Date()), 0);
@@ -15,7 +15,7 @@ export default function TopHeader({ onMenuClick }: { onMenuClick: () => void }) 
             <button className="mobile-menu" onClick={onMenuClick} aria-label="Buka menu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
             </button>
-            <div className="page-heading"><span>MONITORING DASHBOARD</span><strong>Peta Lalu Lintas Real-time</strong></div>
+            <div className="page-heading"><span>{section}</span><strong>{title}</strong></div>
             <div className="header-spacer" />
             <div className="header-live"><i /> LIVE</div>
             <div className="header-time">

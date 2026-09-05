@@ -8,7 +8,7 @@ interface EmissionStatsProps {
 }
 
 export default function EmissionStats({ cameraId }: EmissionStatsProps) {
-    const emissionMap = useEmissionsContext();
+    const { emissionMap } = useEmissionsContext();
     const liveEmission = emissionMap.get(cameraId) ?? null;
     
     if(!liveEmission) {

@@ -1,15 +1,27 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { CameraEmissionsResponse, CameraFeatureCollection } from "@/types";
+import { CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection } from "@/types";
 
-export async function fetchCameras(): Promise<CameraFeatureCollection> {
-    const response = await fetch(`${API_BASE}/api/cameras`)
+export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
+    const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
 
     if(!response.ok) {
         throw new Error(`Failed to fetch cameras: ${response.statusText}`)
     }
 
+    return response.json();
+}
+
+export async function fetchSegmentsGeoJSON(): Promise<SegmentFeatureCollection> {
+    const response = await fetch(`${API_BASE}/api/segments/geojson`);
+    if (!response.ok) throw new Error(`Failed to fetch segments: ${response.statusText}`);
+    return response.json();
+}
+
+export async function fetchSegmentEmission(segmentId: string): Promise<SegmentEmissionDetail> {
+    const response = await fetch(`${API_BASE}/api/emissions/${encodeURIComponent(segmentId)}`);
+    if (!response.ok) throw new Error(`Failed to fetch segment emission: ${response.statusText}`);
     return response.json();
 }
 

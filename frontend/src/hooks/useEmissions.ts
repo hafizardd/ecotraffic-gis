@@ -1,5 +1,5 @@
 import { WS_URL } from "@/services/api";
-import { EmissionUpdate } from "@/types";
+import { EmissionUpdate, SegmentUpdate } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const MAX_BACKOFF = 30000;
@@ -7,6 +7,7 @@ const INITIAL_BACKOFF = 1000;
 
 export default function useEmissions() {
     const [emissionMap, setEmissionMap] = useState<Map<string, EmissionUpdate>>(new Map());
+    const [segmentMap, setSegmentMap] = useState<Map<string, SegmentUpdate["data"]>>(new Map());
     const wsRef = useRef<WebSocket | null>(null);
 
     const connect = useCallback(() => {
@@ -25,12 +26,11 @@ export default function useEmissions() {
             
             ws.onmessage = (event) => {
                 if (cancelled) return;
-                const data: EmissionUpdate = JSON.parse(event.data);
-                setEmissionMap((prev) => {
-                    const next = new Map(prev);
-                    next.set(data.camera_id, data);
-                    return next;
-                });
+                try {
+                    const data = JSON.parse(event.data) as Partial<EmissionUpdate & SegmentUpdate>;
+                    if (data.type === "segment_update" && data.segment_id && data.data) setSegmentMap((prev) => new Map(prev).set(data.segment_id!, data.data!));
+                    else if (data.camera_id) setEmissionMap((prev) => new Map(prev).set(data.camera_id!, data as EmissionUpdate));
+                } catch { /* Ignore malformed messages. */ }
             };
 
             ws.onclose = () => {
@@ -68,5 +68,5 @@ export default function useEmissions() {
         return cleanup;
     }, [connect]);
     
-    return emissionMap;
+    return { emissionMap, segmentMap };
 }

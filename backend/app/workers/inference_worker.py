@@ -411,7 +411,7 @@ def process_inference_job(self, job_payload: dict) -> dict:
         ),
         "batch_size": batch_outcome.batch_size,
         "job_id": job.job_id,
-        "car": vehicle_counts["car"],
+        "car": vehicle_counts.get("gasoline_car", 0) + vehicle_counts.get("diesel_car", 0),
         "motorcycle": vehicle_counts["motorcycle"],
         "bus": vehicle_counts["bus"],
         "truck": vehicle_counts["truck"],

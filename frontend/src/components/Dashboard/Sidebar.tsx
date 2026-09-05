@@ -1,17 +1,15 @@
 "use client";
+import type { ActiveView } from "./DashboardShell";
 
 interface SidebarProps {
     open: boolean;
     onToggle: () => void;
+    activeView: ActiveView;
+    onViewChange: (view: ActiveView) => void;
 }
 
 const navItems = [
-    { label: "Peta Live", icon: "map", active: true },
-    { label: "Emisi & Tren", icon: "trend" },
-    { label: "Kendaraan", icon: "car" },
-    { label: "Riwayat", icon: "history" },
-    { label: "Laporan", icon: "report" },
-    { label: "Pengaturan", icon: "settings" },
+    { label: "Peta Live", icon: "map", view: "peta" as const }, { label: "Emisi & Tren", icon: "trend", view: "emisi" as const }, { label: "Kendaraan", icon: "car", view: "kendaraan" as const }, { label: "Riwayat", icon: "history", view: "riwayat" as const }, { label: "Laporan", icon: "report", view: "laporan" as const }, { label: "Pengaturan", icon: "settings", view: "pengaturan" as const },
 ];
 
 function NavIcon({ name }: { name: string }) {
@@ -26,7 +24,7 @@ function NavIcon({ name }: { name: string }) {
     return <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-export default function Sidebar({ open, onToggle }: SidebarProps) {
+export default function Sidebar({ open, onToggle, activeView, onViewChange }: SidebarProps) {
     return (
         <aside className={`sidebar ${open ? "sidebar-open" : "sidebar-collapsed"}`}>
             <div className="brand">
@@ -35,7 +33,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
             </div>
             <nav className="sidebar-nav" aria-label="Navigasi utama">
                 {navItems.map((item) => (
-                    <button key={item.label} className={`nav-item ${item.active ? "active" : ""}`} title={!open ? item.label : undefined} disabled={!item.active}>
+                    <button key={item.label} className={`nav-item ${activeView === item.view ? "active" : ""}`} title={!open ? item.label : undefined} onClick={() => onViewChange(item.view)}>
                         <NavIcon name={item.icon} /><span>{item.label}</span>
                     </button>
                 ))}
