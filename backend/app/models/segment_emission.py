@@ -26,6 +26,7 @@ class SegmentEmission(Base):
     source_cameras: Mapped[list] = mapped_column(JSONB, nullable=False)
     source_streams: Mapped[list] = mapped_column(JSONB, nullable=False)
     source_observation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    vehicle_count_semantics: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
     raw_counts: Mapped[dict] = mapped_column(JSONB, nullable=False)
     volume_per_hour: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     vkt_km_h: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

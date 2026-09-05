@@ -66,8 +66,7 @@ export default function MapView() {
                 const emissionUpdate = emissionMap.get(
                     camera.properties.camera_id
                 );
-                const emissionValue =
-                    emissionUpdate?.total_co_g_per_min ?? 0;
+                 const emissionValue = emissionUpdate?.total_co2_g_per_min ?? 0;
                 return (
                     <CameraMarker
                         key={camera.properties.id}

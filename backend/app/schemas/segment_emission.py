@@ -34,3 +34,8 @@ class SegmentEmissionMapItem(BaseModel):
     priority: str | None
     total_emission: float | None
     calculated_at: datetime
+    observed_at: datetime | None = None
+    data_age_seconds: int | None = None
+    freshness_status: str = "unknown"
+    vehicle_count_semantics: str = "unknown"
+    source_cameras: list[str] = []

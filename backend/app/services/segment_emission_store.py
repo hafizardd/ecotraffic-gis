@@ -21,6 +21,7 @@ def _values(segment_database_id: uuid.UUID, result: dict) -> dict:
         "source_cameras": list(provenance.get("source_cameras", [])),
         "source_streams": list(provenance.get("source_streams", [])),
         "source_observation_count": provenance.get("source_observation_count", result.get("source_observation_count", len(provenance.get("source_cameras", [])))),
+        "vehicle_count_semantics": result.get("vehicle_count_semantics", "unknown"),
         "raw_counts": result["raw_counts"],
         "volume_per_hour": result["volume_per_hour"],
         "vkt_km_h": result["vkt_km_h"],

@@ -48,7 +48,11 @@ export default function VideoFeed({ streamUrl }: VideoFeedProps) {
         return () => {
             hls?.destroy();
         };
-    }, [streamUrl, isMuted])
+    }, [streamUrl])
+
+    useEffect(() => {
+        if (videoRef.current) videoRef.current.muted = isMuted;
+    }, [isMuted]);
 
     const toggleMute = () => {
         if (videoRef.current) {

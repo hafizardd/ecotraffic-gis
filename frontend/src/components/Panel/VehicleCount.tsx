@@ -61,6 +61,8 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
     ];
     
     return (
+        <>
+        <p className="text-xs text-zinc-500">Kendaraan terlihat pada frame terbaru atau rata-rata snapshot. Ini bukan volume lalu lintas per jam.</p>
         <div className="vehicle-grid">
             {vehicles.map(({ label, count, Icon }) => (
                 <div
@@ -76,5 +78,6 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
                 </div>
             ))}
         </div>
+        </>
     );
 }

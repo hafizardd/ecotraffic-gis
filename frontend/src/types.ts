@@ -75,6 +75,9 @@ export interface EmissionUpdate {
     total_n2o_g_per_min: number;
     total_n2o_kg_per_hr: number;
     cycle_duration_s: number;
+    source_mode?: "LIVE" | "HISTORICAL" | "REPLAY" | "SYNTHETIC";
+    processed_at?: string;
+    calculation_version?: string;
 }
 
 export interface EmissionRow {
@@ -118,6 +121,10 @@ export interface SegmentProperties {
     pollutant_totals: Record<string, number> | null;
     volume_per_hour: Record<string, number> | null;
     total_emission_g_h: number | null;
+    freshness_status?: "fresh" | "aging" | "stale" | "unknown";
+    data_age_seconds?: number | null;
+    vehicle_count_semantics?: string;
+    source_cameras?: string[];
 }
 export interface SegmentFeature { type: "Feature"; geometry: { type: "LineString"; coordinates: [number, number][] }; properties: SegmentProperties; }
 export interface SegmentFeatureCollection { type: "FeatureCollection"; features: SegmentFeature[]; }
