@@ -2,14 +2,15 @@
 
 import { createContext, useContext, ReactNode } from "react";
 import useEmissions from "@/hooks/useEmissions";
-import { EmissionUpdate } from "@/types";
+import { EmissionUpdate, SegmentUpdate } from "@/types";
 
-const EmissionsContext = createContext<Map<string, EmissionUpdate>>(new Map());
+interface EmissionsContextValue { emissionMap: Map<string, EmissionUpdate>; segmentMap: Map<string, SegmentUpdate["data"]>; }
+const EmissionsContext = createContext<EmissionsContextValue>({ emissionMap: new Map(), segmentMap: new Map() });
 
 export function EmissionsProvider({ children }: { children: ReactNode }) {
-    const emissionMap = useEmissions();
+    const value = useEmissions();
     return (
-        <EmissionsContext.Provider value={emissionMap}>
+            <EmissionsContext.Provider value={value}>
             {children}
         </EmissionsContext.Provider>
     );

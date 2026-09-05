@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import Map, { MapRef, NavigationControl } from "react-map-gl/maplibre";
+import Map, { MapRef, NavigationControl, Source, Layer } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import CameraMarker from "./CameraMarker";
 import SidePanel from "../Panel/SidePanel";
@@ -8,11 +8,16 @@ import { getMarkerColor } from "@/utils/markerColor";
 import useCameras from "@/hooks/useCameras";
 import { CameraFeature } from "@/types";
 import { useEmissionsContext } from "@/context/EmissionsContext";
+import useSegments from "@/hooks/useSegments";
+import SegmentPanel from "../Panel/SegmentPanel";
 
 export default function MapView() {
     const { cameras, loading, error } = useCameras();
-    const emissionMap = useEmissionsContext();
+    const { emissionMap, segmentMap } = useEmissionsContext();
+    const { segments } = useSegments();
     const [selectedCamera, setSelectedCamera] = useState<CameraFeature | null>(null);
+    const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+    const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
     const [style, setStyle] = useState<"street-2d-building" | "dark">("street-2d-building");
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
@@ -39,12 +44,18 @@ export default function MapView() {
         );
     }
     
+    const segmentGeoJSON = { type: "FeatureCollection" as const, features: segments.map((segment) => ({ ...segment, properties: { ...segment.properties, ...(segmentMap.get(segment.properties.segment_id) ? { priority: segmentMap.get(segment.properties.segment_id)?.priority ?? segment.properties.priority, decision_score: segmentMap.get(segment.properties.segment_id)?.decision_score ?? segment.properties.decision_score } : {}) } })) };
     return (
-        <div className={`map-panel-layout ${selectedCamera ? "has-panel" : ""}`}>
+        <div className={`map-panel-layout ${selectedCamera || selectedSegmentId ? "has-panel" : ""}`}>
         <div className="map-area" ref={mapAreaRef}>
-        <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
-            initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }}>
+            <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
+            initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line"]}
+            onMouseMove={(event) => { const feature = event.features?.find((item) => item.layer?.id === "segments-line"); setHoveredSegmentId(feature?.properties?.segment_id ?? null); }}
+            onClick={(event) => { const feature = event.features?.find((item) => item.layer?.id === "segments-line"); if (feature?.properties?.segment_id) { setSelectedSegmentId(feature.properties.segment_id); setSelectedCamera(null); } }}>
             <NavigationControl position="bottom-right" showCompass={false} />
+            <Source id="segments" type="geojson" data={segmentGeoJSON}>
+                <Layer id="segments-line" type="line" paint={{ "line-color": ["match", ["get", "priority"], "critical", "#ef4444", "high", "#f97316", "medium", "#facc15", "low", "#22c55e", "#64748b"], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
+            </Source>
             {cameras.map((camera) => {
                 const emissionUpdate = emissionMap.get(
                     camera.properties.camera_id
@@ -56,7 +67,7 @@ export default function MapView() {
                         key={camera.properties.id}
                         camera={camera}
                         color={getMarkerColor(emissionValue)}
-                        onClick={() => setSelectedCamera(camera)}
+                        onClick={() => { setSelectedCamera(camera); setSelectedSegmentId(null); }}
                         selected={selectedCamera?.properties.id === camera.properties.id}
                     />
                 );
@@ -84,9 +95,9 @@ export default function MapView() {
                 )}
                 {isDark ? "Peta terang" : "Peta gelap"}
             </button>
-        </Map>
+         </Map>
         </div>
-        <SidePanel camera={selectedCamera} onClose={() => setSelectedCamera(null)} />
+        {selectedCamera ? <SidePanel camera={selectedCamera} onClose={() => setSelectedCamera(null)} /> : <SegmentPanel segmentId={selectedSegmentId} onClose={() => setSelectedSegmentId(null)} />}
         </div>
     );
 }

@@ -4,7 +4,7 @@ import { useEmissionsContext } from "@/context/EmissionsContext"
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 
 export default function GlobalCounter() {
-    const emissionMap = useEmissionsContext();
+    const { emissionMap } = useEmissionsContext();
 
     const totals = Object.fromEntries(EMISSION_DEFINITIONS.map(({ key }) => [key, 0])) as Record<string, number>;
     const totalsKgHr = Object.fromEntries(EMISSION_DEFINITIONS.map(({ key }) => [key, 0])) as Record<string, number>;

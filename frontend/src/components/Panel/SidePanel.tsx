@@ -13,7 +13,7 @@ interface SidePanelProps {
 }
 
 export default function SidePanel({ camera, onClose }: SidePanelProps) {
-    const emissionMap = useEmissionsContext();
+    const { emissionMap } = useEmissionsContext();
     const liveEmission = camera
         ? emissionMap.get(camera.properties.camera_id) ?? null
         : null;

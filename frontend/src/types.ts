@@ -12,6 +12,7 @@ export interface CameraProperties {
     freshness_status: "fresh" | "aging" | "stale" | "unknown";
     data_age_seconds: number | null;
     created_at: string;
+    data_source?: "LIVE" | "HISTORICAL";
 }
 
 export interface CameraFeature {
@@ -107,6 +108,27 @@ export interface CameraEmissionsResponse {
     total_records: number;
     emissions: EmissionRow[];
 }
+
+export interface SegmentProperties {
+    segment_id: string;
+    name: string;
+    length_km: number;
+    decision_score: number | null;
+    priority: string | null;
+    pollutant_totals: Record<string, number> | null;
+    volume_per_hour: Record<string, number> | null;
+}
+export interface SegmentFeature { type: "Feature"; geometry: { type: "LineString"; coordinates: [number, number][] }; properties: SegmentProperties; }
+export interface SegmentFeatureCollection { type: "FeatureCollection"; features: SegmentFeature[]; }
+export interface SegmentEmissionDetail {
+    road_segment_id: string; name: string; length_km: number; period_start: string; period_end: string; calculated_at: string;
+    raw_counts: Record<string, unknown>; volume_per_hour: Record<string, number>; vkt_km_h: Record<string, number>;
+    pollutant_totals_g_h: Record<string, number>; category_pollutant_breakdown_g_h: Record<string, unknown>;
+    raw_criteria: Record<string, unknown>; normalized_criteria: Record<string, unknown> | null;
+    decision_score: number | null; priority: string | null; spatial_criteria_status: string;
+    provenance: Record<string, unknown>; ahp_metadata: Record<string, unknown>;
+}
+export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: { decision_score?: number | null; priority?: string | null; total_emission_g_h?: number; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string; }; }
 
 export interface ChartPoint {
     timestamp: string;

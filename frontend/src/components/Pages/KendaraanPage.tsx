@@ -1,0 +1,3 @@
+"use client";
+const vehicles = ["Car", "Motorcycle", "Bus", "Truck"];
+export default function KendaraanPage() { return <div className="page-container"><div className="page-header-section"><span>ANALISIS LALU LINTAS</span><h1>Kendaraan</h1><p>Data kendaraan real-time per segmen akan ditampilkan di sini.</p></div><div className="page-card-grid">{vehicles.map((item) => <div className="page-card summary-metric" key={item}><span>{item}</span><strong>--</strong><small>Belum tersedia</small></div>)}</div><div className="page-card"><div className="card-header"><strong>Volume per segmen</strong><span className="unavailable-badge">BELUM TERSEDIA</span></div><div className="unavailable-state">Ranking volume dan tren kendaraan membutuhkan endpoint agregat.</div></div></div>; }
