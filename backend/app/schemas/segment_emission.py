@@ -29,5 +29,5 @@ class SegmentEmissionMapItem(BaseModel):
     road_segment_id: str
     decision_score: float | None
     priority: str | None
-    total_emission: float
+    total_emission: float | None
     calculated_at: datetime

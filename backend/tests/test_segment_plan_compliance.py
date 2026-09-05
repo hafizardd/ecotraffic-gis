@@ -31,13 +31,17 @@ def test_mixed_durations_are_rejected():
         )
 
 
-def test_snapshot_occupancy_cannot_be_scored_as_interval_volume():
-    with pytest.raises(SegmentAggregationError, match="only interval_count"):
-        aggregate_segment_observations(
-            [observation(semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY)],
-            period_start=BASE,
-            period_end=BASE + timedelta(minutes=1),
-        )
+def test_snapshot_occupancy_is_averaged_before_hourly_conversion():
+    result = aggregate_segment_observations(
+        [
+            observation(semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY),
+            observation(semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY),
+        ],
+        period_start=BASE,
+        period_end=BASE + timedelta(minutes=1),
+    )
+    assert result.raw_counts["motorcycle"] == 1
+    assert result.vehicle_count_semantics == "interval_count"
 
 
 def test_constant_pollutant_does_not_contribute_to_k1():

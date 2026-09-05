@@ -27,6 +27,7 @@ celery_app.conf.task_routes = {
     "app.workers.sampling_worker.sample_camera": {"queue": "camera_sampling"},
     "app.workers.inference_worker.process_camera": {"queue": "camera_sampling"},
     "app.workers.inference_worker.process_inference_job": {"queue": "inference"},
+    "app.workers.segment_calculation_worker.recalculate_segment_emissions": {"queue": "inference"},
 }
 
 celery_app.conf.beat_schedule = {

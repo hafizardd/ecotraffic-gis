@@ -27,10 +27,14 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
             select(text("ST_AsGeoJSON(road_segments.geometry)::json"))
             .where(RoadSegment.id == segment.id)
         )).scalar_one()
-        properties = {"segment_id": segment.road_segment_id, "name": segment.name, "length_km": segment.length_km}
+        properties = {"segment_id": segment.road_segment_id, "name": segment.name, "length_km": segment.length_km,
+                      "decision_score": None, "priority": None, "pollutant_totals": None,
+                      "volume_per_hour": None, "total_emission_g_h": None}
         if emission:
+            pollutant_totals = emission.pollutant_totals_g_h
             properties.update({"decision_score": emission.decision_score, "priority": emission.priority,
-                               "pollutant_totals": emission.pollutant_totals_g_h, "volume_per_hour": emission.volume_per_hour})
+                               "pollutant_totals": pollutant_totals, "volume_per_hour": emission.volume_per_hour,
+                               "total_emission_g_h": sum(pollutant_totals.values()) if pollutant_totals else None})
         features.append({"type": "Feature", "geometry": geometry, "properties": properties})
     return JSONResponse({"type": "FeatureCollection", "features": features})
 
@@ -48,7 +52,8 @@ async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
     return [
         SegmentEmissionMapItem(
             road_segment_id=segment.road_segment_id, decision_score=emission.decision_score,
-            priority=emission.priority, total_emission=sum(emission.pollutant_totals_g_h.values()),
+            priority=emission.priority,
+            total_emission=(sum(emission.pollutant_totals_g_h.values()) if emission.pollutant_totals_g_h else None),
             calculated_at=emission.calculated_at,
         )
         for segment, emission in latest.values()

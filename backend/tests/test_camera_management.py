@@ -47,6 +47,7 @@ def test_get_active_camera_source_returns_detached_processing_data(monkeypatch):
         is_active=True,
         priority="high",
         sampling_interval_seconds=10,
+        data_source="LIVE",
     )
     session = _install_fake_database(monkeypatch, record)
 
@@ -60,6 +61,7 @@ def test_get_active_camera_source_returns_detached_processing_data(monkeypatch):
         referer="https://example.test/",
         priority="high",
         sampling_interval_seconds=10,
+        data_source="LIVE",
     )
 
 
@@ -72,6 +74,18 @@ def test_get_active_camera_source_rejects_inactive_camera(monkeypatch):
         is_active=False,
         priority="low",
         sampling_interval_seconds=None,
+        data_source="LIVE",
+    )
+    _install_fake_database(monkeypatch, record)
+
+    assert camera_management.get_active_camera_source("camera-12") is None
+
+
+def test_get_active_camera_source_rejects_historical_camera(monkeypatch):
+    record = SimpleNamespace(
+        id=uuid.uuid4(), camera_id="camera-12", stream_url="stream", referer=None,
+        is_active=True, priority="low", sampling_interval_seconds=None,
+        data_source="HISTORICAL",
     )
     _install_fake_database(monkeypatch, record)
 
