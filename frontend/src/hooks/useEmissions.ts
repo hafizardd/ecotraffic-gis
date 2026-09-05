@@ -1,4 +1,4 @@
-import { WS_URL, fetchCameraEmissions } from "@/services/api";
+import { API_BASE, WS_URL, fetchCameraEmissions } from "@/services/api";
 import { EmissionUpdate, SegmentUpdate } from "@/types";
 import { useEffect, useRef, useState } from "react";
 
@@ -31,12 +31,13 @@ export default function useEmissions() {
 
         const hydrate = async () => {
             try {
-                const cameras = await fetch(`${WS_URL.replace(/^ws/, "http")}/api/cameras`).then((r) => r.json());
+                if (!API_BASE) throw new Error("API URL is not configured");
+                const cameras = await fetch(`${API_BASE}/api/cameras`).then((r) => r.json());
                 for (const camera of cameras.features ?? []) {
                     const id = camera.properties.camera_id;
                     const response = await fetchCameraEmissions(id, 1);
                     const latest = response.emissions[0];
-                    if (latest) setEmissionMap((prev) => new Map(prev).set(id, latest as EmissionUpdate));
+                    if (latest) setEmissionMap((prev) => new Map(prev).set(id, { ...latest, camera_id: id, timestamp: latest.timestamp } as EmissionUpdate));
                 }
             } catch { setError("Gagal memuat data awal"); }
         };
@@ -52,8 +53,9 @@ export default function useEmissions() {
                 try {
                     const data = JSON.parse(event.data) as SegmentUpdate | EmissionUpdate;
                     const messageTime = new Date().toISOString();
-                    if (data.type === "segment_update" && data.segment_id && data.data) {
-                        setSegmentMap((prev) => new Map(prev).set(data.segment_id, data.data));
+                    if ((data as SegmentUpdate).type === "segment_update" && (data as SegmentUpdate).segment_id && (data as SegmentUpdate).data) {
+                        const segment = data as SegmentUpdate;
+                        setSegmentMap((prev) => new Map(prev).set(segment.segment_id, segment.data));
                     } else if (validCameraMessage(data)) {
                         const time = timestampOf(data);
                         if (time < (latestRef.current.get(data.camera_id) ?? 0)) return;

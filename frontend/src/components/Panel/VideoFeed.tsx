@@ -42,7 +42,6 @@ export default function VideoFeed({ streamUrl }: VideoFeedProps) {
             setError("HLS not supported in this browser");
         }
 
-        video.muted = isMuted;
         video.play().catch(() => {});
         
         return () => {
