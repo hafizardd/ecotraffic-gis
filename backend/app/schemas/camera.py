@@ -10,6 +10,7 @@ class CameraProperties(BaseModel):
     camera_id: str
     stream_url: str
     is_active: bool
+    data_source: str
     status: str
     failure_count: int
     last_sample_at: datetime | None

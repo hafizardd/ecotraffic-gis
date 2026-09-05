@@ -2,6 +2,8 @@
 
 A real-time WebGIS platform that monitors vehicle-based carbon emissions across a city using live CCTV feeds and computer vision.
 
+The segment pipeline adds PostGIS road segments, camera-to-segment mappings, Tier-2 emissions, AHP priority scoring, historical fallback data, Redis latest state, and live segment updates.
+
 Built for the AI Innovation Competition — combining **YOLOv8 vehicle detection**, **FastAPI**, **PostGIS**, and **React + Leaflet.js** into a single live dashboard targeting urban traffic corridors in Yogyakarta.
 
 The current scalable scheduler, bounded inference pipeline, aggregation
@@ -130,6 +132,12 @@ cd ..                       # back to root dir
 
 docker compose up --build   # make sure it's in root directory
 ```
+
+### Segment Pipeline
+
+After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Generate the 24-hour synthetic fallback dataset with `python scripts/generate_historical_segment_data.py`.
+
+Segment endpoints are `GET /api/segments/geojson`, `GET /api/emissions/map`, and `GET /api/emissions/{road_segment_id}`. Camera responses include `data_source`; filter live or historical cameras with `GET /api/cameras?data_source=LIVE` or `HISTORICAL`. The `/ws/emissions` socket forwards camera messages and `segment_update` messages.
 
 #### 2. Seed the Data
 ```bash

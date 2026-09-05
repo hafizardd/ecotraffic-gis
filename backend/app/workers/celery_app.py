@@ -7,7 +7,7 @@ celery_app = Celery(
     "ecotraffic",
     broker=redis_url,
     backend=redis_url,
-    include=["app.workers.scheduler"],
+    include=["app.workers.scheduler", "app.workers.segment_calculation_worker"],
 )
 
 celery_app.conf.timezone = "Asia/Jakarta"
@@ -33,5 +33,9 @@ celery_app.conf.beat_schedule = {
     "dispatch_due_cameras": {
         "task": "app.workers.scheduler.dispatch_due_cameras",
         "schedule": settings.CAMERA_SCHEDULER_TICK_SECONDS,
+    },
+    "recalculate-segment-emissions": {
+        "task": "app.workers.segment_calculation_worker.recalculate_segment_emissions",
+        "schedule": settings.SEGMENT_CALCULATION_PERIOD_MINUTES * 60,
     },
 }

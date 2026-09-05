@@ -37,7 +37,10 @@ target_metadata = Base.metadata
 # ------------------------------------------------------------------
 
 # Exact set of table names our app owns
-OUR_TABLES = {"cameras", "emissions", "emission_aggregates"}
+OUR_TABLES = {
+    "cameras", "emissions", "emission_aggregates", "road_segments",
+    "camera_road_segments", "segment_traffic_observations", "segment_emissions",
+}
 
 
 def include_name(name, type_, parent_names):

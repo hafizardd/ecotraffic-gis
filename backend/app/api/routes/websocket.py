@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.database import get_session_factory
 from app.models.camera import Camera
 from app.models.emission import Emission
+from app.models.road_segment import RoadSegment
 from app.services.data_freshness import FreshnessPolicy, add_freshness
 from app.services.latest_emission_state import AsyncLatestEmissionStateStore
 
@@ -104,6 +105,21 @@ async def send_initial_state(websocket: WebSocket) -> None:
                         continue
                     payload = _legacy_emission_payload(camera.camera_id, emission)
                 await websocket.send_text(json.dumps(payload))
+
+            try:
+                segment_result = await db.execute(select(RoadSegment).where(RoadSegment.road_segment_id.is_not(None)))
+                segment_ids = [segment.road_segment_id for segment in segment_result.scalars().all()]
+                segment_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+                try:
+                    segment_store = __import__("app.services.segment_latest_state", fromlist=["SegmentLatestStateStore"]).SegmentLatestStateStore(segment_client)
+                    for segment_id in segment_ids:
+                        state = await segment_client.get(segment_store.key_for(segment_id))
+                        if state:
+                            await websocket.send_text(json.dumps({"type": "segment_update", "segment_id": segment_id, "data": json.loads(state)}))
+                finally:
+                    await segment_client.aclose()
+            except Exception:
+                logger.warning("segment_latest_state_unavailable", exc_info=True)
 
     except Exception as e:
         logger.error(f"send_initial_state failed: {e}")

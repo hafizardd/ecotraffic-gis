@@ -9,6 +9,15 @@ import redis
 from celery.signals import worker_init, worker_shutdown
 
 from app.core.config import settings
+from app.core.database import get_sync_db
+from app.models.camera_road_segment import CameraRoadSegment
+from app.models.road_segment import RoadSegment
+from app.services.segment_emission_pipeline import calculate_segment_emission
+from app.services.segment_emission_store import persist_segment_emission_sync
+from app.services.segment_mapping import MappingResolutionError, CameraSegmentMapping, resolve_camera_mapping
+from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
+from app.services.segment_observation_store import observation_row
+from app.models.segment_traffic_observation import SegmentTrafficObservationRecord
 from app.services.detector_lifecycle import DetectorLifecycle
 from app.services.data_freshness import FreshnessPolicy
 from app.services.emission_aggregation import (
@@ -120,6 +129,50 @@ latest_state_store = LatestEmissionStateStore(
     freshness_policy=FreshnessPolicy.from_settings(settings),
 )
 historical_emission_store = HistoricalEmissionStore()
+
+_segment_mappings: tuple[float, list[CameraSegmentMapping]] | None = None
+
+
+def _load_segment_mappings() -> list[CameraSegmentMapping]:
+    global _segment_mappings
+    now = time.monotonic()
+    if _segment_mappings is not None and now - _segment_mappings[0] < settings.SEGMENT_MAPPING_CACHE_TTL_SECONDS:
+        return _segment_mappings[1]
+    with get_sync_db() as db:
+        rows = db.execute(
+            __import__("sqlalchemy").select(
+                __import__("app.models.camera", fromlist=["Camera"]).Camera.camera_id,
+                RoadSegment.road_segment_id, CameraRoadSegment.lane_or_stream_id,
+                CameraRoadSegment.is_active, CameraRoadSegment.valid_from, CameraRoadSegment.valid_to,
+            ).join(CameraRoadSegment, CameraRoadSegment.camera_id == __import__("app.models.camera", fromlist=["Camera"]).Camera.id)
+            .join(RoadSegment, CameraRoadSegment.road_segment_id == RoadSegment.id)
+            .where(CameraRoadSegment.is_active.is_(True))
+        ).all()
+    _segment_mappings = (now, [CameraSegmentMapping(*row) for row in rows])
+    return _segment_mappings[1]
+
+
+def _persist_segment_observation(job: InferenceJob, vehicle_counts: dict[str, int]) -> dict:
+    metadata = {"segment_pipeline_status": "not_attempted"}
+    try:
+        mapping = resolve_camera_mapping(_load_segment_mappings(), camera_id=job.camera_id, captured_at=job.captured_at)
+    except MappingResolutionError:
+        metadata["segment_pipeline_status"] = "no_mapping"
+        return metadata
+    observation = SegmentTrafficObservation(
+        camera_id=job.camera_id, road_segment_id=mapping.road_segment_id,
+        lane_or_stream_id=mapping.lane_or_stream_id, captured_at=job.captured_at,
+        observation_duration_seconds=settings.EMISSION_AGGREGATION_WINDOW_SECONDS,
+        raw_detected_count=vehicle_counts, vehicle_count_semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY,
+    )
+    with get_sync_db() as db:
+        segment = db.execute(__import__("sqlalchemy").select(RoadSegment).where(RoadSegment.road_segment_id == mapping.road_segment_id)).scalar_one()
+        db.add(SegmentTrafficObservationRecord(**observation_row(observation, road_segment_database_id=segment.id, camera_database_id=job.camera_database_id)))
+        db.flush()
+        metadata.update({"segment_pipeline_status": "observation_stored", "segment_id": mapping.road_segment_id})
+        # Snapshot occupancy is retained for audit but is intentionally not scored as hourly volume.
+        metadata["segment_pipeline_status"] = "pending_snapshot_semantics"
+    return metadata
 
 
 def publish_latest_state(camera_id: str, payload: dict) -> None:
@@ -337,6 +390,11 @@ def process_inference_job(self, job_payload: dict) -> dict:
         inference_latency_s=inference_latency_s,
         cycle_duration_s=cycle_duration_s,
     )
+    try:
+        aggregation_metadata.update(_persist_segment_observation(job, vehicle_counts))
+    except Exception:
+        aggregation_metadata["segment_pipeline_status"] = "failed"
+        logger.exception("segment_observation_persistence_failed", extra={"camera_id": job.camera_id, "job_id": job.job_id})
 
     processed_at = datetime.now(timezone.utc)
     result = {

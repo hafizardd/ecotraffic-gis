@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
  
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
  
@@ -18,13 +18,14 @@ from app.schemas.camera import (
 router = APIRouter(prefix="/api/cameras", tags=["cameras"])
 
 @router.get("", response_model=CameraFeatureCollection)
-async def get_cameras(db: AsyncSession = Depends(get_db)):
+async def get_cameras(data_source: str | None = Query(default=None), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(
             Camera,
             text("ST_AsGeoJSON(cameras.location)::json as geojson")
         )
         .where(Camera.is_active == True)
+        .where(Camera.data_source == data_source if data_source else True)
         .order_by(Camera.created_at)
     )
     rows = result.all()
@@ -70,6 +71,7 @@ def _camera_properties(camera: Camera, now: datetime) -> CameraProperties:
         camera_id=camera.camera_id,
         stream_url=camera.stream_url,
         is_active=camera.is_active,
+        data_source=camera.data_source,
         status=camera.status,
         failure_count=camera.failure_count,
         last_sample_at=camera.last_sample_at,
