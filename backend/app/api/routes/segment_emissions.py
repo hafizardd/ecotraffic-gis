@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi.responses import JSONResponse
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -8,6 +9,30 @@ from app.models.segment_emission import SegmentEmission
 from app.schemas.segment_emission import SegmentEmissionMapItem, SegmentEmissionResponse
 
 router = APIRouter(tags=["segment-emissions"])
+
+
+@router.get("/api/segments/geojson")
+async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(RoadSegment, SegmentEmission)
+        .outerjoin(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
+        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc().nullslast())
+    )
+    latest = {}
+    for segment, emission in result:
+        latest.setdefault(segment.id, (segment, emission))
+    features = []
+    for segment, emission in latest.values():
+        geometry = (await db.execute(
+            select(text("ST_AsGeoJSON(road_segments.geometry)::json"))
+            .where(RoadSegment.id == segment.id)
+        )).scalar_one()
+        properties = {"segment_id": segment.road_segment_id, "name": segment.name, "length_km": segment.length_km}
+        if emission:
+            properties.update({"decision_score": emission.decision_score, "priority": emission.priority,
+                               "pollutant_totals": emission.pollutant_totals_g_h, "volume_per_hour": emission.volume_per_hour})
+        features.append({"type": "Feature", "geometry": geometry, "properties": properties})
+    return JSONResponse({"type": "FeatureCollection", "features": features})
 
 
 @router.get("/api/emissions/map", response_model=list[SegmentEmissionMapItem])
@@ -53,4 +78,3 @@ async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(
         provenance={"source_cameras": emission.source_cameras, "source_streams": emission.source_streams, "aggregation_policy": emission.aggregation_policy},
         ahp_metadata=emission.ahp_metadata,
     )
-

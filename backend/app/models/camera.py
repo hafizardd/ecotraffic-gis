@@ -52,6 +52,9 @@ class Camera(Base):
         nullable=False,
         comment="Set False to disable without deleting emission history",
     )
+    data_source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="HISTORICAL", server_default="HISTORICAL"
+    )
     priority: Mapped[str] = mapped_column(
         String(10),
         default="medium",

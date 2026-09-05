@@ -4,6 +4,8 @@ import uuid
 from typing import Any
 
 from app.services.segment_observation import SegmentTrafficObservation
+from app.models.segment_traffic_observation import SegmentTrafficObservationRecord
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def observation_row(
@@ -27,3 +29,19 @@ def observation_row(
     if ingested_at is not None:
         row["ingested_at"] = ingested_at
     return row
+
+
+async def persist_observation(
+    db: AsyncSession,
+    observation: SegmentTrafficObservation,
+    segment_database_id: uuid.UUID,
+    camera_database_id: uuid.UUID,
+) -> SegmentTrafficObservationRecord:
+    record = SegmentTrafficObservationRecord(**observation_row(
+        observation,
+        road_segment_database_id=segment_database_id,
+        camera_database_id=camera_database_id,
+    ))
+    db.add(record)
+    await db.flush()
+    return record

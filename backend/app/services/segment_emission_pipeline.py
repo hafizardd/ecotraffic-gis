@@ -43,7 +43,7 @@ def calculate_segment_emission(
         "volume_per_hour": volume,
         "vkt_km_h": vkt, "emissions": emissions, "raw_criteria": raw,
         "spatial_criteria_status": "pending" if spatial_pending else "complete",
-        "provenance": {"source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams, "aggregation_policy": aggregation.aggregation_policy},
+        "provenance": {"source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams, "source_observation_count": aggregation.observation_count, "aggregation_policy": aggregation.aggregation_policy},
     }
     if not spatial_pending:
         normalized = normalize_criteria(raw, criterion_ranges)

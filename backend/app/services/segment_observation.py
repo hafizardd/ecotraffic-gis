@@ -3,13 +3,13 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum
 import math
 
 from cv.proposal_emission_factors import VEHICLE_CATEGORIES
 
 
-class VehicleCountSemantics(StrEnum):
+class VehicleCountSemantics(str, Enum):
     INTERVAL_COUNT = "interval_count"
     SNAPSHOT_OCCUPANCY = "snapshot_occupancy"
     VEHICLES_PER_HOUR = "vehicles_per_hour"

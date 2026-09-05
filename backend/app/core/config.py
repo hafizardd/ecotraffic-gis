@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     EMISSION_AGGREGATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
     LATEST_EMISSION_STATE_TTL_SECONDS: int = Field(default=3600, gt=0)
 
+    SEGMENT_CALCULATION_PERIOD_MINUTES: int = Field(default=5, gt=0)
+    SEGMENT_OBSERVATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
+    SEGMENT_MAPPING_CACHE_TTL_SECONDS: int = Field(default=300, gt=0)
+    SEGMENT_LATEST_STATE_TTL_SECONDS: int = Field(default=3600, gt=0)
+    DEFAULT_SPATIAL_CRITERIA_K3: float = 0.5
+    DEFAULT_SPATIAL_CRITERIA_K4: float = 0.5
+    DEFAULT_SPATIAL_CRITERIA_K5: float = 0.5
+
     # Deployments may define settings for adjacent services; they should not
     # prevent this application from starting when those keys are unrelated.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
