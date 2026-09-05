@@ -43,6 +43,22 @@ alembic upgrade head
 python -m app.core.seed
 ```
 
+## Segment Pipeline Reset and Backfill
+
+The seed command is idempotent and loads road geometry plus nearest camera mappings. After reseeding an empty database, generate historical fallback emissions with:
+
+```bash
+python scripts/generate_historical_segment_data.py
+```
+
+To clear only segment-derived data while retaining cameras, run this against PostgreSQL:
+
+```sql
+TRUNCATE segment_emissions, segment_traffic_observations, camera_road_segments, road_segments CASCADE;
+```
+
+Redis segment latest state uses keys matching `emission:segment:*`; remove those keys when testing a clean realtime state.
+
 ## How to Migrations After Modifying Tables
 1. Change Model in `backend\app\models\*`
 2. Generate Migrations
