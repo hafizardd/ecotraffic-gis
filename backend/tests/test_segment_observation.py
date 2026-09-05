@@ -15,7 +15,7 @@ def _observation(**overrides):
         "lane_or_stream_id": "northbound",
         "captured_at": datetime(2026, 9, 3, 10, tzinfo=timezone.utc),
         "observation_duration_seconds": 60,
-        "raw_detected_count": {"motorcycle": 4, "gasoline_car": 2},
+        "raw_detected_count": {"motorcycle": 4, "car": 2},
     }
     values.update(overrides)
     return SegmentTrafficObservation(**values)

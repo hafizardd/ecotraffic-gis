@@ -9,11 +9,11 @@ from app.services.segment_observation import SegmentTrafficObservation
 BASE = datetime(2026, 9, 3, 10, tzinfo=timezone.utc)
 
 
-def observation(camera, stream, motorcycle=0, gasoline_car=0):
+def observation(camera, stream, motorcycle=0, car=0):
     return SegmentTrafficObservation(
         camera_id=camera, road_segment_id="segment-1", lane_or_stream_id=stream,
         captured_at=BASE, observation_duration_seconds=60,
-        raw_detected_count={"motorcycle": motorcycle, "gasoline_car": gasoline_car},
+        raw_detected_count={"motorcycle": motorcycle, "car": car},
     )
 
 

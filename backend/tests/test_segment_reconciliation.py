@@ -8,7 +8,7 @@ def test_category_pollutants_reconcile_to_pollutant_totals():
     captured_at = datetime(2026, 9, 3, 10, tzinfo=timezone.utc)
     observation = SegmentTrafficObservation(
         "camera-a", "segment-1", "northbound", captured_at, 60,
-        {"motorcycle": 40, "gasoline_car": 10, "bus": 1, "truck": 2},
+        {"motorcycle": 40, "car": 10, "bus": 1, "truck": 2},
     )
     result = calculate_segment_emission(
         [observation], period_start=captured_at,

@@ -8,24 +8,8 @@ from collections.abc import Mapping
 import math
 
 
-# Public application contract. Fuel-specific car factors remain internal.
+# Public application vehicle category contract.
 VEHICLE_CATEGORIES = ("car", "motorcycle", "bus", "truck")
-INTERNAL_VEHICLE_CATEGORIES = ("motorcycle", "gasoline_car", "diesel_car", "bus", "truck")
-
-VEHICLE_CATEGORY_ALIASES = {
-    "gasoline_car": "car",
-    "diesel_car": "car",
-}
-
-
-def normalize_vehicle_counts(counts: Mapping[str, int | float]) -> dict[str, float]:
-    """Normalize detector and Tier-2 categories at the application boundary."""
-    normalized = {category: 0.0 for category in VEHICLE_CATEGORIES}
-    for category, value in counts.items():
-        public_category = VEHICLE_CATEGORY_ALIASES.get(category, category)
-        if public_category in normalized:
-            normalized[public_category] += float(value)
-    return normalized
 
 POLLUTANTS = (
     "TSP",
@@ -39,8 +23,7 @@ POLLUTANTS = (
 )
 
 EMISSION_FACTORS: dict[str, dict[str, float]] = {
-    # Public car results use the existing gasoline baseline. Fuel-specific
-    # factors remain available below for internal modelling and audit detail.
+    # The public car factor uses the proposal's gasoline-car baseline.
     "car": {
         "TSP": 0.01, "NOx": 2.0, "SO2": 0.026, "HC": 4.0,
         "CO": 40.0, "CO2": 3180.0, "CH4": 0.07, "N2O": 0.005,
@@ -57,15 +40,6 @@ EMISSION_FACTORS: dict[str, dict[str, float]] = {
         "TSP": 1.4, "NOx": 17.7, "SO2": 0.82, "HC": 1.8,
         "CO": 9.4, "CO2": 3172.0, "CH4": 0.01, "N2O": 0.031,
     },
-}
-
-INTERNAL_EMISSION_FACTORS: dict[str, dict[str, float]] = {
-    category: factors for category, factors in EMISSION_FACTORS.items()
-}
-INTERNAL_EMISSION_FACTORS["gasoline_car"] = dict(EMISSION_FACTORS["car"])
-INTERNAL_EMISSION_FACTORS["diesel_car"] = {
-    "TSP": 0.53, "NOx": 3.5, "SO2": 0.44, "HC": 0.2,
-    "CO": 2.8, "CO2": 3172.0, "CH4": 0.01, "N2O": 0.014,
 }
 
 

@@ -12,7 +12,7 @@ def test_observation_row_preserves_audit_fields_and_raw_counts():
         lane_or_stream_id="northbound",
         captured_at=datetime(2026, 9, 3, 10, tzinfo=timezone.utc),
         observation_duration_seconds=60,
-        raw_detected_count={"gasoline_car": 3},
+        raw_detected_count={"car": 3},
     )
     segment_id = uuid.uuid4()
     camera_id = uuid.uuid4()
@@ -21,5 +21,5 @@ def test_observation_row_preserves_audit_fields_and_raw_counts():
     assert row["road_segment_id"] == segment_id
     assert row["camera_id"] == camera_id
     assert row["camera_identifier"] == "camera-a"
-    assert row["raw_detected_count"]["diesel_car"] == 0
+    assert row["raw_detected_count"]["car"] == 3
     assert row["vehicle_count_semantics"] == "interval_count"

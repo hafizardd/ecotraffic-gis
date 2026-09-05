@@ -1,11 +1,10 @@
-from cv.proposal_emission_factors import normalize_vehicle_counts
 from cv.emission_factors import calculate_emission
 
 
-def test_fuel_specific_cars_share_public_car_category():
-    assert normalize_vehicle_counts({"gasoline_car": 2, "diesel_car": 3}) == {
-        "car": 5.0, "motorcycle": 0.0, "bus": 0.0, "truck": 0.0,
-    }
+def test_public_vehicle_contract_is_four_categories():
+    from cv.proposal_emission_factors import VEHICLE_CATEGORIES
+
+    assert VEHICLE_CATEGORIES == ("car", "motorcycle", "bus", "truck")
 
 
 def test_car_contributes_to_camera_emissions():
