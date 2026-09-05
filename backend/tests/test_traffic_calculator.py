@@ -6,7 +6,7 @@ from app.services.traffic_calculator import volume_per_hour, vkt_by_category
 def test_interval_counts_are_converted_to_hourly_volume():
     result = volume_per_hour({"motorcycle": 120}, 600)
     assert result["motorcycle"] == 720
-    assert result["gasoline_car"] == 0
+    assert result["car"] == 0
 
 
 def test_already_hourly_input_is_not_scaled_again():
@@ -14,8 +14,8 @@ def test_already_hourly_input_is_not_scaled_again():
 
 
 def test_vkt_uses_authoritative_length_in_kilometres():
-    volume = volume_per_hour({"gasoline_car": 100}, 3600, already_hourly=True)
-    assert vkt_by_category(volume, 2)["gasoline_car"] == 200
+    volume = volume_per_hour({"car": 100}, 3600, already_hourly=True)
+    assert vkt_by_category(volume, 2)["car"] == 200
 
 
 @pytest.mark.parametrize("duration", [0, -1, float("nan")])

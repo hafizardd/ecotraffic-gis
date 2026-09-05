@@ -24,9 +24,8 @@ def _observation(**overrides):
 def test_observation_normalizes_all_canonical_categories():
     observation = _observation()
     assert observation.raw_detected_count == {
+        "car": 2,
         "motorcycle": 4,
-        "gasoline_car": 2,
-        "diesel_car": 0,
         "bus": 0,
         "truck": 0,
     }

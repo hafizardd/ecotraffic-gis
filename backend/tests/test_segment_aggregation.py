@@ -23,7 +23,7 @@ def test_independent_streams_are_summed_once_with_provenance():
         period_start=BASE, period_end=BASE + timedelta(minutes=1),
     )
     assert result.raw_counts["motorcycle"] == 75
-    assert result.raw_counts["gasoline_car"] == 22
+    assert result.raw_counts["car"] == 22
     assert result.source_cameras == ("camera-a", "camera-b")
     assert result.source_streams == ("northbound", "southbound")
 

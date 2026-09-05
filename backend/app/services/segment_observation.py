@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 import math
 
-from cv.proposal_emission_factors import VEHICLE_CATEGORIES
+from cv.proposal_emission_factors import VEHICLE_CATEGORIES, normalize_vehicle_counts
 
 
 class VehicleCountSemantics(str, Enum):
@@ -33,9 +33,9 @@ class SegmentTrafficObservation:
         if not math.isfinite(self.observation_duration_seconds) or self.observation_duration_seconds <= 0:
             raise ValueError("observation_duration_seconds must be finite and greater than zero")
 
-        counts = {}
+        counts = normalize_vehicle_counts(self.raw_detected_count)
         for category in VEHICLE_CATEGORIES:
-            value = float(self.raw_detected_count.get(category, 0))
+            value = float(counts[category])
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"raw count for {category} must be finite and non-negative")
             counts[category] = value

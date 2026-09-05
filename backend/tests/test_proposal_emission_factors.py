@@ -32,10 +32,10 @@ def test_missing_category_or_pollutant_is_rejected():
         validate_emission_factors(missing_pollutant)
 
 
-def test_default_yolo_mapping_assigns_car_to_gasoline_category():
+def test_default_yolo_mapping_assigns_car_to_public_category():
     assert DEFAULT_YOLO_CATEGORY_MAPPING == {
         "motorcycle": "motorcycle",
-        "car": "gasoline_car",
+        "car": "car",
         "bus": "bus",
         "truck": "truck",
     }
