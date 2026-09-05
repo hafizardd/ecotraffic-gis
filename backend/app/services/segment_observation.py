@@ -35,7 +35,7 @@ class SegmentTrafficObservation:
 
         counts = {}
         for category in VEHICLE_CATEGORIES:
-            value = float(counts[category])
+            value = float(self.raw_detected_count.get(category, 0))
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"raw count for {category} must be finite and non-negative")
             counts[category] = value
