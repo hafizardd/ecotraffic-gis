@@ -7,7 +7,7 @@ celery_app = Celery(
     "ecotraffic",
     broker=redis_url,
     backend=redis_url,
-    include=["app.workers.scheduler", "app.workers.segment_calculation_worker"],
+    include=["app.workers.scheduler", "app.workers.segment_calculation_worker", "app.workers.staleness_worker"],
 )
 
 celery_app.conf.timezone = "Asia/Jakarta"
@@ -28,6 +28,7 @@ celery_app.conf.task_routes = {
     "app.workers.inference_worker.process_camera": {"queue": "camera_sampling"},
     "app.workers.inference_worker.process_inference_job": {"queue": "inference"},
     "app.workers.segment_calculation_worker.recalculate_segment_emissions": {"queue": "inference"},
+    "app.workers.staleness_worker.check_camera_staleness": {"queue": "inference"},
 }
 
 celery_app.conf.beat_schedule = {
@@ -38,5 +39,9 @@ celery_app.conf.beat_schedule = {
     "recalculate-segment-emissions": {
         "task": "app.workers.segment_calculation_worker.recalculate_segment_emissions",
         "schedule": settings.SEGMENT_CALCULATION_PERIOD_MINUTES * 60,
+    },
+    "check-camera-staleness": {
+        "task": "app.workers.staleness_worker.check_camera_staleness",
+        "schedule": settings.CAMERA_STALENESS_CHECK_INTERVAL_SECONDS,
     },
 }
