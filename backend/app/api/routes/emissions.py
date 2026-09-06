@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
  
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
  
 from app.core.database import get_db
@@ -90,17 +90,25 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
             total_cameras_active=0,
             **{field: 0.0 for field in EMISSION_RATE_FIELDS},
             by_vehicle=VehicleSummary(car=0, motorcycle=0, bus=0, truck=0),
-            last_updated=None, active_cameras=0,
+last_updated=None, active_cameras=0,
         )
 
     # Read current persisted windows in one grouped/window query. Legacy rows are
     # deliberately excluded from the current summary.
+    rn_subq = (
+        select(
+            EmissionAggregate.id,
+            func.row_number().over(
+                partition_by=EmissionAggregate.camera_id,
+                order_by=EmissionAggregate.period_end.desc(),
+            ).label("rn"),
+        )
+        .subquery()
+    )
     latest_rows = await db.execute(
-        select(EmissionAggregate).where(
-            EmissionAggregate.id.in_(
-                select(func.max(EmissionAggregate.id))
-                .group_by(EmissionAggregate.camera_id)
-            )
+        select(EmissionAggregate).join(
+            rn_subq,
+            and_(EmissionAggregate.id == rn_subq.c.id, rn_subq.c.rn == 1),
         )
     )
     aggregates = list(latest_rows.scalars().all())

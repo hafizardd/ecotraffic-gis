@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 GEOJSON_PATH = Path(__file__).resolve().parents[2] / "data" / "road_segments_scored.geojson"
 CAMERA_SEGMENT_OVERRIDES = {
     "atcs_jlagran": "SEG-0022",
-    "kotabaru_wardhani": "SEG-0029",
+    "atcs_balaikota_timur": "SEG-0137",
 }
 
 
@@ -121,7 +121,7 @@ async def seed_camera_segment_mappings(session: AsyncSession) -> int:
             FROM cameras c
             CROSS JOIN LATERAL (
                 SELECT id FROM road_segments
-                WHERE road_segment_id NOT IN ('SEG-0022', 'SEG-0029')
+                WHERE road_segment_id NOT IN ('SEG-0022', 'SEG-0137')
                 ORDER BY ST_Distance(geometry, ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326))
                 LIMIT 1
             ) s
