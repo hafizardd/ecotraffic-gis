@@ -83,8 +83,8 @@ function SegmentDetails({ detail }: { detail: SegmentEmissionDetail }) {
                 <p className="criteria-status">Kriteria spasial: {detail.spatial_criteria_status}</p>
                 <div className="criteria-grid">{Object.entries(detail.raw_criteria).map(([key, value]) => <div key={key}><span>{key}</span><strong>{value == null ? "N/A" : String(value)}</strong></div>)}</div>
             </section>
-            <VehicleMetrics title="VOLUME KENDARAAN" subtitle="Agregat per jam" values={detail.volume_per_hour} unavailableLabel="Volume belum tersedia dari snapshot occupancy" />
-            <VehicleMetrics title="VKT" subtitle="Kendaraan-kilometer per jam" values={detail.vkt_km_h} unavailableLabel="VKT belum tersedia dari snapshot occupancy" />
+            <VehicleMetrics title="VOLUME KENDARAAN" subtitle="Agregat per jam" values={detail.volume_per_hour} estimated={detail.volume_status === "estimated"} unavailableLabel="Volume belum tersedia dari snapshot occupancy" />
+            <VehicleMetrics title="VKT" subtitle="Kendaraan-kilometer per jam" values={detail.vkt_km_h} estimated={detail.volume_status === "estimated"} unavailableLabel="VKT belum tersedia dari snapshot occupancy" />
         </>
     );
 }
@@ -93,16 +93,18 @@ function VehicleMetrics({
     title,
     subtitle,
     values,
+    estimated,
     unavailableLabel,
 }: {
     title: string;
     subtitle: string;
     values: Record<string, number> | null;
+    estimated: boolean;
     unavailableLabel: string;
 }) {
     return (
         <section className="panel-section">
-            <div className="section-heading"><div><span>{title}</span><small>{subtitle}</small></div></div>
+            <div className="section-heading"><div><span>{title}</span><small>{subtitle}</small></div>{estimated && <b className="estimate-badge">Estimasi</b>}</div>
             {values == null && <p className="data-empty">{unavailableLabel}</p>}
             <div className="vehicle-summary">
                 {VEHICLE_TYPES.map((key) => {

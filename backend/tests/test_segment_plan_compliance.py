@@ -37,11 +37,11 @@ def test_snapshot_occupancy_is_averaged_before_hourly_conversion():
             observation(semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY),
             observation(semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY),
         ],
-        period_start=BASE,
+period_start=BASE,
         period_end=BASE + timedelta(minutes=1),
     )
     assert result.raw_counts["motorcycle"] == 1
-    assert result.vehicle_count_semantics == "interval_count"
+    assert result.vehicle_count_semantics == "snapshot_occupancy"
 
 
 def test_constant_pollutant_does_not_contribute_to_k1():

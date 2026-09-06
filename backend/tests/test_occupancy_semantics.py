@@ -4,7 +4,7 @@ from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
 
 
-def test_snapshot_occupancy_does_not_become_hourly_volume():
+def test_snapshot_occupancy_is_estimated_as_hourly_volume():
     captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     observation = SegmentTrafficObservation(
         camera_id="cam", road_segment_id="seg", lane_or_stream_id="default",
@@ -17,5 +17,7 @@ def test_snapshot_occupancy_does_not_become_hourly_volume():
         period_end=datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc), road_length_km=1,
     )
     assert result["vehicle_count_semantics"] == "snapshot_occupancy"
-    assert result["volume_per_hour"] is None
-    assert result["volume_status"] == "unavailable"
+    assert result["volume_per_hour"]["car"] == 240.0
+    assert result["vkt_km_h"]["car"] == 240.0
+    assert result["volume_status"] == "estimated"
+    assert result["emissions"]["totals_g_h"]

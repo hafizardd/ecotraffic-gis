@@ -6,4 +6,8 @@ def test_map_response_is_lightweight():
         road_segment_id="segment-1", decision_score=0.73, priority="Very High",
         total_emission=12345.67, calculated_at="2026-09-03T10:00:00Z",
     )
-    assert set(item.model_dump()) == {"road_segment_id", "decision_score", "priority", "total_emission", "calculated_at"}
+    assert set(item.model_dump()) == {
+        "road_segment_id", "decision_score", "priority", "total_emission",
+        "calculated_at", "observed_at", "data_age_seconds", "freshness_status",
+        "vehicle_count_semantics", "source_cameras",
+    }

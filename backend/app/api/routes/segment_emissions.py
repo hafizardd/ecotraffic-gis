@@ -97,7 +97,7 @@ async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(
         decision_score=emission.decision_score, priority=emission.priority, spatial_criteria_status=emission.spatial_criteria_status,
         provenance={"source_cameras": emission.source_cameras, "source_streams": emission.source_streams, "aggregation_policy": emission.aggregation_policy},
         ahp_metadata=emission.ahp_metadata,
-        volume_status="unavailable" if emission.volume_per_hour is None else "calculated",
+        volume_status="unavailable" if emission.volume_per_hour is None else ("estimated" if emission.vehicle_count_semantics == "snapshot_occupancy" else "calculated"),
         vehicle_count_semantics=emission.vehicle_count_semantics,
         freshness_status=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).status.value,
     )

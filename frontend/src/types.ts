@@ -135,6 +135,8 @@ export interface SegmentEmissionDetail {
     raw_criteria: Record<string, unknown>; normalized_criteria: Record<string, unknown> | null;
     decision_score: number | null; priority: string | null; spatial_criteria_status: string;
     provenance: Record<string, unknown>; ahp_metadata: Record<string, unknown>;
+    volume_status?: "calculated" | "estimated" | "unavailable";
+    vehicle_count_semantics?: string;
 }
 export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: { decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string; }; }
 
