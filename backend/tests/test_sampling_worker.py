@@ -38,6 +38,7 @@ def _camera():
         referer="https://example.test/",
         priority="high",
         sampling_interval_seconds=10,
+        data_source="LIVE",
     )
 
 

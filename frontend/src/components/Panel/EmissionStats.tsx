@@ -20,7 +20,7 @@ export default function EmissionStats({ cameraId }: EmissionStatsProps) {
             {EMISSION_DEFINITIONS.map(({ key, field, label }) => (
                 <div key={key} className={`stat-card pollutant-${key}`}>
                     <div className="stat-label"><span className="pollutant-dot" />{label}</div>
-                    <div className="stat-value">{Number(liveEmission[field] ?? 0).toFixed(2)}<small>g/min</small></div>
+                <div className="stat-value">{liveEmission[field] == null ? "N/A" : Number(liveEmission[field]).toFixed(2)}<small>g/min</small></div>
                 </div>
             ))}
         </div>

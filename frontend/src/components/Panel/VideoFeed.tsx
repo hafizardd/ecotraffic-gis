@@ -42,13 +42,16 @@ export default function VideoFeed({ streamUrl }: VideoFeedProps) {
             setError("HLS not supported in this browser");
         }
 
-        video.muted = isMuted;
         video.play().catch(() => {});
         
         return () => {
             hls?.destroy();
         };
-    }, [streamUrl, isMuted])
+    }, [streamUrl])
+
+    useEffect(() => {
+        if (videoRef.current) videoRef.current.muted = isMuted;
+    }, [isMuted]);
 
     const toggleMute = () => {
         if (videoRef.current) {

@@ -52,9 +52,9 @@ class EmissionObservation:
 
     def __post_init__(self) -> None:
         _require_aware(self.captured_at, "captured_at")
-        normalized_counts = {}
+        normalized_counts = {vehicle_type: float(self.vehicle_counts.get(vehicle_type, 0)) for vehicle_type in VEHICLE_TYPES}
         for vehicle_type in VEHICLE_TYPES:
-            count = float(self.vehicle_counts.get(vehicle_type, 0))
+            count = float(normalized_counts.get(vehicle_type, 0))
             if not math.isfinite(count) or count < 0:
                 raise ValueError(
                     f"vehicle count for {vehicle_type} must be finite and non-negative"

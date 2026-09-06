@@ -4,7 +4,7 @@ A real-time WebGIS platform that monitors vehicle-based carbon emissions across 
 
 The segment pipeline adds PostGIS road segments, camera-to-segment mappings, Tier-2 emissions, AHP priority scoring, historical fallback data, Redis latest state, and live segment updates.
 
-Built for the AI Innovation Competition — combining **YOLOv8 vehicle detection**, **FastAPI**, **PostGIS**, and **React + Leaflet.js** into a single live dashboard targeting urban traffic corridors in Yogyakarta.
+Built for the AI Innovation Competition — combining **YOLO vehicle detection**, **FastAPI**, **PostGIS**, and **Next.js + React + TypeScript + MapLibre** into a single freshness-aware dashboard targeting urban traffic corridors in Yogyakarta.
 
 The current scalable scheduler, bounded inference pipeline, aggregation
 semantics, configuration, and synthetic load-test results are documented in
@@ -209,11 +209,11 @@ Open http://localhost:3000
 | Task queue | Celery + Redis | Background stream processing without blocking API |
 | Database | PostgreSQL + PostGIS | Native geospatial queries for CCTV coordinates |
 | ORM | SQLAlchemy + GeoAlchemy2 | Geospatial model support |
-| Map library | Leaflet.js + React-Leaflet (should change it to GeoMapid maps later) | Lightweight, free tile layers (OpenStreetMap) |
+| Map library | MapLibre + react-map-gl | Vector map rendering and interactive segment/camera layers |
 | Video streaming | HLS.js | Plays `.m3u8` CCTV streams natively in browser |
 | Charts | Recharts | React-native, clean time-series visualizations |
-| Frontend framework | React 18 + Vite | Fast dev server, component-based |
-| Styling | Tailwind CSS | Utility-first, rapid UI building |
+| Frontend framework | Next.js + React + TypeScript | Application routing and typed component-based UI |
+| Styling | Global CSS and component styles | Dashboard visual system |
 
 ---
 

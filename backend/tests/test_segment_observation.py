@@ -15,7 +15,7 @@ def _observation(**overrides):
         "lane_or_stream_id": "northbound",
         "captured_at": datetime(2026, 9, 3, 10, tzinfo=timezone.utc),
         "observation_duration_seconds": 60,
-        "raw_detected_count": {"motorcycle": 4, "gasoline_car": 2},
+        "raw_detected_count": {"motorcycle": 4, "car": 2},
     }
     values.update(overrides)
     return SegmentTrafficObservation(**values)
@@ -24,9 +24,8 @@ def _observation(**overrides):
 def test_observation_normalizes_all_canonical_categories():
     observation = _observation()
     assert observation.raw_detected_count == {
+        "car": 2,
         "motorcycle": 4,
-        "gasoline_car": 2,
-        "diesel_car": 0,
         "bus": 0,
         "truck": 0,
     }

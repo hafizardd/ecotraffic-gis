@@ -8,13 +8,8 @@ from collections.abc import Mapping
 import math
 
 
-VEHICLE_CATEGORIES = (
-    "motorcycle",
-    "gasoline_car",
-    "diesel_car",
-    "bus",
-    "truck",
-)
+# Public application vehicle category contract.
+VEHICLE_CATEGORIES = ("car", "motorcycle", "bus", "truck")
 
 POLLUTANTS = (
     "TSP",
@@ -28,17 +23,14 @@ POLLUTANTS = (
 )
 
 EMISSION_FACTORS: dict[str, dict[str, float]] = {
-    "motorcycle": {
-        "TSP": 0.24, "NOx": 0.29, "SO2": 0.008, "HC": 5.9,
-        "CO": 14.0, "CO2": 3180.0, "CH4": 0.26, "N2O": 0.002,
-    },
-    "gasoline_car": {
+    # The public car factor uses the proposal's gasoline-car baseline.
+    "car": {
         "TSP": 0.01, "NOx": 2.0, "SO2": 0.026, "HC": 4.0,
         "CO": 40.0, "CO2": 3180.0, "CH4": 0.07, "N2O": 0.005,
     },
-    "diesel_car": {
-        "TSP": 0.53, "NOx": 3.5, "SO2": 0.44, "HC": 0.2,
-        "CO": 2.8, "CO2": 3172.0, "CH4": 0.01, "N2O": 0.014,
+    "motorcycle": {
+        "TSP": 0.24, "NOx": 0.29, "SO2": 0.008, "HC": 5.9,
+        "CO": 14.0, "CO2": 3180.0, "CH4": 0.26, "N2O": 0.002,
     },
     "bus": {
         "TSP": 1.4, "NOx": 11.9, "SO2": 0.93, "HC": 1.3,

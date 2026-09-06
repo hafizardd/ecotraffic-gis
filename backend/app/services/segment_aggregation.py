@@ -46,8 +46,8 @@ def aggregate_segment_observations(
     if len(durations) != 1:
         raise SegmentAggregationError("observations must use one duration per calculation period")
     semantics = {item.vehicle_count_semantics.value for item in observations}
-    if semantics != {"interval_count"} and semantics != {"vehicles_per_hour"}:
-        raise SegmentAggregationError("only interval_count or vehicles_per_hour observations can be scored")
+    if semantics not in ({"interval_count"}, {"vehicles_per_hour"}, {"snapshot_occupancy"}):
+        raise SegmentAggregationError("only interval_count, vehicles_per_hour, or snapshot_occupancy observations can be scored")
     if len(semantics) != 1:
         raise SegmentAggregationError("observations must use one count semantics per calculation period")
 
@@ -65,9 +65,24 @@ def aggregate_segment_observations(
             selected.extend(stream_observations)
 
     counts = {category: 0.0 for category in VEHICLE_CATEGORIES}
-    for observation in selected:
-        for category in VEHICLE_CATEGORIES:
-            counts[category] += observation.raw_detected_count[category]
+    if semantics == {"snapshot_occupancy"}:
+        # A live frame is a point-in-time occupancy sample. Average samples per
+        # stream for display, but preserve the occupancy semantics downstream.
+        stream_totals: dict[str, dict[str, float]] = defaultdict(
+            lambda: {category: 0.0 for category in VEHICLE_CATEGORIES}
+        )
+        stream_counts: dict[str, int] = defaultdict(int)
+        for observation in selected:
+            stream_counts[observation.lane_or_stream_id] += 1
+            for category in VEHICLE_CATEGORIES:
+                stream_totals[observation.lane_or_stream_id][category] += observation.raw_detected_count[category]
+        for stream, totals in stream_totals.items():
+            for category in VEHICLE_CATEGORIES:
+                counts[category] += totals[category] / stream_counts[stream]
+    else:
+        for observation in selected:
+            for category in VEHICLE_CATEGORIES:
+                counts[category] += observation.raw_detected_count[category]
     return SegmentAggregation(
         road_segment_id=next(iter(segment_ids)),
         period_start=period_start,

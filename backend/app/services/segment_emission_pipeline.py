@@ -16,9 +16,9 @@ def calculate_segment_emission(
 ):
     aggregation = aggregate_segment_observations(observations, period_start=period_start, period_end=period_end)
     duration = aggregation.observation_duration_seconds
+    occupancy = aggregation.vehicle_count_semantics == VehicleCountSemantics.SNAPSHOT_OCCUPANCY.value
     volume = volume_per_hour(
-        aggregation.raw_counts,
-        duration,
+        aggregation.raw_counts, duration,
         already_hourly=aggregation.vehicle_count_semantics == VehicleCountSemantics.VEHICLES_PER_HOUR.value,
     )
     vkt = vkt_by_category(volume, road_length_km)
@@ -41,6 +41,7 @@ def calculate_segment_emission(
         "raw_counts": aggregation.raw_counts, "observation_duration_seconds": duration,
         "vehicle_count_semantics": aggregation.vehicle_count_semantics,
         "volume_per_hour": volume,
+        "volume_status": "estimated" if occupancy else "calculated",
         "vkt_km_h": vkt, "emissions": emissions, "raw_criteria": raw,
         "spatial_criteria_status": "pending" if spatial_pending else "complete",
         "provenance": {"source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams, "source_observation_count": aggregation.observation_count, "aggregation_policy": aggregation.aggregation_policy},

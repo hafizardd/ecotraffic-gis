@@ -58,7 +58,7 @@ async def seed_cameras(session: AsyncSession) -> None:
                     "LIVE"
                     if cam["stream_url"].endswith((
                         "ATCS_jlagran.stream/playlist.m3u8",
-                        "ANPR-Jl-Wardhani.stream/playlist.m3u8",
+                        "ATCS_Simpang_Balaikota_View_Utara.stream/playlist.m3u8",
                     ))
                     else "HISTORICAL"
                 ),

@@ -17,6 +17,7 @@ class CameraSource:
     referer: str | None
     priority: str
     sampling_interval_seconds: int | None
+    data_source: str
 
 
 def get_active_camera_source(camera_id: str) -> CameraSource | None:
@@ -27,7 +28,7 @@ def get_active_camera_source(camera_id: str) -> CameraSource | None:
             select(Camera).where(Camera.camera_id == camera_id)
         ).scalars().first()
 
-        if camera is None or not camera.is_active:
+        if camera is None or not camera.is_active or camera.data_source != "LIVE":
             return None
 
         return CameraSource(
@@ -37,4 +38,5 @@ def get_active_camera_source(camera_id: str) -> CameraSource | None:
             referer=camera.referer,
             priority=camera.priority,
             sampling_interval_seconds=camera.sampling_interval_seconds,
+            data_source=camera.data_source,
         )

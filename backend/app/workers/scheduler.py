@@ -44,7 +44,7 @@ def dispatch_due_cameras() -> dict[str, int]:
     with get_sync_db() as db:
         cameras = db.execute(
             select(Camera)
-            .where(Camera.is_active.is_(True))
+            .where(Camera.is_active.is_(True), Camera.data_source == "LIVE")
             .order_by(priority_order, Camera.next_sample_at.nullsfirst(), Camera.camera_id)
             .with_for_update(skip_locked=True)
         ).scalars().all()

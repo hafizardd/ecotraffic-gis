@@ -49,8 +49,7 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
                     <small>{ageSeconds == null ? "Belum ada data" : `${ageSeconds}s sejak capture terakhir`}</small>
                 </div>
                 <section className="panel-section video-section">
-                    <div className="section-heading"><div><span>LIVE CAMERA</span><small>Streaming pemantauan lokasi</small></div></div>
-                    <VideoFeed streamUrl={camera.properties.stream_url} />
+                    {camera.properties.data_source === "LIVE" && <><div className="section-heading"><div><span>LIVE CAMERA</span><small>Streaming pemantauan lokasi</small></div></div><VideoFeed streamUrl={camera.properties.stream_url} /></>}
                 </section>
                 <section className="panel-section">
                     <div className="section-heading"><div><span>CURRENT EMISSIONS</span><small>Emisi saat ini dalam g/min</small></div></div>

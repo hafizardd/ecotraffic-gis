@@ -20,7 +20,7 @@ VEHICLE_CLASSES = {
 
 DEFAULT_YOLO_CATEGORY_MAPPING = {
     "motorcycle": "motorcycle",
-    "car": "gasoline_car",
+    "car": "car",
     "bus": "bus",
     "truck": "truck",
 }

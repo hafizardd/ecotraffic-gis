@@ -315,12 +315,12 @@ CAMERAS = [
         "is_active": True,
     },
     {
-        "name": "SIMPANG BALAIKOTA VIEW UTARA-BARAT",
-        "camera_id": "atcs_balaikota_utara_barat",
-        "stream_url": "https://cctvjss.jogjakota.go.id/atcs/ATCS_Simpang_Balaikota_View_Timur.stream/playlist.m3u8",
+        "name": "SIMPANG BALAIKOTA VIEW TIMUR",
+        "camera_id": "atcs_balaikota_timur",
+        "stream_url": "https://cctvjss.jogjakota.go.id/atcs/ATCS_Simpang_Balaikota_View_Utara.stream/playlist.m3u8",
         "referer": "https://cctv.jogjakota.go.id/",
-        "longitude": 110.39231,
-        "latitude": -7.799595,
+        "longitude": 110.392313,
+        "latitude": -7.799549,
         "is_active": True,
     },
     {

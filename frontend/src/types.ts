@@ -75,6 +75,9 @@ export interface EmissionUpdate {
     total_n2o_g_per_min: number;
     total_n2o_kg_per_hr: number;
     cycle_duration_s: number;
+    source_mode?: "LIVE" | "HISTORICAL" | "REPLAY" | "SYNTHETIC";
+    processed_at?: string;
+    calculation_version?: string;
 }
 
 export interface EmissionRow {
@@ -117,6 +120,11 @@ export interface SegmentProperties {
     priority: string | null;
     pollutant_totals: Record<string, number> | null;
     volume_per_hour: Record<string, number> | null;
+    total_emission_g_h: number | null;
+    freshness_status?: "fresh" | "aging" | "stale" | "unknown";
+    data_age_seconds?: number | null;
+    vehicle_count_semantics?: string;
+    source_cameras?: string[];
 }
 export interface SegmentFeature { type: "Feature"; geometry: { type: "LineString"; coordinates: [number, number][] }; properties: SegmentProperties; }
 export interface SegmentFeatureCollection { type: "FeatureCollection"; features: SegmentFeature[]; }
@@ -127,8 +135,10 @@ export interface SegmentEmissionDetail {
     raw_criteria: Record<string, unknown>; normalized_criteria: Record<string, unknown> | null;
     decision_score: number | null; priority: string | null; spatial_criteria_status: string;
     provenance: Record<string, unknown>; ahp_metadata: Record<string, unknown>;
+    volume_status?: "calculated" | "estimated" | "unavailable";
+    vehicle_count_semantics?: string;
 }
-export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: { decision_score?: number | null; priority?: string | null; total_emission_g_h?: number; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string; }; }
+export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: { decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string; }; }
 
 export interface ChartPoint {
     timestamp: string;

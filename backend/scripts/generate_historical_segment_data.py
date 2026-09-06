@@ -30,7 +30,7 @@ def generate(seed: int | None = None) -> int:
                 period_end = end - timedelta(hours=hour)
                 period_start = period_end - timedelta(minutes=1)
                 total = max(0, round(base * (0.8 + rng.random() * 0.4) / 60))
-                counts = {"motorcycle": round(total * .60), "gasoline_car": round(total * .25), "bus": round(total * .08), "truck": round(total * .07)}
+                counts = {"motorcycle": round(total * .60), "car": round(total * .25), "bus": round(total * .08), "truck": round(total * .07)}
                 observation = SegmentTrafficObservation(camera.camera_id, segment.road_segment_id, mapping.lane_or_stream_id, period_start, 60, counts)
                 result = calculate_segment_emission([observation], period_start=period_start, period_end=period_end, road_length_km=segment.length_km, spatial_criteria={"K3": .5, "K4": .5, "K5": .5})
                 result["data_source"] = "HISTORICAL"

@@ -39,8 +39,8 @@ export default function Sidebar({ open, onToggle, activeView, onViewChange }: Si
                 ))}
             </nav>
             <div className="sidebar-footer">
-                <div className="system-status" title={!open ? "Sistem terhubung" : undefined}>
-                    <i /><div><strong>LIVE</strong><span>Sistem terhubung</span></div>
+                <div className="system-status" title={!open ? "Status pipeline" : undefined}>
+                    <i /><div><strong>PIPELINE</strong><span>Status tersedia di header</span></div>
                 </div>
                 <button className="sidebar-toggle" onClick={onToggle} aria-label={open ? "Ciutkan sidebar" : "Buka sidebar"}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={open ? "m15 18-6-6 6-6" : "m9 18 6-6-6-6"}/></svg>

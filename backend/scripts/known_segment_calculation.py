@@ -9,8 +9,8 @@ from app.services.segment_observation import SegmentTrafficObservation
 def main() -> None:
     start = datetime(2026, 9, 3, 10, tzinfo=timezone.utc)
     observations = [
-        SegmentTrafficObservation("camera-a", "segment-001", "northbound", start, 60, {"motorcycle": 40, "gasoline_car": 10, "bus": 1, "truck": 2}),
-        SegmentTrafficObservation("camera-b", "segment-001", "southbound", start, 60, {"motorcycle": 35, "gasoline_car": 12, "bus": 0, "truck": 1}),
+        SegmentTrafficObservation("camera-a", "segment-001", "northbound", start, 60, {"motorcycle": 40, "car": 10, "bus": 1, "truck": 2}),
+        SegmentTrafficObservation("camera-b", "segment-001", "southbound", start, 60, {"motorcycle": 35, "car": 12, "bus": 0, "truck": 1}),
     ]
     result = calculate_segment_emission(observations, period_start=start, period_end=start + timedelta(minutes=1), road_length_km=0.8)
     print({

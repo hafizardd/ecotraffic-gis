@@ -24,4 +24,4 @@ def test_invalid_control_efficiency_is_rejected(efficiency):
 def test_all_categories_and_pollutants_are_present():
     result = calculate_tier2_emissions({})
     assert set(result["totals_g_h"]) == {"TSP", "NOx", "SO2", "HC", "CO", "CO2", "CH4", "N2O"}
-    assert set(result["by_category_g_h"]) == {"motorcycle", "gasoline_car", "diesel_car", "bus", "truck"}
+    assert set(result["by_category_g_h"]) == {"car", "motorcycle", "bus", "truck"}
