@@ -90,7 +90,8 @@ async def get_emissions_summary(db: AsyncSession = Depends(get_db)):
             total_cameras_active=0,
             **{field: 0.0 for field in EMISSION_RATE_FIELDS},
             by_vehicle=VehicleSummary(car=0, motorcycle=0, bus=0, truck=0),
-last_updated=None, active_cameras=0,
+            last_updated=None, 
+            active_cameras=0,
         )
 
     # Read current persisted windows in one grouped/window query. Legacy rows are
