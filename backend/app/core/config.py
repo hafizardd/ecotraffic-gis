@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     SECRET_KEY: str 
 
-    YOLO_MODEL_PATH: str = "yolo/yolov8l.pt"
+    YOLO_MODEL_PATH: str = "yolo/yolo11n.pt"
     YOLO_DEVICE: str = "auto"
     YOLO_IMAGE_SIZE: int = Field(default=640, gt=0)
     CONFIDENCE_THRESHOLD: float = Field(default=0.25, ge=0.0, le=1.0)
@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     SEGMENT_OBSERVATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
     SEGMENT_MAPPING_CACHE_TTL_SECONDS: int = Field(default=300, gt=0)
     SEGMENT_LATEST_STATE_TTL_SECONDS: int = Field(default=3600, gt=0)
-    DEFAULT_SPATIAL_CRITERIA_K3: float = 0.5
-    DEFAULT_SPATIAL_CRITERIA_K4: float = 0.5
-    DEFAULT_SPATIAL_CRITERIA_K5: float = 0.5
+    K3_BUFFER_DISTANCE_M: int = Field(default=400, gt=0)
+    K4_BUFFER_DISTANCE_M: int = Field(default=500, gt=0)
+    K5_BUFFER_DISTANCE_M: int = Field(default=500, gt=0)
 
     # Deployments may define settings for adjacent services; they should not
     # prevent this application from starting when those keys are unrelated.

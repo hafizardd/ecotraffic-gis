@@ -1,5 +1,5 @@
 import { API_BASE, WS_URL, fetchCameraEmissions } from "@/services/api";
-import { EmissionUpdate, SegmentUpdate } from "@/types";
+import { EmissionUpdate, SegmentUpdate, SegmentUpdateData } from "@/types";
 import { useEffect, useRef, useState } from "react";
 
 const MAX_BACKOFF = 30000;
@@ -10,19 +10,31 @@ function timestampOf(value: Partial<EmissionUpdate>): number {
     return timestamp ? Date.parse(timestamp) : 0;
 }
 
+function segmentTimestampOf(value: SegmentUpdateData): number {
+    const timestamp = value.calculated_at ?? value.observed_at;
+    return timestamp ? Date.parse(timestamp) : 0;
+}
+
 function validCameraMessage(value: unknown): value is EmissionUpdate {
     if (!value || typeof value !== "object") return false;
     const item = value as Partial<EmissionUpdate>;
     return typeof item.camera_id === "string" && typeof item.timestamp === "string";
 }
 
+function validSegmentMessage(value: unknown): value is SegmentUpdate {
+    if (!value || typeof value !== "object") return false;
+    const item = value as Partial<SegmentUpdate>;
+    return item.type === "segment_update" && typeof item.segment_id === "string" && !!item.data && typeof item.data === "object";
+}
+
 export default function useEmissions() {
     const [emissionMap, setEmissionMap] = useState<Map<string, EmissionUpdate>>(new Map());
-    const [segmentMap, setSegmentMap] = useState<Map<string, SegmentUpdate["data"]>>(new Map());
+    const [segmentMap, setSegmentMap] = useState<Map<string, SegmentUpdateData>>(new Map());
     const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
     const [lastMessageAt, setLastMessageAt] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const latestRef = useRef(new Map<string, number>());
+    const segmentLatestRef = useRef(new Map<string, number>());
 
     useEffect(() => {
         let cancelled = false;
@@ -53,12 +65,22 @@ export default function useEmissions() {
                 try {
                     const data = JSON.parse(event.data) as SegmentUpdate | EmissionUpdate;
                     const messageTime = new Date().toISOString();
-                    if ((data as SegmentUpdate).type === "segment_update" && (data as SegmentUpdate).segment_id && (data as SegmentUpdate).data) {
+                    if (validSegmentMessage(data)) {
                         const segment = data as SegmentUpdate;
-                        setSegmentMap((prev) => new Map(prev).set(segment.segment_id, segment.data));
+                        const time = segmentTimestampOf(segment.data);
+                        if (time > 0 && time < (segmentLatestRef.current.get(segment.segment_id) ?? 0)) {
+                            setLastMessageAt(messageTime);
+                            return;
+                        }
+                        if (time > 0) segmentLatestRef.current.set(segment.segment_id, time);
+                        setSegmentMap((prev) => {
+                            const existing = prev.get(segment.segment_id) ?? {};
+                            const merged: SegmentUpdateData = { ...existing, ...segment.data };
+                            return new Map(prev).set(segment.segment_id, merged);
+                        });
                     } else if (validCameraMessage(data)) {
                         const time = timestampOf(data);
-                        if (time < (latestRef.current.get(data.camera_id) ?? 0)) return;
+                        if (time < (latestRef.current.get(data.camera_id) ?? 0)) { setLastMessageAt(messageTime); return; }
                         latestRef.current.set(data.camera_id, time);
                         setEmissionMap((prev) => new Map(prev).set(data.camera_id, data));
                     } else if ((data as { type?: string }).type !== "system_status") {

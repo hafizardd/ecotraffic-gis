@@ -12,7 +12,7 @@ from app.services.tier2_emission_calculator import calculate_tier2_emissions
 def calculate_segment_emission(
     observations, *, period_start, period_end, road_length_km,
     spatial_criteria=None, criterion_ranges=None, pollutant_ranges=None,
-    control_efficiency=0.0,
+    control_efficiency=0.0, spatial_details=None,
 ):
     aggregation = aggregate_segment_observations(observations, period_start=period_start, period_end=period_end)
     duration = aggregation.observation_duration_seconds
@@ -35,6 +35,7 @@ def calculate_segment_emission(
         "K5": None if spatial_criteria is None else spatial_criteria.get("K5"),
     }
     spatial_pending = any(raw[key] is None for key in ("K3", "K4", "K5"))
+    component_status = {key: ("complete" if raw[key] is not None else "pending") for key in ("K3", "K4", "K5")}
     result = {
         "road_segment_id": aggregation.road_segment_id, "period_start": period_start,
         "period_end": period_end, "calculated_at": datetime.now(timezone.utc),
@@ -43,8 +44,15 @@ def calculate_segment_emission(
         "volume_per_hour": volume,
         "volume_status": "estimated" if occupancy else "calculated",
         "vkt_km_h": vkt, "emissions": emissions, "raw_criteria": raw,
+        "normalized_values": spatial_details.get("normalized_values") if spatial_details else None,
+        "component_status": component_status,
         "spatial_criteria_status": "pending" if spatial_pending else "complete",
-        "provenance": {"source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams, "source_observation_count": aggregation.observation_count, "aggregation_policy": aggregation.aggregation_policy},
+        "spatial_details": spatial_details,
+        "provenance": {
+            "source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams,
+            "source_observation_count": aggregation.observation_count, "aggregation_policy": aggregation.aggregation_policy,
+            "spatial": spatial_details.get("provenance") if spatial_details else None,
+        },
     }
     if not spatial_pending:
         normalized = normalize_criteria(raw, criterion_ranges)
