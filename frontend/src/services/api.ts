@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection, EmissionUpdate } from "@/types";
+import { CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection, EmissionUpdate, SpatialFeatureCollection } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
@@ -41,3 +41,13 @@ export async function fetchLatestEmissions(): Promise<EmissionUpdate[]> {
     if (!response.ok) throw new Error(`Failed to fetch emission summary: ${response.statusText}`);
     return [];
 }
+
+async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
+    const response = await fetch(`${API_BASE}${path}`);
+    if (!response.ok) throw new Error(`Failed to fetch spatial layer: ${response.statusText}`);
+    return response.json();
+}
+
+export const fetchPois = (bbox?: string, category?: string) => fetchSpatial(`/api/spatial/pois?limit=500${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`);
+export const fetchPopulationZones = () => fetchSpatial("/api/spatial/population-zones");
+export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);

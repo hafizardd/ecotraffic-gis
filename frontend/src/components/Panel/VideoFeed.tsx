@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { Volume2, VolumeX } from "lucide-react"
 import Hls from "hls.js"
 
 interface VideoFeedProps {
@@ -82,8 +83,10 @@ export default function VideoFeed({ streamUrl }: VideoFeedProps) {
             <button
                 onClick={toggleMute}
                 className="video-control"
+                aria-label={isMuted ? "Aktifkan suara" : "Bisukan suara"}
+                aria-pressed={!isMuted}
             >
-                {isMuted ? "Unmute" : "Mute"}
+                {isMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
             </button>
         </div>
     )

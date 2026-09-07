@@ -36,6 +36,9 @@ def _values(segment_database_id: uuid.UUID, result: dict) -> dict:
             "weights": result.get("ahp_weights"),
             "consistency": result.get("ahp_consistency"),
             "data_source": result.get("data_source"),
+            "normalized_values": result.get("normalized_values"),
+            "component_status": result.get("component_status"),
+            "spatial_details": result.get("spatial_details"),
         },
     }
 

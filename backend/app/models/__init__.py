@@ -5,9 +5,10 @@ from app.models.camera_road_segment import CameraRoadSegment
 from app.models.segment_traffic_observation import SegmentTrafficObservationRecord
 from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
+from app.models.spatial_sources import PointOfInterest, PopulationZone, SurveyStopObservation
 
 __all__ = [
     "Camera", "Emission", "EmissionAggregate", "CameraRoadSegment",
     "SegmentTrafficObservationRecord",
-    "RoadSegment", "SegmentEmission",
+    "RoadSegment", "SegmentEmission", "SurveyStopObservation", "PointOfInterest", "PopulationZone",
 ]

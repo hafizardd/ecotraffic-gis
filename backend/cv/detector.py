@@ -26,7 +26,7 @@ DEFAULT_YOLO_CATEGORY_MAPPING = {
 }
 
 DEFAULT_MODEL_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "yolo", "yolov8l.pt")
+    os.path.join(os.path.dirname(__file__), "..", "yolo", "yolo11n.pt")
 )
 
 

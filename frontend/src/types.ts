@@ -125,20 +125,56 @@ export interface SegmentProperties {
     data_age_seconds?: number | null;
     vehicle_count_semantics?: string;
     source_cameras?: string[];
+    population?: number | null;
+    population_district?: string | null;
+    population_context?: PopulationContext | null;
+    spatial_criteria_status?: string;
+    k3_k4_k5_status?: Record<string, string>;
+    k5_raw_population_density?: number | null;
+    period_start?: string | null;
+    period_end?: string | null;
+    observed_at?: string | null;
+    calculated_at?: string | null;
+    source_streams?: string[];
+    aggregation_policy?: string | null;
+    source_observation_count?: number | null;
+    volume_status?: string;
+    calculation_version?: number | null;
+}
+export interface PopulationContext {
+    primary?: { district_name?: string; population?: number | null; method?: string } | null;
+    intersecting?: { district_name: string; population: number | null; overlap_share: number | null }[];
+    buffer_distance_m?: number;
+    source?: string;
+    calculated_at?: string;
 }
 export interface SegmentFeature { type: "Feature"; geometry: { type: "LineString"; coordinates: [number, number][] }; properties: SegmentProperties; }
 export interface SegmentFeatureCollection { type: "FeatureCollection"; features: SegmentFeature[]; }
 export interface SegmentEmissionDetail {
-    road_segment_id: string; name: string; length_km: number; period_start: string; period_end: string; calculated_at: string;
-    raw_counts: Record<string, unknown>; volume_per_hour: Record<string, number>; vkt_km_h: Record<string, number>;
-    pollutant_totals_g_h: Record<string, number>; category_pollutant_breakdown_g_h: Record<string, unknown>;
-    raw_criteria: Record<string, unknown>; normalized_criteria: Record<string, unknown> | null;
+    road_segment_id: string; name: string; length_km: number; period_start: string | null; period_end: string | null; calculated_at: string | null;
+    raw_counts: Record<string, unknown> | null; volume_per_hour: Record<string, number> | null; vkt_km_h: Record<string, number> | null;
+    pollutant_totals_g_h: Record<string, number> | null; category_pollutant_breakdown_g_h: Record<string, unknown> | null;
+    raw_criteria: Record<string, unknown> | null; normalized_criteria: Record<string, unknown> | null;
     decision_score: number | null; priority: string | null; spatial_criteria_status: string;
-    provenance: Record<string, unknown>; ahp_metadata: Record<string, unknown>;
+    provenance: Record<string, unknown>; ahp_metadata: Record<string, unknown> | null;
     volume_status?: "calculated" | "estimated" | "unavailable";
     vehicle_count_semantics?: string;
+    freshness_status?: string;
+    data_age_seconds?: number | null;
+    population?: number | null;
+    population_district?: string | null;
+    population_context?: PopulationContext | null;
+    spatial_criteria_details?: Record<string, unknown> | null;
 }
-export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: { decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string; }; }
+export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
+export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
+export type SpatialLayerData = { pois: SpatialFeatureCollection; populationZones: SpatialFeatureCollection; surveyStops: SpatialFeatureCollection };
+export interface SegmentUpdateData {
+    decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string;
+    observed_at?: string | null; data_age_seconds?: number | null; freshness_status?: string;
+    population?: number | null; population_district?: string | null; population_context?: PopulationContext | null;
+}
+export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: SegmentUpdateData; }
 
 export interface ChartPoint {
     timestamp: string;

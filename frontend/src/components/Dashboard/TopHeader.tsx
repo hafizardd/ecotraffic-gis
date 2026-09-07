@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Menu } from "lucide-react";
 
 import { useEmissionsContext } from "@/context/EmissionsContext";
 
@@ -16,7 +17,7 @@ export default function TopHeader({ onMenuClick, section, title }: { onMenuClick
     return (
         <header className="top-header">
             <button className="mobile-menu" onClick={onMenuClick} aria-label="Buka menu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                <Menu aria-hidden="true" />
             </button>
             <div className="page-heading"><span>{section}</span><strong>{title}</strong></div>
             <div className="header-spacer" />

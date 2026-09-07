@@ -135,7 +135,7 @@ docker compose up --build   # make sure it's in root directory
 
 ### Segment Pipeline
 
-After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Generate the 24-hour synthetic fallback dataset with `python scripts/generate_historical_segment_data.py`.
+After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Then import the spatial source layers and backfill segments with `python scripts/import_pois.py`, `python scripts/import_population.py`, `python scripts/import_survey_activities.py`, and `python scripts/backfill_spatial_context.py`. Generate the 24-hour synthetic fallback dataset with `python scripts/generate_historical_segment_data.py`.
 
 Segment endpoints are `GET /api/segments/geojson`, `GET /api/emissions/map`, and `GET /api/emissions/{road_segment_id}`. Camera responses include `data_source`; filter live or historical cameras with `GET /api/cameras?data_source=LIVE` or `HISTORICAL`. The `/ws/emissions` socket forwards camera messages and `segment_update` messages.
 
@@ -143,14 +143,55 @@ Segment endpoints are `GET /api/segments/geojson`, `GET /api/emissions/map`, and
 ```bash
 # Open new terminal and go to root dir
 docker compose exec backend alembic upgrade head        # migrate data + add extension
-docker compose exec backend python -m app.core.seed     # seed data
+docker compose exec backend python -m app.core.seed     # seed cameras + road segments + mappings (idempotent)
+
+# Import spatial source layers (idempotent — safe to re-run)
+docker compose exec backend python scripts/import_pois.py                # points_of_interest  (data/poi.geojson)
+docker compose exec backend python scripts/import_population.py          # population_zones     (data/populations.geojson)
+docker compose exec backend python scripts/import_survey_activities.py   # survey_stop_observations (data/output/activities.csv)
+docker compose exec backend python scripts/backfill_spatial_context.py   # segment spatial_metadata + population
+
+# Generate 24h synthetic historical fallback (NOT idempotent — skip if data already exists)
+docker compose exec backend python scripts/generate_historical_segment_data.py
 
 # Restart docker
 Ctrl + C
 docker compose up
 ```
 
-#### 3. Configure the Worker
+#### 3. Update an Existing Checkout (git pull)
+
+When pulling new code that added migrations, seed data, or scripts, bring a
+database that already has cameras/segments up to date without resetting it:
+
+```bash
+git pull origin <branch>                       # e.g. dev
+docker compose up -d postgres redis
+
+# Verify there is a single migration head; then apply it
+docker compose exec backend alembic heads      # expect a single head
+docker compose exec backend alembic upgrade head   # → 9d2c6f1a4b8e (adds survey/poi/population layers;
+                                                  #   also flips LIVE to atcs_balaikota_timur / SEG-0137)
+
+# All seed/import scripts below are idempotent — safe to re-run on existing data
+docker compose exec backend python -m app.core.seed
+docker compose exec backend python scripts/import_pois.py
+docker compose exec backend python scripts/import_population.py
+docker compose exec backend python scripts/import_survey_activities.py
+docker compose exec backend python scripts/backfill_spatial_context.py
+
+# Only if historical fallback is missing or stale — this appends and is NOT idempotent:
+docker compose exec backend python scripts/generate_historical_segment_data.py
+
+docker compose up --build
+```
+
+Notes:
+- If realtime segment state looks stale, clear Redis keys matching `emission:segment:*`.
+- Re-running `generate_historical_segment_data.py` blindly duplicates rows; only run it on an empty
+  segment emissions table (see `NOTES.md` for the truncate command).
+
+#### 4. Configure the Worker
 1. Open `docker-compose.yml` in root dir
 2. See for this line of code
 `celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=16`
