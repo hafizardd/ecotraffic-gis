@@ -48,6 +48,5 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
     return response.json();
 }
 
-export const fetchPois = (bbox?: string, category?: string) => fetchSpatial(`/api/spatial/pois?limit=500${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}${category ? `&category=${encodeURIComponent(category)}` : ""}`);
 export const fetchPopulationZones = () => fetchSpatial("/api/spatial/population-zones");
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);

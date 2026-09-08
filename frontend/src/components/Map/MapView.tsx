@@ -17,6 +17,7 @@ import {
     CAMERA_TIER_COLORS,
     DEFAULT_VISIBLE_LAYERS,
     MapLayerKey,
+    POPULATION_SCALE,
 } from "@/constants/mapColors";
 
 const TIER_NUM: Record<string, number> = { unavailable: 0, low: 1, medium: 2, high: 3 };
@@ -38,13 +39,12 @@ export default function MapView() {
     const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
     const [hoveredCamera, setHoveredCamera] = useState<CameraFeature | null>(null);
     const [hoveredPoint, setHoveredPoint] = useState<[number, number] | null>(null);
+    const [hoveredPopulationDistrict, setHoveredPopulationDistrict] = useState<string | null>(null);
     const [style, setStyle] = useState<"street-2d-building" | "dark">("street-2d-building");
     const [visible, setVisible] = useState<Record<MapLayerKey, boolean>>(() => ({ ...DEFAULT_VISIBLE_LAYERS, ...readStoredLayers() }));
     const [bbox, setBbox] = useState<string | null>(null);
-    const [poiCategory, setPoiCategory] = useState("");
     const [selectedSpatial, setSelectedSpatial] = useState<(SpatialFeature & { kind?: string }) | null>(null);
-    const { pois, populationZones, surveyStops } = useSpatialLayers(bbox, { pois: visible.pois, populationZones: visible.populationZones, surveyStops: visible.surveyStops }, poiCategory);
-    const poiCategories = Array.from(new Set(pois.features.map((f) => String(f.properties.category ?? "")).filter(Boolean))).sort();
+    const { populationZones, surveyStops } = useSpatialLayers(bbox, { populationZones: visible.populationZones, surveyStops: visible.surveyStops });
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
@@ -138,12 +138,14 @@ export default function MapView() {
         <div className={`map-panel-layout ${selectedCamera || selectedSegmentId ? "has-panel" : ""}`}>
         <div className="map-area" ref={mapAreaRef}>
             <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
-             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "population-fill", "survey-circles", "poi-points", "poi-clusters"]}
+             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "population-fill", "survey-circles"]}
              onMove={(event) => { const b = event.target.getBounds(); setBbox(`${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`); }}
-            onMouseMove={(event) => {
-                const segment = event.features?.find((item) => item.layer?.id === "segments-line");
-                setHoveredSegmentId(segment?.properties?.segment_id ?? null);
-                const camera = event.features?.find((item) => item.layer?.id === "camera-points");
+             onMouseMove={(event) => {
+                 const segment = event.features?.find((item) => item.layer?.id === "segments-line");
+                 setHoveredSegmentId(segment?.properties?.segment_id ?? null);
+                 const population = event.features?.find((item) => item.layer?.id === "population-fill");
+                 setHoveredPopulationDistrict(population?.properties?.district_name ? String(population.properties.district_name) : null);
+                 const camera = event.features?.find((item) => item.layer?.id === "camera-points");
                 if (camera?.properties?.camera_id) {
                     const found = camerasById.get(String(camera.properties.camera_id));
                     const coords = (camera.geometry as unknown as { coordinates: [number, number] }).coordinates;
@@ -154,14 +156,14 @@ export default function MapView() {
                     setHoveredPoint(null);
                 }
             }}
-            onMouseLeave={() => { setHoveredSegmentId(null); setHoveredCamera(null); setHoveredPoint(null); }}
+             onMouseLeave={() => { setHoveredSegmentId(null); setHoveredPopulationDistrict(null); setHoveredCamera(null); setHoveredPoint(null); }}
             onClick={(event) => {
                 const cameraCluster = event.features?.find((item) => item.layer?.id === "camera-cluster");
                 if (cameraCluster?.properties?.cluster_id != null) {
                     const map = mapRef.current?.getMap();
                     const source = map?.getSource("camera-source") as unknown as { getClusterExpansionZoom?: (id: number, cb: (err: unknown, zoom: number) => void) => void } | undefined;
                     const id = Number(cameraCluster.properties.cluster_id);
-                    if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom }); });
+                     if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom, duration: 500 }); });
                     else map?.easeTo({ center: event.lngLat, zoom: (map.getZoom() ?? 14) + 2 });
                     return;
                 }
@@ -172,17 +174,8 @@ export default function MapView() {
                 }
                 const feature = event.features?.find((item) => item.layer?.id === "segments-line");
                 if (feature?.properties?.segment_id) { setSelectedSegmentId(feature.properties.segment_id); setSelectedCamera(null); return; }
-                const cluster = event.features?.find((item) => item.layer?.id === "poi-clusters");
-                if (cluster?.properties?.cluster_id != null) {
-                    const map = mapRef.current?.getMap();
-                    const source = map?.getSource("pois") as unknown as { getClusterExpansionZoom?: (id: number, cb: (err: unknown, zoom: number) => void) => void } | undefined;
-                    const id = Number(cluster.properties.cluster_id);
-                    if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom }); });
-                    else map?.easeTo({ center: event.lngLat, zoom: (map.getZoom() ?? 14) + 2 });
-                    return;
-                }
-                const spatial = event.features?.find((item) => ["population-fill", "survey-circles", "poi-points"].includes(item.layer?.id ?? ""));
-                if (spatial) {
+                 const spatial = event.features?.find((item) => ["population-fill", "survey-circles"].includes(item.layer?.id ?? ""));
+                 if (spatial) {
                     const geom = spatial.geometry as unknown as { type?: string; coordinates?: unknown };
                     const raw = geom?.coordinates;
                     const isLngLat = Array.isArray(raw) && raw.length === 2
@@ -191,16 +184,39 @@ export default function MapView() {
                     const coords: [number, number] = isLngLat
                         ? [raw[0] as number, raw[1] as number]
                         : [event.lngLat.lng, event.lngLat.lat];
-                    setSelectedSpatial({ type: "Feature", geometry: { type: "Point", coordinates: coords }, properties: spatial.properties as SpatialFeature["properties"], kind: spatial.layer?.id ?? "" });
-                }
-            }}>
-            <NavigationControl position="bottom-right" showCompass={false} />
-             {visible.populationZones && <Source id="population-zones" type="geojson" data={populationZones as never}><Layer id="population-fill" type="fill" paint={{ "fill-color": "#a78bfa", "fill-opacity": 0.14 }} /><Layer id="population-outline" type="line" paint={{ "line-color": "#c4b5fd", "line-width": 1 }} /></Source>}
+                     setSelectedSpatial({ type: "Feature", geometry: { type: "Point", coordinates: coords }, properties: spatial.properties as SpatialFeature["properties"], kind: spatial.layer?.id ?? "" });
+                     if (spatial.layer?.id === "population-fill" && spatial.properties?.district_name) {
+                         setHoveredPopulationDistrict(String(spatial.properties.district_name));
+                     }
+                 }
+             }}>
+             <NavigationControl position="bottom-right" showCompass={false} />
+              {visible.populationZones && <Source id="population-zones" type="geojson" data={populationZones as never}>
+                  <Layer id="population-fill" type="fill" paint={{ "fill-color": ["case",
+                      ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], "#4c1d95",
+                      ["==", ["get", "district_name"], hoveredPopulationDistrict], "#7c3aed",
+                      ["step", ["coalesce", ["get", "population"], 0], POPULATION_SCALE[0].color, 25000, POPULATION_SCALE[1].color, 100000, POPULATION_SCALE[2].color, 250000, POPULATION_SCALE[3].color],
+                  ], "fill-opacity": ["case",
+                      ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], 0.55,
+                      ["==", ["get", "district_name"], hoveredPopulationDistrict], 0.4,
+                      0.2,
+                  ] }} />
+                  <Layer id="population-extrusion" type="fill-extrusion" paint={{
+                      "fill-extrusion-color": ["case",
+                          ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], "#4c1d95",
+                          ["==", ["get", "district_name"], hoveredPopulationDistrict], "#7c3aed",
+                          ["step", ["coalesce", ["get", "population"], 0], POPULATION_SCALE[0].color, 25000, POPULATION_SCALE[1].color, 100000, POPULATION_SCALE[2].color, 250000, POPULATION_SCALE[3].color],
+                      ],
+                      "fill-extrusion-height": 20,
+                      "fill-extrusion-base": 0,
+                      "fill-extrusion-opacity": 0.6,
+                  }} />
+                  <Layer id="population-outline" type="line" paint={{ "line-color": "#5b21b6", "line-width": ["case", ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], 3, ["==", ["get", "district_name"], hoveredPopulationDistrict], 2, 1.5], "line-opacity": 0.85 }} />
+              </Source>}
              {visible.surveyStops && <Source id="survey-stops" type="geojson" data={surveyStops as never}><Layer id="survey-circles" type="circle" paint={{ "circle-color": "#06b6d4", "circle-radius": 6, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
              </Source>}
-             {visible.pois && <Source id="pois" type="geojson" data={pois as never} cluster clusterMaxZoom={14} clusterRadius={45}><Layer id="poi-clusters" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": "#14b8a6", "circle-radius": 12 }} /><Layer id="poi-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": "#14b8a6", "circle-radius": 4 }} /></Source>}
              {visible.cameras && <Source id="camera-source" type="geojson" data={cameraGeoJSON} cluster clusterMaxZoom={14} clusterRadius={50} clusterProperties={{ maxTier: ["max", ["get", "tier"]] }}>
                 <Layer id="camera-cluster" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": ["step", ["get", "maxTier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 25, 26, 100, 32], "circle-opacity": 0.85 }} />
                 <Layer id="camera-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 }} />
@@ -208,13 +224,30 @@ export default function MapView() {
                 <Layer id="camera-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["step", ["get", "tier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "tier"], 11, 1, 12, 2, 14, 3, 16], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-opacity": ["step", ["get", "freshness"], 1, 1, 0.8, 2, 0.35, 3, 0.6] }} />
 </Source>}
               {selectedSpatial && spatialLngLat && (
-                <Popup longitude={spatialLngLat[0]} latitude={spatialLngLat[1]} closeOnClick={false} onClose={() => setSelectedSpatial(null)}>
-                    {selectedSpatial.kind === "population-fill" ? (
-                        <div><strong>{String(selectedSpatial.properties.district_name ?? "Kecamatan")}</strong><p>Populasi: {selectedSpatial.properties.population == null ? "Data tidak tersedia" : `${Number(selectedSpatial.properties.population).toLocaleString("id-ID")} jiwa`}</p></div>
+                 <Popup longitude={spatialLngLat[0]} latitude={spatialLngLat[1]} closeOnClick={false} className="popup-dark" onClose={() => setSelectedSpatial(null)}>
+                     {selectedSpatial.kind === "population-fill" ? (
+                         <div className="spatial-popup">
+                             <span className="spatial-popup-eyebrow">Wilayah populasi</span>
+                             <strong className="spatial-popup-title">{String(selectedSpatial.properties.district_name ?? "Kecamatan")}</strong>
+                             <div className="spatial-popup-value">{selectedSpatial.properties.population == null ? "Data tidak tersedia" : Number(selectedSpatial.properties.population).toLocaleString("id-ID")}<small>{selectedSpatial.properties.population == null ? "" : " jiwa"}</small></div>
+                             <dl className="spatial-popup-meta">
+                                 <div><dt>Sumber</dt><dd>{String(selectedSpatial.properties.source ?? "Data wilayah")}</dd></div>
+                                 <div><dt>Tahun referensi</dt><dd>{String(selectedSpatial.properties.reference_year ?? "Tidak tersedia")}</dd></div>
+                             </dl>
+                         </div>
                     ) : selectedSpatial.kind === "survey-circles" ? (
                         <div><strong>{String(selectedSpatial.properties.title ?? "Halte survei")}</strong><p>Skor: {selectedSpatial.properties.score ?? "N/A"} · {selectedSpatial.properties.observed_at ? new Date(String(selectedSpatial.properties.observed_at)).toLocaleString("id-ID") : "Waktu tidak tersedia"}</p>{selectedSpatial.properties.source_id && <p>ID: {String(selectedSpatial.properties.source_id)} · Media: {String(selectedSpatial.properties.media_count ?? 0)}</p>}</div>
                     ) : (
-                        <div><strong>{String(selectedSpatial.properties.name ?? selectedSpatial.properties.title ?? "POI")}</strong><p>{[selectedSpatial.properties.category, selectedSpatial.properties.type_1 ?? selectedSpatial.properties.type_2].filter(Boolean).join(" · ")}</p>{selectedSpatial.properties.address && <p>{String(selectedSpatial.properties.address)}</p>}</div>
+                        <div className="spatial-popup">
+                            <span className="spatial-popup-eyebrow">Observasi lapangan</span>
+                            <strong className="spatial-popup-title">{String(selectedSpatial.properties.title ?? "Halte survei")}</strong>
+                            <dl className="spatial-popup-meta">
+                                <div><dt>Skor</dt><dd>{String(selectedSpatial.properties.score ?? "N/A")}</dd></div>
+                                <div><dt>Diamati</dt><dd>{selectedSpatial.properties.observed_at ? new Date(String(selectedSpatial.properties.observed_at)).toLocaleString("id-ID") : "Waktu tidak tersedia"}</dd></div>
+                                {selectedSpatial.properties.source_id && <div><dt>ID sumber</dt><dd>{String(selectedSpatial.properties.source_id)}</dd></div>}
+                                {selectedSpatial.properties.media_count != null && <div><dt>Media</dt><dd>{String(selectedSpatial.properties.media_count)}</dd></div>}
+                            </dl>
+                        </div>
                     )}
                 </Popup>
               )}
@@ -222,7 +255,7 @@ export default function MapView() {
                 <Popup longitude={hoveredPoint[0]} latitude={hoveredPoint[1]} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
                     <div className="marker-popup">
                         <strong>{hoveredCamera.properties.name}</strong>
-                        <span className={`marker-health-${hoveredCamera.properties.status}`}><i /> {hoveredCamera.properties.status}</span>
+                        {hoveredCamera.properties.data_source === "LIVE" && <span className="marker-tracking"><i /> Pelacakan visual</span>}
                         {(() => {
                             const point = cameraPoints.find((p) => p.camera.properties.id === hoveredCamera.properties.id);
                             return point ? <small>CO₂: {point.emission == null ? "N/A" : `${point.emission.toFixed(0)} g/min`} · {point.freshness}</small> : null;
@@ -238,12 +271,7 @@ export default function MapView() {
                 cameraFresh={hoverCounts.fresh}
                 cameraStale={hoverCounts.stale}
                 cameraTotal={hoverCounts.total}
-              />
-              {visible.pois && (
-                <div className="map-poi-filter">
-                    <label>Kategori POI<select value={poiCategory} onChange={(e) => setPoiCategory(e.target.value)} aria-label="Filter kategori POI"><option value="">Semua</option>{poiCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
-                </div>
-              )}
+            />
               {hoveredSegmentId && (
                   <div className="segment-hover-summary">
                       <strong>{hoveredSegmentId}</strong>

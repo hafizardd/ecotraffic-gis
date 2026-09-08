@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-    { label: "Peta Live", icon: Map, view: "peta" as const }, { label: "Emisi & Tren", icon: TrendingUp, view: "emisi" as const }, { label: "Kendaraan", icon: CarFront, view: "kendaraan" as const }, { label: "Riwayat", icon: History, view: "riwayat" as const }, { label: "Laporan", icon: FileText, view: "laporan" as const }, { label: "Pengaturan", icon: Settings, view: "pengaturan" as const },
+    { label: "Peta Live", icon: Map, view: "peta" as const }, { label: "Emisi & Tren", icon: TrendingUp, view: "emisi" as const }, { label: "Kendaraan", icon: CarFront, view: "kendaraan" as const }, { label: "Riwayat", icon: History, view: "riwayat" as const }, { label: "Laporan", icon: FileText, view: "laporan" as const },
 ];
 
 export default function Sidebar({ open, onToggle, activeView, onViewChange }: SidebarProps) {
@@ -28,9 +28,6 @@ export default function Sidebar({ open, onToggle, activeView, onViewChange }: Si
                 ))}
             </nav>
             <div className="sidebar-footer">
-                <div className="system-status" title={!open ? "Status pipeline" : undefined}>
-                    <i /><div><strong>PIPELINE</strong><span>Status tersedia di header</span></div>
-                </div>
                 <button className="sidebar-toggle" onClick={onToggle} aria-label={open ? "Ciutkan sidebar" : "Buka sidebar"}>
                     {open ? <ChevronsLeft aria-hidden="true" /> : <ChevronsRight aria-hidden="true" />}
                     <span>Ciutkan menu</span>

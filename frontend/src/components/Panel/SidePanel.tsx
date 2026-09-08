@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { MapPin, X } from "lucide-react";
 import { CameraFeature } from "@/types";
 import VideoFeed from "./VideoFeed";
@@ -15,24 +16,25 @@ interface SidePanelProps {
 
 export default function SidePanel({ camera, onClose }: SidePanelProps) {
     const { emissionMap } = useEmissionsContext();
+    const [trackingStatus, setTrackingStatus] = useState<"loading" | "streaming" | "error">("loading");
     const liveEmission = camera
         ? emissionMap.get(camera.properties.camera_id) ?? null
         : null;
 
     if (!camera) return null;
 
-    const healthStatus = camera.properties.status;
     const freshnessStatus = liveEmission?.freshness_status ?? camera.properties.freshness_status;
     const ageSeconds = liveEmission?.data_age_seconds ?? camera.properties.data_age_seconds;
+    const isTrackingSource = camera.properties.data_source === "LIVE";
 
     return (
         <aside className="monitoring-panel">
             <div className="panel-header">
                 <div className="panel-location-icon"><MapPin aria-hidden="true" /></div>
                 <div className="panel-title"><span>LOKASI TERPILIH</span><h2>{camera.properties.name}</h2></div>
-                <div className={`panel-live panel-health-${healthStatus}`}>
-                    <i /> {healthStatus.toUpperCase()}
-                </div>
+                {isTrackingSource && <div className={`panel-tracking ${trackingStatus === "error" ? "panel-tracking-error" : ""}`}>
+                    <i /> {trackingStatus === "error" ? "TRACKING TERPUTUS" : "PELACAKAN VISUAL"}
+                </div>}
                 <button
                     onClick={onClose}
                     className="panel-close"
@@ -48,7 +50,7 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
                     <small>{ageSeconds == null ? "Belum ada data" : `${ageSeconds}s sejak capture terakhir`}</small>
                 </div>
                 <section className="panel-section video-section">
-                    {camera.properties.data_source === "LIVE" && <><div className="section-heading"><div><span>LIVE CAMERA</span><small>Streaming pemantauan lokasi</small></div></div><VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} /></>}
+                    {isTrackingSource && <><div className="section-heading"><div><span>PELACAKAN VISUAL</span><small>Deteksi dan tracking kendaraan real-time</small></div></div><VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} onStatusChange={setTrackingStatus} /></>}
                 </section>
                 <section className="panel-section">
                     <div className="section-heading"><div><span>CURRENT EMISSIONS</span><small>Emisi saat ini dalam g/min</small></div></div>

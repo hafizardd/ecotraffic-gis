@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchPois, fetchPopulationZones, fetchSurveyStops } from "@/services/api";
+import { fetchPopulationZones, fetchSurveyStops } from "@/services/api";
 import { SpatialFeatureCollection } from "@/types";
 
 const empty: SpatialFeatureCollection = { type: "FeatureCollection", features: [] };
 
-export default function useSpatialLayers(bbox: string | null, enabled: { pois: boolean; populationZones: boolean; surveyStops: boolean }, poiCategory?: string) {
-    const [data, setData] = useState({ pois: empty, populationZones: empty, surveyStops: empty });
-    const [loading, setLoading] = useState({ pois: false, populationZones: false, surveyStops: false });
+export default function useSpatialLayers(bbox: string | null, enabled: { populationZones: boolean; surveyStops: boolean }) {
+    const [data, setData] = useState({ populationZones: empty, surveyStops: empty });
+    const [loading, setLoading] = useState({ populationZones: false, surveyStops: false });
     const [errors, setErrors] = useState<Record<string, Error>>({});
     const zonesLoaded = useRef(false);
 
@@ -24,13 +24,6 @@ export default function useSpatialLayers(bbox: string | null, enabled: { pois: b
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            if (enabled.pois) {
-                setLoading((p) => ({ ...p, pois: true }));
-                fetchPois(bbox ?? undefined, poiCategory || undefined)
-                    .then((value) => setData((p) => ({ ...p, pois: value })))
-                    .catch((e) => setErrors((p) => ({ ...p, pois: e instanceof Error ? e : new Error(String(e)) })))
-                    .finally(() => setLoading((p) => ({ ...p, pois: false })));
-            }
             if (enabled.surveyStops) {
                 setLoading((p) => ({ ...p, surveyStops: true }));
                 fetchSurveyStops(bbox ?? undefined)
@@ -40,7 +33,7 @@ export default function useSpatialLayers(bbox: string | null, enabled: { pois: b
             }
         }, 250);
         return () => clearTimeout(timer);
-    }, [bbox, enabled.pois, enabled.surveyStops, poiCategory]);
+    }, [bbox, enabled.surveyStops]);
 
     return { ...data, loading, errors };
 }

@@ -146,13 +146,13 @@ docker compose exec backend alembic upgrade head        # migrate data + add ext
 docker compose exec backend python -m app.core.seed     # seed cameras + road segments + mappings (idempotent)
 
 # Import spatial source layers (idempotent — safe to re-run)
-docker compose exec backend python scripts/import_pois.py                # points_of_interest  (data/poi.geojson)
-docker compose exec backend python scripts/import_population.py          # population_zones     (data/populations.geojson)
-docker compose exec backend python scripts/import_survey_activities.py   # survey_stop_observations (data/output/activities.csv)
-docker compose exec backend python scripts/backfill_spatial_context.py   # segment spatial_metadata + population
+docker compose exec backend python -m scripts.import_pois                # points_of_interest  (data/poi.geojson)
+docker compose exec backend python -m scripts.import_population          # population_zones     (data/populations.geojson)
+docker compose exec backend python -m scripts.import_survey_activities   # survey_stop_observations (data/output/activities.csv)
+docker compose exec backend python -m scripts.backfill_spatial_context   # segment spatial_metadata + population
 
 # Generate 24h synthetic historical fallback (NOT idempotent — skip if data already exists)
-docker compose exec backend python scripts/generate_historical_segment_data.py
+docker compose exec backend python -m scripts.generate_historical_segment_data
 
 # Restart docker
 Ctrl + C

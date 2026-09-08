@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
+import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, POPULATION_SCALE, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
 
 interface MapLegendProps {
     visible: Record<MapLayerKey, boolean>;
@@ -13,18 +13,16 @@ interface MapLegendProps {
     cameraTotal: number;
 }
 
-const LAYER_KEYS: MapLayerKey[] = ["cameras", "segments", "pois", "populationZones", "surveyStops"];
+const LAYER_KEYS: MapLayerKey[] = ["cameras", "segments", "populationZones", "surveyStops"];
 const LAYER_LABELS: Record<MapLayerKey, string> = {
     cameras: "CCTV kamera",
     segments: "Segmen jalan",
-    pois: "POI",
     populationZones: "Wilayah populasi",
     surveyStops: "Halte survei",
 };
 const LAYER_DOT: Record<MapLayerKey, string> = {
     cameras: CAMERA_TIER_COLORS.low,
     segments: "#facc15",
-    pois: SPATIAL_COLORS.poi,
     populationZones: SPATIAL_COLORS.populationZone,
     surveyStops: SPATIAL_COLORS.surveyStop,
 };
@@ -63,6 +61,11 @@ export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFre
                             <li><i style={{ background: FRESHNESS_COLORS.stale }} />Basi</li>
                             <li><i style={{ background: FRESHNESS_COLORS.unknown }} />Tidak diketahui</li>
                         </ul>
+                    </section>
+                    <section className="map-legend-section">
+                        <h3>Populasi wilayah</h3>
+                        <ul className="legend-swatches">{POPULATION_SCALE.map((stop) => <li key={stop.label}><i style={{ background: stop.color }} />{stop.label}</li>)}</ul>
+                        <p className="legend-note">Skala berdasarkan jumlah penduduk, bukan kepadatan.</p>
                     </section>
                     <section className="map-legend-section">
                         <h3>Lapisan</h3>
