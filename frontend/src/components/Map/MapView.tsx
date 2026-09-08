@@ -192,18 +192,22 @@ export default function MapView() {
              }}>
              <NavigationControl position="bottom-right" showCompass={false} />
               {visible.populationZones && <Source id="population-zones" type="geojson" data={populationZones as never}>
-                  <Layer id="population-fill" type="fill" paint={{ "fill-color": ["step", ["coalesce", ["get", "population"], 0], POPULATION_SCALE[0].color, 25000, POPULATION_SCALE[1].color, 100000, POPULATION_SCALE[2].color, 250000, POPULATION_SCALE[3].color], "fill-opacity": 0.2 }} />
+                  <Layer id="population-fill" type="fill" paint={{ "fill-color": ["case",
+                      ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], "#4c1d95",
+                      ["==", ["get", "district_name"], hoveredPopulationDistrict], "#7c3aed",
+                      ["step", ["coalesce", ["get", "population"], 0], POPULATION_SCALE[0].color, 25000, POPULATION_SCALE[1].color, 100000, POPULATION_SCALE[2].color, 250000, POPULATION_SCALE[3].color],
+                  ], "fill-opacity": ["case",
+                      ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], 0.55,
+                      ["==", ["get", "district_name"], hoveredPopulationDistrict], 0.4,
+                      0.2,
+                  ] }} />
                   <Layer id="population-extrusion" type="fill-extrusion" paint={{
                       "fill-extrusion-color": ["case",
-                          ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], "#ddd6fe",
-                          ["==", ["get", "district_name"], hoveredPopulationDistrict], "#c4b5fd",
+                          ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], "#4c1d95",
+                          ["==", ["get", "district_name"], hoveredPopulationDistrict], "#7c3aed",
                           ["step", ["coalesce", ["get", "population"], 0], POPULATION_SCALE[0].color, 25000, POPULATION_SCALE[1].color, 100000, POPULATION_SCALE[2].color, 250000, POPULATION_SCALE[3].color],
                       ],
-                      "fill-extrusion-height": ["case",
-                          ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], 220,
-                          ["==", ["get", "district_name"], hoveredPopulationDistrict], 80,
-                          20,
-                      ],
+                      "fill-extrusion-height": 20,
                       "fill-extrusion-base": 0,
                       "fill-extrusion-opacity": 0.6,
                   }} />
