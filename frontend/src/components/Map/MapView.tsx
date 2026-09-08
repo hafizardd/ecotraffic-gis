@@ -205,11 +205,7 @@ export default function MapView() {
                           20,
                       ],
                       "fill-extrusion-base": 0,
-                      "fill-extrusion-opacity": ["case",
-                          ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], 0.82,
-                          ["==", ["get", "district_name"], hoveredPopulationDistrict], 0.68,
-                          0.42,
-                      ],
+                      "fill-extrusion-opacity": 0.6,
                   }} />
                   <Layer id="population-outline" type="line" paint={{ "line-color": "#5b21b6", "line-width": ["case", ["==", ["get", "district_name"], selectedSpatial?.kind === "population-fill" ? String(selectedSpatial.properties.district_name) : ""], 3, ["==", ["get", "district_name"], hoveredPopulationDistrict], 2, 1.5], "line-opacity": 0.85 }} />
               </Source>}
