@@ -43,8 +43,7 @@ export default function MapView() {
     const [bbox, setBbox] = useState<string | null>(null);
     const [poiCategory, setPoiCategory] = useState("");
     const [selectedSpatial, setSelectedSpatial] = useState<(SpatialFeature & { kind?: string }) | null>(null);
-    const { pois, populationZones, surveyStops } = useSpatialLayers(bbox, { pois: visible.pois, populationZones: visible.populationZones, surveyStops: visible.surveyStops }, poiCategory);
-    const poiCategories = Array.from(new Set(pois.features.map((f) => String(f.properties.category ?? "")).filter(Boolean))).sort();
+    const { pois, poiCategories, populationZones, surveyStops } = useSpatialLayers(bbox, { pois: visible.pois, populationZones: visible.populationZones, surveyStops: visible.surveyStops }, poiCategory);
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);

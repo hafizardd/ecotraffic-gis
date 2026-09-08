@@ -4,11 +4,21 @@ import { SpatialFeatureCollection } from "@/types";
 
 const empty: SpatialFeatureCollection = { type: "FeatureCollection", features: [] };
 
+function extractPoiCategories(collection: SpatialFeatureCollection): string[] {
+    return Array.from(new Set(
+        collection.features
+            .map((feature) => String(feature.properties.category ?? ""))
+            .filter(Boolean),
+    )).sort();
+}
+
 export default function useSpatialLayers(bbox: string | null, enabled: { pois: boolean; populationZones: boolean; surveyStops: boolean }, poiCategory?: string) {
     const [data, setData] = useState({ pois: empty, populationZones: empty, surveyStops: empty });
+    const [poiCategories, setPoiCategories] = useState<string[]>([]);
     const [loading, setLoading] = useState({ pois: false, populationZones: false, surveyStops: false });
     const [errors, setErrors] = useState<Record<string, Error>>({});
     const zonesLoaded = useRef(false);
+    const poiRequestId = useRef(0);
 
     useEffect(() => {
         if (!enabled.populationZones || zonesLoaded.current) return;
@@ -23,13 +33,29 @@ export default function useSpatialLayers(bbox: string | null, enabled: { pois: b
     }, [enabled.populationZones]);
 
     useEffect(() => {
+        const requestId = ++poiRequestId.current;
         const timer = setTimeout(() => {
             if (enabled.pois) {
+                const requestedCategory = poiCategory || undefined;
                 setLoading((p) => ({ ...p, pois: true }));
-                fetchPois(bbox ?? undefined, poiCategory || undefined)
-                    .then((value) => setData((p) => ({ ...p, pois: value })))
-                    .catch((e) => setErrors((p) => ({ ...p, pois: e instanceof Error ? e : new Error(String(e)) })))
-                    .finally(() => setLoading((p) => ({ ...p, pois: false })));
+                fetchPois(bbox ?? undefined, requestedCategory)
+                    .then((value) => {
+                        if (requestId !== poiRequestId.current) return;
+                        setData((p) => ({ ...p, pois: value }));
+
+                        // Keep the dropdown options from the unfiltered response.
+                        // A filtered response only contains the selected category.
+                        if (!requestedCategory) setPoiCategories(extractPoiCategories(value));
+                    })
+                    .catch((e) => {
+                        if (requestId !== poiRequestId.current) return;
+                        setErrors((p) => ({ ...p, pois: e instanceof Error ? e : new Error(String(e)) }));
+                    })
+                    .finally(() => {
+                        if (requestId === poiRequestId.current) setLoading((p) => ({ ...p, pois: false }));
+                    });
+            } else {
+                setLoading((p) => ({ ...p, pois: false }));
             }
             if (enabled.surveyStops) {
                 setLoading((p) => ({ ...p, surveyStops: true }));
@@ -42,5 +68,5 @@ export default function useSpatialLayers(bbox: string | null, enabled: { pois: b
         return () => clearTimeout(timer);
     }, [bbox, enabled.pois, enabled.surveyStops, poiCategory]);
 
-    return { ...data, loading, errors };
+    return { ...data, poiCategories, loading, errors };
 }
