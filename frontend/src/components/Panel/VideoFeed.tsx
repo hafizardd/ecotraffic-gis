@@ -5,6 +5,7 @@ import { API_BASE } from "@/services/api"
 
 interface VideoFeedProps {
     cameraId: string;
+    onStatusChange?: (status: StreamStatus) => void;
 }
 
 const INITIAL_BACKOFF = 1000;
@@ -14,7 +15,7 @@ type StreamStatus = "loading" | "streaming" | "error";
 
 // Annotated MJPEG display: the tracker bakes boxes + track IDs into each
 // frame, so this component is just an <img> — no canvas, no HLS, no WebSocket.
-export default function VideoFeed({ cameraId }: VideoFeedProps) {
+export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) {
     const [status, setStatus] = useState<StreamStatus>("loading");
     const [reloadKey, setReloadKey] = useState(0);
     const [isVisible, setIsVisible] = useState(() =>
@@ -39,6 +40,7 @@ export default function VideoFeed({ cameraId }: VideoFeedProps) {
     }, []);
 
     useEffect(() => {
+        onStatusChange?.("loading");
         const updateVisibility = () => {
             const visible = !document.hidden;
             setIsVisible(visible);
@@ -49,19 +51,21 @@ export default function VideoFeed({ cameraId }: VideoFeedProps) {
             document.removeEventListener("visibilitychange", updateVisibility);
             if (timerRef.current) clearTimeout(timerRef.current);
         };
-    }, []);
+    }, [cameraId, onStatusChange]);
 
     const handleLoad = useCallback(() => {
         setStatus("streaming");
+        onStatusChange?.("streaming");
         backoffRef.current = INITIAL_BACKOFF;
-    }, []);
+    }, [onStatusChange]);
 
     const handleError = useCallback(() => {
+        onStatusChange?.("error");
         setStatus((prev) => {
             if (prev !== "error") scheduleRetry();
             return "error";
         });
-    }, [scheduleRetry]);
+    }, [onStatusChange, scheduleRetry]);
 
     return (
         <div className="video-frame" style={{ position: "relative" }}>

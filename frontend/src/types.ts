@@ -173,7 +173,7 @@ export interface SegmentEmissionDetail {
 }
 export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
 export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
-export type SpatialLayerData = { pois: SpatialFeatureCollection; populationZones: SpatialFeatureCollection; surveyStops: SpatialFeatureCollection };
+export type SpatialLayerData = { populationZones: SpatialFeatureCollection; surveyStops: SpatialFeatureCollection };
 export interface SegmentUpdateData {
     decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string;
     observed_at?: string | null; data_age_seconds?: number | null; freshness_status?: string;

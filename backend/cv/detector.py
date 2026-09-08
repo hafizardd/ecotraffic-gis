@@ -14,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 TRAINED_VEHICLE_CLASSES = ("bus", "car", "motorcycle", "truck")
 
+# OpenCV uses BGR; these colors keep each vehicle class distinct from the green ROI.
+BOX_COLORS = {
+    "car": (248, 189, 56),        # sky
+    "motorcycle": (11, 158, 245), # amber
+    "bus": (250, 143, 167),       # violet
+    "truck": (133, 113, 251),     # rose
+}
+
 DEFAULT_YOLO_CATEGORY_MAPPING = {
     "motorcycle": "motorcycle",
     "car": "car",
@@ -270,7 +278,7 @@ class VehicleDetector:
     ) -> None:
         """Draw a bounding box + label onto the frame in-place."""
         x1, y1, x2, y2 = map(int, box.xyxy[0])
-        color = (0, 255, 0) if not dimmed else (128, 128, 128)
+        color = BOX_COLORS.get(label, (255, 255, 255)) if not dimmed else (128, 128, 128)
         text = f"{label} {conf:.2f}"
         if track_id is not None:
             text = f"#{track_id} {text}"
