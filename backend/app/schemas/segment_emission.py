@@ -37,7 +37,7 @@ class SegmentEmissionMapItem(BaseModel):
     decision_score: float | None
     priority: str | None
     total_emission: float | None
-    calculated_at: datetime
+    calculated_at: datetime | None = None
     observed_at: datetime | None = None
     data_age_seconds: int | None = None
     freshness_status: str = "unknown"

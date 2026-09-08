@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection, EmissionUpdate, SpatialFeatureCollection } from "@/types";
+import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, EmissionUpdate, SpatialFeatureCollection } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
@@ -36,10 +36,16 @@ export async function fetchCameraEmissions(
     return response.json();
 }
 
+export async function fetchEmissionsSummary(): Promise<EmissionSummary> {
+    const response = await fetch(`${API_BASE}/api/emissions/summary`);
+    if (!response.ok) throw new Error(`Failed to fetch emission summary: ${response.statusText}`);
+    return response.json();
+}
+
 export async function fetchLatestEmissions(): Promise<EmissionUpdate[]> {
     const response = await fetch(`${API_BASE}/api/emissions/summary`);
     if (!response.ok) throw new Error(`Failed to fetch emission summary: ${response.statusText}`);
-    return [];
+    return response.json();
 }
 
 async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {

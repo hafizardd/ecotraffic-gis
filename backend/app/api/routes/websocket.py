@@ -194,8 +194,8 @@ async def redis_subscriber():
                 decode_responses=True,
             )
             pubsub = client.pubsub()
-            await pubsub.psubscribe("emissions:*", "tracks:*")
-            logger.info("Subscribed to patterns: emissions:*, tracks:*")
+            await pubsub.psubscribe("emissions:*", "emissions:segment:*", "tracks:*")
+            logger.info("Subscribed to patterns: emissions:*, emissions:segment:*, tracks:*")
 
             async for message in pubsub.listen():
                 if message["type"] == "pmessage":

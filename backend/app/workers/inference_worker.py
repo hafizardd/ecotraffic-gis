@@ -170,7 +170,7 @@ def _persist_segment_observation(job: InferenceJob, vehicle_counts: dict[str, in
         db.add(SegmentTrafficObservationRecord(**observation_row(observation, road_segment_database_id=segment.id, camera_database_id=job.camera_database_id)))
         db.flush()
         metadata.update({"segment_pipeline_status": "observation_stored", "segment_id": mapping.road_segment_id})
-        # Snapshot occupancy is retained for audit but is intentionally not scored as hourly volume.
+        # Snapshot occupancy averaged downstream as `estimated` hourly volume; see `segment_aggregation.py`.
         metadata["segment_pipeline_status"] = "pending_snapshot_semantics"
     return metadata
 

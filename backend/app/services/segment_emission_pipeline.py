@@ -14,6 +14,8 @@ def calculate_segment_emission(
     spatial_criteria=None, criterion_ranges=None, pollutant_ranges=None,
     control_efficiency=0.0, spatial_details=None,
 ):
+    # Regression guard: no placeholder (e.g. 0.5) K3/K4/K5 path — when spatial
+    # is pending, decision_score/priority are omitted, not invented.
     aggregation = aggregate_segment_observations(observations, period_start=period_start, period_end=period_end)
     duration = aggregation.observation_duration_seconds
     occupancy = aggregation.vehicle_count_semantics == VehicleCountSemantics.SNAPSHOT_OCCUPANCY.value

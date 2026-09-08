@@ -78,25 +78,34 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
 async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(RoadSegment, SegmentEmission)
-        .join(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
-        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc())
+        .outerjoin(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
+        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc().nullslast())
     )
     latest = {}
     for segment, emission in result:
         latest.setdefault(segment.road_segment_id, (segment, emission))
-    return [
-        SegmentEmissionMapItem(
+    items = []
+    for segment, emission in latest.values():
+        if emission is None:
+            items.append(SegmentEmissionMapItem(
+                road_segment_id=segment.road_segment_id, decision_score=None,
+                priority=None, total_emission=None, calculated_at=None,
+                observed_at=None, data_age_seconds=None, freshness_status="unknown",
+                vehicle_count_semantics="unknown", source_cameras=[],
+            ))
+            continue
+        freshness = classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings))
+        items.append(SegmentEmissionMapItem(
             road_segment_id=segment.road_segment_id, decision_score=emission.decision_score,
             priority=emission.priority,
             total_emission=(sum(emission.pollutant_totals_g_h.values()) if emission.pollutant_totals_g_h else None),
-             calculated_at=emission.calculated_at, observed_at=emission.period_end,
-             data_age_seconds=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).age_seconds,
-             freshness_status=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).status.value,
-             vehicle_count_semantics=emission.vehicle_count_semantics,
-             source_cameras=emission.source_cameras,
-        )
-        for segment, emission in latest.values()
-    ]
+            calculated_at=emission.calculated_at, observed_at=emission.period_end,
+            data_age_seconds=freshness.age_seconds,
+            freshness_status=freshness.status.value,
+            vehicle_count_semantics=emission.vehicle_count_semantics,
+            source_cameras=emission.source_cameras,
+        ))
+    return items
 
 
 @router.get("/api/emissions/{road_segment_id}", response_model=SegmentEmissionResponse)

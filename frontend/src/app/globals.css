@@ -1056,6 +1056,8 @@ button {
 .criteria-grid strong,
 .vehicle-summary strong {
   font-size: 10px;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 .provenance p {
   margin: 4px 0 12px;

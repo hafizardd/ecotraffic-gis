@@ -174,12 +174,24 @@ export interface SegmentEmissionDetail {
 export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
 export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
 export type SpatialLayerData = { populationZones: SpatialFeatureCollection; surveyStops: SpatialFeatureCollection };
+// WS `segment_update` payload uses `pollutant_totals` (= `pollutant_totals_g_h` in REST detail).
+// Map via SegmentPanel liveDetail mapper; do not rename without updating both.
 export interface SegmentUpdateData {
     decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string;
     observed_at?: string | null; data_age_seconds?: number | null; freshness_status?: string;
     population?: number | null; population_district?: string | null; population_context?: PopulationContext | null;
 }
 export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: SegmentUpdateData; }
+
+export interface EmissionSummary {
+    total_cameras_active: number;
+    by_vehicle: { car: number; motorcycle: number; bus: number; truck: number };
+    last_updated: string | null;
+    freshness_status?: string;
+    active_cameras?: number;
+    live_cameras?: number;
+    [key: string]: unknown;
+}
 
 export interface ChartPoint {
     timestamp: string;
