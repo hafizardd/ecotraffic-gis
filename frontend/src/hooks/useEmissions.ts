@@ -1,5 +1,5 @@
 import { API_BASE, WS_URL, fetchCameraEmissions } from "@/services/api";
-import { EmissionUpdate, SegmentUpdate, SegmentUpdateData } from "@/types";
+import { EmissionUpdate, SegmentUpdate, SegmentUpdateData, TrackUpdate } from "@/types";
 import { useEffect, useRef, useState } from "react";
 
 const MAX_BACKOFF = 30000;
@@ -27,9 +27,16 @@ function validSegmentMessage(value: unknown): value is SegmentUpdate {
     return item.type === "segment_update" && typeof item.segment_id === "string" && !!item.data && typeof item.data === "object";
 }
 
+function validTrackMessage(value: unknown): value is TrackUpdate {
+    if (!value || typeof value !== "object") return false;
+    const item = value as Partial<TrackUpdate>;
+    return item.type === "track_update" && typeof item.camera_id === "string" && Array.isArray(item.tracks);
+}
+
 export default function useEmissions() {
     const [emissionMap, setEmissionMap] = useState<Map<string, EmissionUpdate>>(new Map());
     const [segmentMap, setSegmentMap] = useState<Map<string, SegmentUpdateData>>(new Map());
+    const [trackMap, setTrackMap] = useState<Map<string, TrackUpdate>>(new Map());
     const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
     const [lastMessageAt, setLastMessageAt] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -63,7 +70,7 @@ export default function useEmissions() {
             ws.onmessage = (event) => {
                 if (cancelled) return;
                 try {
-                    const data = JSON.parse(event.data) as SegmentUpdate | EmissionUpdate;
+                    const data = JSON.parse(event.data) as SegmentUpdate | EmissionUpdate | TrackUpdate;
                     const messageTime = new Date().toISOString();
                     if (validSegmentMessage(data)) {
                         const segment = data as SegmentUpdate;
@@ -78,6 +85,8 @@ export default function useEmissions() {
                             const merged: SegmentUpdateData = { ...existing, ...segment.data };
                             return new Map(prev).set(segment.segment_id, merged);
                         });
+                    } else if (validTrackMessage(data)) {
+                        setTrackMap((prev) => new Map(prev).set(data.camera_id, data));
                     } else if (validCameraMessage(data)) {
                         const time = timestampOf(data);
                         if (time < (latestRef.current.get(data.camera_id) ?? 0)) { setLastMessageAt(messageTime); return; }
@@ -96,5 +105,5 @@ export default function useEmissions() {
         connect();
         return () => { cancelled = true; if (timer) clearTimeout(timer); };
     }, []);
-    return { emissionMap, segmentMap, connectionStatus, lastMessageAt, error };
+    return { emissionMap, segmentMap, trackMap, connectionStatus, lastMessageAt, error };
 }

@@ -175,6 +175,8 @@ export interface SegmentUpdateData {
     population?: number | null; population_district?: string | null; population_context?: PopulationContext | null;
 }
 export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: SegmentUpdateData; }
+export interface TrackBox { id: number | null; cls: string; conf: number; x1: number; y1: number; x2: number; y2: number; inside_roi: boolean; }
+export interface TrackUpdate { type: "track_update"; camera_id: string; timestamp: string; tracks: TrackBox[]; roi: [number, number][] | null; }
 
 export interface ChartPoint {
     timestamp: string;

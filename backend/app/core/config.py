@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     YOLO_DEVICE: str = "auto"
     YOLO_IMAGE_SIZE: int = Field(default=640, gt=0)
     CONFIDENCE_THRESHOLD: float = Field(default=0.25, ge=0.0, le=1.0)
+    YOLO_TRACKER: str = "bytetrack.yaml"
+    YOLO_IOU: float = Field(default=0.5, ge=0.0, le=1.0)
+    TRACK_FPS: float = Field(default=10.0, gt=0)
+    TRACK_CAMS: str = "atcs_jlagran,atcs_balaikota_timur"
+    TRACK_SNAPSHOT_TTL_SECONDS: int = Field(default=180, gt=0)
 
     STREAM_REFERER: str = "https://cctv.jogjakota.go.id/"
 
