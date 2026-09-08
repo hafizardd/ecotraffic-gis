@@ -17,6 +17,7 @@ import {
     CAMERA_TIER_COLORS,
     DEFAULT_VISIBLE_LAYERS,
     MapLayerKey,
+    POPULATION_SCALE,
     getPoiCategoryColor,
 } from "@/constants/mapColors";
 
@@ -172,7 +173,7 @@ export default function MapView() {
                     const map = mapRef.current?.getMap();
                     const source = map?.getSource("camera-source") as unknown as { getClusterExpansionZoom?: (id: number, cb: (err: unknown, zoom: number) => void) => void } | undefined;
                     const id = Number(cameraCluster.properties.cluster_id);
-                    if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom }); });
+                     if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom, duration: 500 }); });
                     else map?.easeTo({ center: event.lngLat, zoom: (map.getZoom() ?? 14) + 2 });
                     return;
                 }
@@ -188,7 +189,7 @@ export default function MapView() {
                     const map = mapRef.current?.getMap();
                     const source = map?.getSource("pois") as unknown as { getClusterExpansionZoom?: (id: number, cb: (err: unknown, zoom: number) => void) => void } | undefined;
                     const id = Number(cluster.properties.cluster_id);
-                    if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom }); });
+                     if (source?.getClusterExpansionZoom) source.getClusterExpansionZoom(id, (err, zoom) => { if (!err && map) map.easeTo({ center: event.lngLat, zoom, duration: 500 }); });
                     else map?.easeTo({ center: event.lngLat, zoom: (map.getZoom() ?? 14) + 2 });
                     return;
                 }
@@ -206,12 +207,12 @@ export default function MapView() {
                 }
             }}>
             <NavigationControl position="bottom-right" showCompass={false} />
-             {visible.populationZones && <Source id="population-zones" type="geojson" data={populationZones as never}><Layer id="population-fill" type="fill" paint={{ "fill-color": "#a78bfa", "fill-opacity": 0.14 }} /><Layer id="population-outline" type="line" paint={{ "line-color": "#c4b5fd", "line-width": 1 }} /></Source>}
+              {visible.populationZones && <Source id="population-zones" type="geojson" data={populationZones as never}><Layer id="population-fill" type="fill" paint={{ "fill-color": ["step", ["coalesce", ["get", "population"], 0], POPULATION_SCALE[0].color, 25000, POPULATION_SCALE[1].color, 100000, POPULATION_SCALE[2].color, 250000, POPULATION_SCALE[3].color], "fill-opacity": 0.2 }} /><Layer id="population-outline" type="line" paint={{ "line-color": "#5b21b6", "line-width": 1.5, "line-opacity": 0.8 }} /></Source>}
              {visible.surveyStops && <Source id="survey-stops" type="geojson" data={surveyStops as never}><Layer id="survey-circles" type="circle" paint={{ "circle-color": "#06b6d4", "circle-radius": 6, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
              </Source>}
-             {visible.pois && <Source id="pois" type="geojson" data={coloredPois as never} cluster clusterMaxZoom={14} clusterRadius={45}><Layer id="poi-clusters" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": "#0f766e", "circle-radius": 12 }} /><Layer id="poi-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["get", "poi_color"], "circle-radius": 4, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
+              {visible.pois && <Source id="pois" type="geojson" data={coloredPois as never} cluster clusterMaxZoom={14} clusterRadius={45}><Layer id="poi-clusters" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": "#334155", "circle-radius": ["step", ["get", "point_count"], 13, 10, 17, 25, 21], "circle-stroke-color": "#f8fafc", "circle-stroke-width": 2 }} /><Layer id="poi-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 11, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#0f172a", "text-halo-width": 1.5 }} /><Layer id="poi-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["get", "poi_color"], "circle-radius": 5, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.cameras && <Source id="camera-source" type="geojson" data={cameraGeoJSON} cluster clusterMaxZoom={14} clusterRadius={50} clusterProperties={{ maxTier: ["max", ["get", "tier"]] }}>
                 <Layer id="camera-cluster" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": ["step", ["get", "maxTier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 25, 26, 100, 32], "circle-opacity": 0.85 }} />
                 <Layer id="camera-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 }} />
@@ -219,7 +220,7 @@ export default function MapView() {
                 <Layer id="camera-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["step", ["get", "tier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "tier"], 11, 1, 12, 2, 14, 3, 16], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-opacity": ["step", ["get", "freshness"], 1, 1, 0.8, 2, 0.35, 3, 0.6] }} />
 </Source>}
               {selectedSpatial && spatialLngLat && (
-                <Popup longitude={spatialLngLat[0]} latitude={spatialLngLat[1]} closeOnClick={false} onClose={() => setSelectedSpatial(null)}>
+                 <Popup longitude={spatialLngLat[0]} latitude={spatialLngLat[1]} closeOnClick={false} className="popup-dark" onClose={() => setSelectedSpatial(null)}>
                     {selectedSpatial.kind === "population-fill" ? (
                         <div><strong>{String(selectedSpatial.properties.district_name ?? "Kecamatan")}</strong><p>Populasi: {selectedSpatial.properties.population == null ? "Data tidak tersedia" : `${Number(selectedSpatial.properties.population).toLocaleString("id-ID")} jiwa`}</p></div>
                     ) : selectedSpatial.kind === "survey-circles" ? (
@@ -253,7 +254,7 @@ export default function MapView() {
             />
               {visible.pois && (
                 <div className="map-poi-filter">
-                    <label>Kategori POI<select value={poiCategory} onChange={(e) => setPoiCategory(e.target.value)} aria-label="Filter kategori POI"><option value="">Semua</option>{poiCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+                    <label>Kategori POI<select className={poiCategory ? "active" : ""} value={poiCategory} onChange={(e) => setPoiCategory(e.target.value)} aria-label="Filter kategori POI"><option value="">Semua</option>{poiCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
                 </div>
               )}
               {hoveredSegmentId && (

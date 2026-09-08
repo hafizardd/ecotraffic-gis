@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, getPoiCategoryColor, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
+import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, getPoiCategoryColor, POPULATION_SCALE, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
 
 interface MapLegendProps {
     visible: Record<MapLayerKey, boolean>;
@@ -72,6 +72,11 @@ export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFre
                                 ? poiCategories.map((category) => <li key={category}><i style={{ background: getPoiCategoryColor(category) }} />{category}</li>)
                                 : <li><i style={{ background: SPATIAL_COLORS.poi }} />Memuat kategori...</li>}
                         </ul>
+                    </section>
+                    <section className="map-legend-section">
+                        <h3>Populasi wilayah</h3>
+                        <ul className="legend-swatches">{POPULATION_SCALE.map((stop) => <li key={stop.label}><i style={{ background: stop.color }} />{stop.label}</li>)}</ul>
+                        <p className="legend-note">Skala berdasarkan jumlah penduduk, bukan kepadatan.</p>
                     </section>
                     <section className="map-legend-section">
                         <h3>Lapisan</h3>

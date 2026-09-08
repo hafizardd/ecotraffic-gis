@@ -22,9 +22,16 @@ export const FRESHNESS_COLORS = {
 
 export const SPATIAL_COLORS = {
     poi: "#14b8a6",
-    populationZone: "#a78bfa",
+    populationZone: "#8b5cf6",
     surveyStop: "#06b6d4",
 };
+
+export const POPULATION_SCALE = [
+    { color: "#ede9fe", label: "< 25.000 jiwa" },
+    { color: "#c4b5fd", label: "25.000–99.999 jiwa" },
+    { color: "#8b5cf6", label: "100.000–249.999 jiwa" },
+    { color: "#6d28d9", label: "≥ 250.000 jiwa" },
+] as const;
 
 export const POI_CATEGORY_COLORS: Record<string, string> = {
     Kesehatan: "#ef4444",
@@ -35,6 +42,7 @@ export const POI_CATEGORY_COLORS: Record<string, string> = {
     Peribadatan: "#ec4899",
     Perkantoran: "#84cc16",
     Transportasi: "#14b8a6",
+    Pemerintahan: "#f43f5e",
 };
 
 const POI_FALLBACK_COLORS = ["#0ea5e9", "#84cc16", "#f43f5e", "#c026d3"];

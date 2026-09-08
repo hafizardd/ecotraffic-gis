@@ -34,6 +34,11 @@ export default function useSpatialLayers(bbox: string | null, enabled: { pois: b
 
     useEffect(() => {
         const requestId = ++poiRequestId.current;
+        const clearTimer = setTimeout(() => {
+            if (requestId !== poiRequestId.current) return;
+            setData((p) => ({ ...p, pois: empty }));
+            setErrors((p) => { const next = { ...p }; delete next.pois; return next; });
+        }, 0);
         const timer = setTimeout(() => {
             if (enabled.pois) {
                 const requestedCategory = poiCategory || undefined;
@@ -65,7 +70,7 @@ export default function useSpatialLayers(bbox: string | null, enabled: { pois: b
                     .finally(() => setLoading((p) => ({ ...p, surveyStops: false })));
             }
         }, 250);
-        return () => clearTimeout(timer);
+        return () => { clearTimeout(clearTimer); clearTimeout(timer); };
     }, [bbox, enabled.pois, enabled.surveyStops, poiCategory]);
 
     return { ...data, poiCategories, loading, errors };
