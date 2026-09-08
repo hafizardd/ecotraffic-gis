@@ -27,7 +27,7 @@ from app.services.camera_management import get_active_camera_source
 from app.services.emission_aggregation import EmissionObservation, EmissionWindowAggregator
 from app.services.historical_emission_store import HistoricalEmissionStore
 from app.services.latest_emission_state import LatestEmissionStateStore
-from cv.detector import VEHICLE_CLASSES, VehicleDetector
+from cv.detector import VehicleDetector
 from cv.frame_store import RedisFrameStore
 from cv.rois import to_normalized
 from cv.emission_factors import calculate_emission
@@ -72,7 +72,7 @@ def _parse_tracks(detector: VehicleDetector, frame, result) -> list[dict]:
             conf = float(box.conf[0])
         except (TypeError, IndexError, ValueError):
             continue
-        if cls_id not in VEHICLE_CLASSES or conf < detector.confidence_threshold:
+        if cls_id not in detector.vehicle_classes or conf < detector.confidence_threshold:
             continue
         x1, y1, x2, y2 = map(float, box.xyxy[0])
         inside = (
@@ -83,7 +83,7 @@ def _parse_tracks(detector: VehicleDetector, frame, result) -> list[dict]:
         tracks.append(
             {
                 "id": VehicleDetector._box_track_id(box),
-                "cls": VEHICLE_CLASSES[cls_id],
+                "cls": detector.vehicle_classes[cls_id],
                 "conf": round(conf, 3),
                 "x1": round(x1 / w, 4),
                 "y1": round(y1 / h, 4),

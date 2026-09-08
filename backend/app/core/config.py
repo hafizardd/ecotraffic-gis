@@ -13,12 +13,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     SECRET_KEY: str 
 
-    YOLO_MODEL_PATH: str = "yolo/yolo11n.pt"
+    YOLO_MODEL_PATH: str = "yolo/best30.pt"
     YOLO_DEVICE: str = "auto"
     YOLO_IMAGE_SIZE: int = Field(default=512, gt=0)
     CONFIDENCE_THRESHOLD: float = Field(default=0.25, ge=0.0, le=1.0)
-    YOLO_TRACKER: str = "bytetrack.yaml"
-    YOLO_IOU: float = Field(default=0.5, ge=0.0, le=1.0)
+    YOLO_TRACKER: str = "botsort.yaml"
+    YOLO_IOU: float = Field(default=0.7, ge=0.0, le=1.0)
     TRACK_FPS: float = Field(default=5.0, gt=0)
     TRACK_CAMS: str = "atcs_jlagran,atcs_balaikota_timur"
     TRACK_FLOW_MIN_FRAMES: int = Field(default=3, gt=0)

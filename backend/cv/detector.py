@@ -12,12 +12,7 @@ from cv.rois import FILL, resolve, to_polygon_for_camera
 
 logger = logging.getLogger(__name__)
 
-VEHICLE_CLASSES = {
-    2: "car",
-    3: "motorcycle",
-    5: "bus",
-    7: "truck"
-}
+TRAINED_VEHICLE_CLASSES = ("bus", "car", "motorcycle", "truck")
 
 DEFAULT_YOLO_CATEGORY_MAPPING = {
     "motorcycle": "motorcycle",
@@ -73,6 +68,7 @@ class VehicleDetector:
             },
         )
         self.model = model_factory(self.model_path)
+        self.vehicle_classes = self._vehicle_classes_from_model()
         logger.info(
             "yolo_model_loaded",
             extra={"model_path": self.model_path, "device": self.device or "auto"},
@@ -129,10 +125,33 @@ class VehicleDetector:
             "verbose": False,
             "conf": self.confidence_threshold,
             "imgsz": self.image_size,
+            "iou": 0.7,
+            "max_det": 300,
+            "agnostic_nms": False,
         }
         if self.device is not None:
             options["device"] = self.device
         return options
+
+    def _vehicle_classes_from_model(self) -> dict[int, str]:
+        names = getattr(self.model, "names", None)
+        if isinstance(names, dict):
+            names = [names[key] for key in sorted(names)]
+        if isinstance(names, (list, tuple)):
+            normalized = {
+                index: str(name).strip().lower()
+                for index, name in enumerate(names)
+            }
+            return {
+                index: name
+                for index, name in normalized.items()
+                if name in self.category_mapping
+            }
+        return {
+            index: name
+            for index, name in enumerate(TRAINED_VEHICLE_CLASSES)
+            if name in self.category_mapping
+        }
 
     @staticmethod
     def _validate_frame(frame: np.ndarray) -> None:
@@ -180,12 +199,12 @@ class VehicleDetector:
             cls_id = int(box.cls[0])
             confidence = float(box.conf[0])
 
-            if cls_id not in VEHICLE_CLASSES:
+            if cls_id not in self.vehicle_classes:
                 continue
             if confidence < self.confidence_threshold:
                 continue
 
-            yolo_label = VEHICLE_CLASSES[cls_id]
+            yolo_label = self.vehicle_classes[cls_id]
             category = self.category_mapping.get(yolo_label)
             if category is None:
                 continue
