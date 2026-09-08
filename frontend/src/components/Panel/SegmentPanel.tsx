@@ -41,7 +41,7 @@ function SegmentDetailPanel({
 }) {
     const [detail, setDetail] = useState<SegmentEmissionDetail | null>(null);
     const [error, setError] = useState<Error | null>(null);
-    const { segmentMap, emissionMap, connectionStatus } = useEmissionsContext();
+    const { segmentMap, emissionMap } = useEmissionsContext();
 
     useEffect(() => {
         let mounted = true;
@@ -98,7 +98,7 @@ function SegmentDetailPanel({
             <div className="panel-content">
                 {!detail && !error && <div className="segment-state"><span className="loading-spinner" />Memuat detail segmen...</div>}
                 {error && <div className="segment-state error-state"><strong>Data segmen tidak tersedia</strong><span>{error.message}</span></div>}
-                {liveDetail && <><div className="segment-state">Sumber: {connectionStatus === "connected" ? "Realtime" : "Terakhir diterima"}{liveDetail.freshness_status ? ` · Data: ${liveDetail.freshness_status}` : ""}{!liveDetail.calculated_at && " · Belum ada perhitungan emisi"}</div><SegmentDetails detail={liveDetail} fallback={fallback} /></>}
+                {liveDetail && <><div className="segment-state">{liveDetail.calculated_at ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}${liveDetail.freshness_status ? ` · Data: ${liveDetail.freshness_status}` : ""}` : "Belum ada perhitungan emisi"}</div><SegmentDetails detail={liveDetail} fallback={fallback} /></>}
             </div>
         </aside>
     );
@@ -144,7 +144,7 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
         : detail.volume_status === "estimated"
             ? "Estimasi CCTV"
             : detail.calculated_at
-                ? "Realtime"
+                ? "Terukur"
                 : "Belum ada perhitungan";
     return (
         <>
@@ -174,11 +174,12 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                 )}
             </section>
             <section className="panel-section">
-                <div className="segment-score"><span>DECISION SCORE</span><strong>{detail.decision_score == null ? MISSING_LABEL : fmtFloatId(detail.decision_score, 3)}</strong></div>
+                <div className="segment-score"><span>DECISION SCORE</span><strong>{detail.decision_score == null ? MISSING_LABEL : fmtFloatId(detail.decision_score, 2)}</strong></div>
                 <p className="criteria-status">Kriteria spasial: {fmtSpatialStatus(detail.spatial_criteria_status)}</p>
                 <div className="criteria-grid">{CRITERIA_ORDER.map((key) => {
                     const value = (detail.raw_criteria as Record<string, unknown> | null)?.[key] as number | null | undefined;
-                    return <div key={key}><span>{key}</span><strong>{value == null ? MISSING_LABEL : fmtFloatId(Number(value), 3)}</strong></div>;
+                    const text = value == null ? MISSING_LABEL : key === "K1" || key === "K2" ? fmtEmissionId(Number(value)) : fmtFloatId(Number(value), 2);
+                    return <div key={key}><span>{key}</span><strong>{text}</strong></div>;
                 })}</div>
             </section>
             <PopulationSection context={detail.population_context} />
@@ -235,14 +236,11 @@ function SpatialCriteriaSection({ details, ahpMetadata, rawCriteria }: { details
     return (
         <section className="panel-section">
             <div className="section-heading"><div><span>KRITERIA SPASIAL</span><small>K3, K4, K5</small></div></div>
-            <p><strong>K3 — Akses Halte:</strong> {rawCriteria["K3"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K3"]), 3)}</p>
-            <p className="indent">Survei terdekat: {k3?.nearby_observation_count ?? MISSING_LABEL} · Skor halte: {k3?.composite_stop_score == null ? MISSING_LABEL : fmtFloatId(Number(k3.composite_stop_score), 2)} · Versi: {k3?.scoring_version ?? MISSING_LABEL}</p>
-            <p><strong>K4 — Aktivitas:</strong> {rawCriteria["K4"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K4"]), 3)}</p>
-            <p className="indent">POI dalam buffer: {k4?.poi_count ?? MISSING_LABEL} · Berbobot: {k4?.weighted_poi_count ?? MISSING_LABEL} · Buffer: {k4?.buffer_distance_m == null ? MISSING_LABEL : `${fmtIntId(k4.buffer_distance_m)} m`}</p>
-            <p><strong>K5 — Populasi (est.):</strong> {rawCriteria["K5"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K5"]), 3)}</p>
-            <p className="indent">{k5?.method ?? MISSING_LABEL} · Sumber tingkat kecamatan (perkiraan, bukan jumlah pasti di sepanjang jalan)</p>
+            <div className="criterion-card"><span>K3 — Akses Halte</span><strong>{rawCriteria["K3"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K3"]), 2)}</strong><small>Survei terdekat: {k3?.nearby_observation_count == null ? MISSING_LABEL : fmtIntId(k3.nearby_observation_count)} · Skor halte: {k3?.composite_stop_score == null ? MISSING_LABEL : fmtFloatId(Number(k3.composite_stop_score), 2)} · Versi: {k3?.scoring_version ?? MISSING_LABEL}</small></div>
+            <div className="criterion-card"><span>K4 — Aktivitas</span><strong>{rawCriteria["K4"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K4"]), 2)}</strong><small>POI dalam buffer: {k4?.poi_count == null ? MISSING_LABEL : fmtIntId(k4.poi_count)} · Berbobot: {k4?.weighted_poi_count == null ? MISSING_LABEL : fmtIntId(k4.weighted_poi_count)} · Buffer: {k4?.buffer_distance_m == null ? MISSING_LABEL : `${fmtIntId(k4.buffer_distance_m)} m`}</small></div>
+            <div className="criterion-card"><span>K5 — Populasi (est.)</span><strong>{rawCriteria["K5"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K5"]), 2)}</strong><small>{k5?.method ?? MISSING_LABEL} · Sumber tingkat kecamatan (perkiraan, bukan jumlah pasti di sepanjang jalan)</small></div>
             {normalized && (
-                <div className="criteria-grid">{Object.entries(normalized).map(([key, value]) => <div key={key}><span>{key} (norm)</span><strong>{value == null ? MISSING_LABEL : fmtFloatId(Number(value), 3)}</strong></div>)}</div>
+                <div className="criteria-grid">{Object.entries(normalized).map(([key, value]) => <div key={key}><span>{key} (norm)</span><strong>{value == null ? MISSING_LABEL : fmtFloatId(Number(value), 2)}</strong></div>)}</div>
             )}
         </section>
     );

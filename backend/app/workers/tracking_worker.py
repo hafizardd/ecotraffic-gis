@@ -54,7 +54,7 @@ _segment_mappings_cache: tuple[float, list[CameraSegmentMapping]] | None = None
 
 
 def _load_segment_mappings_cached() -> list[CameraSegmentMapping]:
-    """Sync mapping cache for tracking threads (mirrors inference_worker loader)."""
+    """Sync mapping cache for tracking threads (standalone loader)."""
     global _segment_mappings_cache
     now = time.monotonic()
     if _segment_mappings_cache is not None and now - _segment_mappings_cache[0] < settings.SEGMENT_MAPPING_CACHE_TTL_SECONDS:

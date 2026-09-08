@@ -7,7 +7,7 @@ celery_app = Celery(
     "ecotraffic",
     broker=redis_url,
     backend=redis_url,
-    include=["app.workers.scheduler", "app.workers.segment_calculation_worker", "app.workers.staleness_worker"],
+    include=["app.workers.segment_calculation_worker"],
 )
 
 celery_app.conf.timezone = "Asia/Jakarta"
@@ -15,33 +15,13 @@ celery_app.conf.enable_utc = True
 celery_app.conf.broker_connection_retry_on_startup = True
 celery_app.conf.task_track_started = True
 celery_app.conf.result_expires = 3600
-celery_app.conf.worker_concurrency = settings.INFERENCE_WORKER_CONCURRENCY
-celery_app.conf.task_queue_max_priority = 9
-celery_app.conf.task_default_priority = 5
-celery_app.conf.broker_transport_options = {
-    "priority_steps": list(range(10)),
-    "queue_order_strategy": "priority",
-}
 celery_app.conf.task_routes = {
-    "app.workers.scheduler.dispatch_due_cameras": {"queue": "camera_sampling"},
-    "app.workers.sampling_worker.sample_camera": {"queue": "camera_sampling"},
-    "app.workers.inference_worker.process_camera": {"queue": "camera_sampling"},
-    "app.workers.inference_worker.process_inference_job": {"queue": "inference"},
     "app.workers.segment_calculation_worker.recalculate_segment_emissions": {"queue": "inference"},
-    "app.workers.staleness_worker.check_camera_staleness": {"queue": "inference"},
 }
 
 celery_app.conf.beat_schedule = {
-    "dispatch_due_cameras": {
-        "task": "app.workers.scheduler.dispatch_due_cameras",
-        "schedule": settings.CAMERA_SCHEDULER_TICK_SECONDS,
-    },
     "recalculate-segment-emissions": {
         "task": "app.workers.segment_calculation_worker.recalculate_segment_emissions",
         "schedule": settings.SEGMENT_CALCULATION_PERIOD_MINUTES * 60,
-    },
-    "check-camera-staleness": {
-        "task": "app.workers.staleness_worker.check_camera_staleness",
-        "schedule": settings.CAMERA_STALENESS_CHECK_INTERVAL_SECONDS,
     },
 }

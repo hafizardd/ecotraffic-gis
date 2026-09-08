@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, EmissionUpdate, SpatialFeatureCollection } from "@/types";
+import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
@@ -42,9 +42,21 @@ export async function fetchEmissionsSummary(): Promise<EmissionSummary> {
     return response.json();
 }
 
-export async function fetchLatestEmissions(): Promise<EmissionUpdate[]> {
-    const response = await fetch(`${API_BASE}/api/emissions/summary`);
-    if (!response.ok) throw new Error(`Failed to fetch emission summary: ${response.statusText}`);
+export interface SegmentHistoryBucket {
+    bucket_start: string;
+    segment_id: string;
+    avg_total_emission_g_h: number;
+    avg_volume_per_hour: number;
+    decision_score: number | null;
+    priority: string | null;
+    sample_count: number;
+}
+
+export async function fetchSegmentEmissionHistory(segmentId?: string): Promise<SegmentHistoryBucket[]> {
+    const params = new URLSearchParams({ bucket: "hour" });
+    if (segmentId) params.set("segment_id", segmentId);
+    const response = await fetch(`${API_BASE}/api/emissions/segments/history?${params}`);
+    if (!response.ok) throw new Error(`Failed to fetch segment history: ${response.statusText}`);
     return response.json();
 }
 

@@ -6,7 +6,6 @@ from typing import Any
 import cv2
 import numpy as np
 
-from cv.frame_sampler import FrameSampler
 from cv.proposal_emission_factors import VEHICLE_CATEGORIES
 from cv.rois import FILL, resolve, to_polygon_for_camera
 
@@ -252,12 +251,6 @@ class VehicleDetector:
         except (TypeError, IndexError, ValueError):
             return None
     
-    def capture_frame(self, stream_url: str, referer: str = None) -> np.ndarray:
-        """Compatibility wrapper; new processing code uses FrameSampler directly."""
-        captured_frame = FrameSampler().capture(stream_url, referer)
-        logger.info("Captured frame — shape: %s", captured_frame.frame.shape)
-        return captured_frame.frame
- 
     def _draw_roi(self, frame: np.ndarray, roi_poly) -> None:
         """Fill ROI polygon with FILL alpha + green border, in-place."""
         overlay = frame.copy()

@@ -1,4 +1,27 @@
-"""Pure orchestration for one segment calculation period."""
+"""Pure orchestration for one segment calculation period.
+
+Canonical hourly aggregation logic (live + history share one definition):
+
+per-camera window (60s, epoch-aligned):
+  mean_counts[veh] = sum(snapshot_counts) / sample_count
+  camera_emission  = calculate_emission(mean_counts)  # fuel-based g/min + kg/hr
+  -> 1 EmissionAggregate row / camera / minute
+
+per-segment period (60s, [now-60, now)):
+  per-stream mean occupancy = sum(snapshot_occupancy) / n
+  raw_counts   = sum over streams
+  volume/hr    = raw * 3600/60          # always labeled "estimated"
+  vkt          = volume * length_km
+  segment_emission = Tier2(vkt)         # proposal factors, g/jam per pollutant
+  -> 1 SegmentEmission row / segment / minute
+
+hourly history view (read-only, no new table in v1):
+  hour_bucket = date_trunc('hour', period_end)
+  hourly_emission_g = avg(totals) per bucket
+  hourly_volume     = avg(volume_per_hour) per bucket
+  score/priority    = max(decision_score) row per bucket
+  (avg, never sum: rows are rate samples; sum would double city totals)
+"""
 
 from datetime import datetime, timezone
 
