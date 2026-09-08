@@ -125,6 +125,9 @@ def test_detector_passes_explicit_model_configuration():
         "verbose": False,
         "conf": 0.4,
         "imgsz": 512,
+        "iou": 0.7,
+        "max_det": 300,
+        "agnostic_nms": False,
         "device": "cuda:0",
     }
 
@@ -154,8 +157,8 @@ def test_detector_batches_frames_once_and_preserves_result_order():
     def model(frames, **_options):
         model_inputs.append(frames)
         return [
-            SimpleNamespace(boxes=[box(2)]),
-            SimpleNamespace(boxes=[box(7), box(7)]),
+            SimpleNamespace(boxes=[box(1)]),
+            SimpleNamespace(boxes=[box(3), box(3)]),
         ]
 
     detector = VehicleDetector(model_factory=lambda _path: model)

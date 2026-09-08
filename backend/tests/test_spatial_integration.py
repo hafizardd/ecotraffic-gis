@@ -43,7 +43,7 @@ def test_poi_weights_are_versioned_and_explicit():
 
 
 def test_yolo_default_is_yolo11n():
-    assert Settings.model_fields["YOLO_MODEL_PATH"].default == "yolo/yolo11n.pt"
+    assert Settings.model_fields["YOLO_MODEL_PATH"].default == "yolo/best30.pt"
     assert DEFAULT_MODEL_PATH.endswith("yolo11n.pt")
 
 
