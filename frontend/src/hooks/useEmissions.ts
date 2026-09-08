@@ -18,7 +18,9 @@ function segmentTimestampOf(value: SegmentUpdateData): number {
 function validCameraMessage(value: unknown): value is EmissionUpdate {
     if (!value || typeof value !== "object") return false;
     const item = value as Partial<EmissionUpdate>;
-    return typeof item.camera_id === "string" && typeof item.timestamp === "string";
+    return typeof item.camera_id === "string"
+        && typeof item.timestamp === "string"
+        && typeof item.total_co2_g_per_min === "number";
 }
 
 function validSegmentMessage(value: unknown): value is SegmentUpdate {
@@ -30,6 +32,7 @@ function validSegmentMessage(value: unknown): value is SegmentUpdate {
 export default function useEmissions() {
     const [emissionMap, setEmissionMap] = useState<Map<string, EmissionUpdate>>(new Map());
     const [segmentMap, setSegmentMap] = useState<Map<string, SegmentUpdateData>>(new Map());
+
     const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
     const [lastMessageAt, setLastMessageAt] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -44,12 +47,19 @@ export default function useEmissions() {
         const hydrate = async () => {
             try {
                 if (!API_BASE) throw new Error("API URL is not configured");
-                const cameras = await fetch(`${API_BASE}/api/cameras`).then((r) => r.json());
-                for (const camera of cameras.features ?? []) {
-                    const id = camera.properties.camera_id;
-                    const response = await fetchCameraEmissions(id, 1);
-                    const latest = response.emissions[0];
-                    if (latest) setEmissionMap((prev) => new Map(prev).set(id, { ...latest, camera_id: id, timestamp: latest.timestamp } as EmissionUpdate));
+                    const cameras = await fetch(`${API_BASE}/api/cameras`).then((r) => r.json());
+                    for (const camera of cameras.features ?? []) {
+                        const id = camera.properties.camera_id;
+                        const response = await fetchCameraEmissions(id, 1);
+                        const latest = response.emissions[0];
+                        if (latest) {
+                            const hydrated = { ...latest, camera_id: id, timestamp: latest.timestamp } as EmissionUpdate;
+                            const time = timestampOf(hydrated);
+                            if (time >= (latestRef.current.get(id) ?? 0)) {
+                                latestRef.current.set(id, time);
+                                setEmissionMap((prev) => new Map(prev).set(id, hydrated));
+                            }
+                        }
                 }
             } catch { setError("Gagal memuat data awal"); }
         };
@@ -78,12 +88,20 @@ export default function useEmissions() {
                             const merged: SegmentUpdateData = { ...existing, ...segment.data };
                             return new Map(prev).set(segment.segment_id, merged);
                         });
+                    } else if ((data as { type?: string }).type === "track_update") {
+                        // Tracking overlays are delivered on the same WebSocket,
+                        // but are not emission state and must not replace it.
+                        setLastMessageAt(messageTime);
+                        return;
                     } else if (validCameraMessage(data)) {
                         const time = timestampOf(data);
                         if (time < (latestRef.current.get(data.camera_id) ?? 0)) { setLastMessageAt(messageTime); return; }
                         latestRef.current.set(data.camera_id, time);
                         setEmissionMap((prev) => new Map(prev).set(data.camera_id, data));
-                    } else if ((data as { type?: string }).type !== "system_status") {
+                    } else if ((data as { type?: string }).type !== "system_status"
+                        && (data as { type?: string }).type !== "track_update") {
+                        // track_update is still published for backend consumers;
+                        // display comes from the MJPEG stream, so ignore it here.
                         setError("Pesan realtime tidak valid");
                         return;
                     }

@@ -13,6 +13,11 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 SAMPLE_CAMERA_TASK = "app.workers.sampling_worker.sample_camera"
+TRACKING_CAMERA_IDS = {
+    camera_id.strip()
+    for camera_id in settings.TRACK_CAMS.split(",")
+    if camera_id.strip()
+}
 
 
 def _mark_camera_due_again(camera_id: str, now: datetime) -> None:
@@ -53,6 +58,8 @@ def dispatch_due_cameras() -> dict[str, int]:
     enqueued_count = 0
     failed_count = 0
     for scheduled_camera in plan.due_cameras:
+        if scheduled_camera.camera_id in TRACKING_CAMERA_IDS:
+            continue
         try:
             celery_app.send_task(
                 SAMPLE_CAMERA_TASK,

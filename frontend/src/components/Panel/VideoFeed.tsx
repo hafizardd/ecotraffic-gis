@@ -1,93 +1,97 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Volume2, VolumeX } from "lucide-react"
-import Hls from "hls.js"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { API_BASE } from "@/services/api"
 
 interface VideoFeedProps {
-    streamUrl: string;
+    cameraId: string;
 }
 
-export default function VideoFeed({ streamUrl }: VideoFeedProps) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const [isMuted, setIsMuted] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+const INITIAL_BACKOFF = 1000;
+const MAX_BACKOFF = 30000;
+
+type StreamStatus = "loading" | "streaming" | "error";
+
+// Annotated MJPEG display: the tracker bakes boxes + track IDs into each
+// frame, so this component is just an <img> — no canvas, no HLS, no WebSocket.
+export default function VideoFeed({ cameraId }: VideoFeedProps) {
+    const [status, setStatus] = useState<StreamStatus>("loading");
+    const [reloadKey, setReloadKey] = useState(0);
+    const [isVisible, setIsVisible] = useState(() =>
+        typeof document === "undefined" || !document.hidden
+    );
+    const backoffRef = useRef(INITIAL_BACKOFF);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const streamUrl = isVisible && API_BASE
+        ? `${API_BASE}/api/cameras/${cameraId}/tracked.mjpg${
+            reloadKey > 0 ? `?_t=${reloadKey}` : ""
+        }`
+        : null;
+
+    const scheduleRetry = useCallback(() => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+            setStatus("loading");
+            setReloadKey((k) => k + 1);
+        }, backoffRef.current);
+        backoffRef.current = Math.min(backoffRef.current * 2, MAX_BACKOFF);
+    }, []);
 
     useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        let hls: Hls | null = null;
-        setError(null);
-        setIsLoading(true);
-
-        if (Hls.isSupported()) {
-            hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-            })
-
-            hls.loadSource(streamUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.ERROR, (_, data) => {
-                if (data.fatal) {
-                    setError("Failed to load video stream");
-                    hls?.destroy();
-                }
-            });
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-            // Safari
-            video.src = streamUrl;
-        } else {
-            setError("HLS not supported in this browser");
-        }
-
-        video.play().catch(() => {});
-        
-        return () => {
-            hls?.destroy();
+        const updateVisibility = () => {
+            const visible = !document.hidden;
+            setIsVisible(visible);
+            if (visible) setReloadKey((key) => key + 1);
         };
-    }, [streamUrl])
+        document.addEventListener("visibilitychange", updateVisibility);
+        return () => {
+            document.removeEventListener("visibilitychange", updateVisibility);
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
 
-    useEffect(() => {
-        if (videoRef.current) videoRef.current.muted = isMuted;
-    }, [isMuted]);
+    const handleLoad = useCallback(() => {
+        setStatus("streaming");
+        backoffRef.current = INITIAL_BACKOFF;
+    }, []);
 
-    const toggleMute = () => {
-        if (videoRef.current) {
-            videoRef.current.muted = !isMuted;
-            setIsMuted(!isMuted);
-        }
-    };
-
-    if (error) {
-        return (
-            <div className="flex items-center justify-center h-48 bg-zinc-900 text-zinc-400 text-sm">
-                <div className="video-error"><strong>Stream tidak tersedia</strong><span>{error}</span></div>
-            </div>
-        )
-    }
+    const handleError = useCallback(() => {
+        setStatus((prev) => {
+            if (prev !== "error") scheduleRetry();
+            return "error";
+        });
+    }, [scheduleRetry]);
 
     return (
-        <div className="video-frame">
-            {isLoading && <div className="video-loading"><span className="loading-spinner" />Menghubungkan ke kamera...</div>}
-            <video
-                ref={videoRef}
-                className="video-element"
-                muted={isMuted}
-                autoPlay
-                playsInline
-                onPlaying={() => setIsLoading(false)}
-            />
-            <button
-                onClick={toggleMute}
-                className="video-control"
-                aria-label={isMuted ? "Aktifkan suara" : "Bisukan suara"}
-                aria-pressed={!isMuted}
-            >
-                {isMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-            </button>
+        <div className="video-frame" style={{ position: "relative" }}>
+            {status === "loading" && (
+                <div className="video-loading">
+                    <span className="loading-spinner" />
+                    Menghubungkan ke kamera...
+                </div>
+            )}
+            {status === "error" && (
+                <div className="video-error" role="status">
+                    <strong>Stream tidak tersedia</strong>
+                    <span>Mencoba menghubungkan kembali...</span>
+                </div>
+            )}
+            {streamUrl && (
+                // Key on cameraId so switching cameras resets the stream.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                    key={cameraId}
+                    src={streamUrl}
+                    className="video-element"
+                    alt={`Tracked CCTV ${cameraId}`}
+                    decoding="async"
+                    fetchPriority="low"
+                    onLoad={handleLoad}
+                    onError={handleError}
+                    style={{ display: status === "streaming" ? "block" : "none" }}
+                />
+            )}
         </div>
     )
 }

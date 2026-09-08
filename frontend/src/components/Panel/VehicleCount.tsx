@@ -12,16 +12,20 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
         return <div className="data-empty"><span className="loading-spinner small" />Menunggu data kendaraan...</div>;
     }
 
+    const counts = emission.source === "tracking" && emission.occupancy
+        ? emission.occupancy
+        : emission;
+    const isInstant = emission.source === "tracking" && !!emission.occupancy;
     const vehicles = [
-        { label: "Car", count: emission.car, Icon: Car },
-        { label: "Motorcycle", count: emission.motorcycle, Icon: Bike },
-        { label: "Bus", count: emission.bus, Icon: Bus },
-        { label: "Truck", count: emission.truck, Icon: Truck },
+        { label: "Car", count: counts.car ?? 0, Icon: Car },
+        { label: "Motorcycle", count: counts.motorcycle ?? 0, Icon: Bike },
+        { label: "Bus", count: counts.bus ?? 0, Icon: Bus },
+        { label: "Truck", count: counts.truck ?? 0, Icon: Truck },
     ];
     
     return (
         <>
-        <p className="text-xs text-zinc-500">Kendaraan terlihat pada frame terbaru atau rata-rata snapshot. Ini bukan volume lalu lintas per jam.</p>
+        <p className="text-xs text-zinc-500">{isInstant ? "Kendaraan pada frame terbaru." : "Kendaraan terlihat atau rata-rata snapshot. Ini bukan volume lalu lintas per jam."}</p>
         <div className="vehicle-grid">
             {vehicles.map(({ label, count, Icon }) => (
                 <div
@@ -32,7 +36,7 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
                         <Icon aria-hidden="true" />
                     </div>
                     <div className="vehicle-copy">
-                        <span>{label}</span><strong>{Number.isInteger(count) ? count : count.toFixed(1)}</strong>
+                        <span>{label}</span><strong>{isInstant ? Math.round(count) : Number.isInteger(count) ? count : count.toFixed(1)}</strong>
                     </div>
                 </div>
             ))}

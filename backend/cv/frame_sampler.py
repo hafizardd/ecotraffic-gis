@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
+import os
 import subprocess
 import time
 from typing import Any, Callable
@@ -57,7 +58,7 @@ class FrameSampler:
         """Capture a single frame, first via OpenCV and then via FFmpeg."""
 
         started_at = self._monotonic()
-        frame = self._capture_opencv(stream_url)
+        frame = self._capture_opencv(stream_url, referer)
         if self._is_valid_frame(frame):
             return self._build_captured_frame(frame, "opencv", started_at)
 
@@ -81,13 +82,20 @@ class FrameSampler:
             method=method,
         )
 
-    def _capture_opencv(self, stream_url: str) -> Any | None:
+    def _capture_opencv(self, stream_url: str, referer: str | None = None) -> Any | None:
         cv2 = self._get_cv2()
         if cv2 is None:
             return None
 
         capture = None
+        # Wowza CCTV hosts require a Referer header; OpenCV's FFmpeg backend
+        # only honours it via OPENCV_FFMPEG_CAPTURE_OPTIONS. Set it around
+        # open() and restore afterwards (ffmpeg fallback already sends it).
+        env_key = "OPENCV_FFMPEG_CAPTURE_OPTIONS"
+        previous_env = os.environ.get(env_key)
         try:
+            if referer:
+                os.environ[env_key] = f"headers=Referer: {referer}\r\n"
             capture = cv2.VideoCapture()
             self._set_capture_timeout(
                 capture,
@@ -109,6 +117,10 @@ class FrameSampler:
             logger.warning("opencv_frame_capture_error", exc_info=True)
             return None
         finally:
+            if previous_env is None:
+                os.environ.pop(env_key, None)
+            else:
+                os.environ[env_key] = previous_env
             if capture is not None:
                 capture.release()
 

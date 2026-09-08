@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "hls.js": "^1.6.16",
     "lucide-react": "^1.42.0",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.6",
@@ -20,7 +19,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/hls.js": "^0.13.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

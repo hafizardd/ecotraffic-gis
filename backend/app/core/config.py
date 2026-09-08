@@ -15,8 +15,20 @@ class Settings(BaseSettings):
 
     YOLO_MODEL_PATH: str = "yolo/yolo11n.pt"
     YOLO_DEVICE: str = "auto"
-    YOLO_IMAGE_SIZE: int = Field(default=640, gt=0)
+    YOLO_IMAGE_SIZE: int = Field(default=512, gt=0)
     CONFIDENCE_THRESHOLD: float = Field(default=0.25, ge=0.0, le=1.0)
+    YOLO_TRACKER: str = "bytetrack.yaml"
+    YOLO_IOU: float = Field(default=0.5, ge=0.0, le=1.0)
+    TRACK_FPS: float = Field(default=5.0, gt=0)
+    TRACK_CAMS: str = "atcs_jlagran,atcs_balaikota_timur"
+    TRACK_FLOW_MIN_FRAMES: int = Field(default=3, gt=0)
+    TRACK_FLOW_EXIT_FRAMES: int = Field(default=5, gt=0)
+    TRACK_DB_FLUSH_SECONDS: int = Field(default=60, gt=0)
+    TRACK_SNAPSHOT_TTL_SECONDS: int = Field(default=180, gt=0)
+    # Annotated MJPEG display stream: the tracking worker writes annotated
+    # JPEGs to tracks:snapshot:{id}; the /tracked.mjpg endpoint polls that key.
+    STREAM_JPEG_QUALITY: int = Field(default=70, ge=1, le=100)
+    STREAM_FPS: float = Field(default=5.0, gt=0)
 
     STREAM_REFERER: str = "https://cctv.jogjakota.go.id/"
 

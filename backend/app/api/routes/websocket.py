@@ -127,6 +127,7 @@ async def send_initial_state(websocket: WebSocket) -> None:
 
 def _legacy_emission_payload(camera_id: str, emission: Emission) -> dict:
     payload = {
+        "type": "emission_update",
         "camera_id": camera_id,
         "timestamp": emission.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "car": emission.car,
@@ -179,7 +180,8 @@ async def websocket_emissions(websocket: WebSocket):
 
 # ------------------------------------------------------------------
 # Redis subscriber — fans out compact latest-state payloads from the worker.
-# The channel intentionally carries no frames, bounding boxes, or raw YOLO data.
+# emissions:* carries no frames; tracks:* carries lightweight track + ROI
+# payloads (normalized boxes) for the verification overlay only.
 # ------------------------------------------------------------------
 
 async def redis_subscriber():
@@ -192,8 +194,8 @@ async def redis_subscriber():
                 decode_responses=True,
             )
             pubsub = client.pubsub()
-            await pubsub.psubscribe("emissions:*")
-            logger.info("Subscribed to latest emission pattern: emissions:*")
+            await pubsub.psubscribe("emissions:*", "tracks:*")
+            logger.info("Subscribed to patterns: emissions:*, tracks:*")
 
             async for message in pubsub.listen():
                 if message["type"] == "pmessage":

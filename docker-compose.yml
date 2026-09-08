@@ -58,6 +58,18 @@ services:
       - redis
       - postgres
 
+  tracker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.tracking_worker
+    env_file: ./backend/.env
+    volumes:
+      - ./backend/yolo:/app/yolo
+    depends_on:
+      - redis
+      - postgres
+
   frontend:
     build: ./frontend
     ports:

@@ -177,7 +177,10 @@ def _persist_segment_observation(job: InferenceJob, vehicle_counts: dict[str, in
 
 def publish_latest_state(camera_id: str, payload: dict) -> None:
     """Publish the compact latest aggregate state to WebSocket subscribers."""
-    redis_client.publish(f"emissions:{camera_id}", json.dumps(payload))
+    redis_client.publish(
+        f"emissions:{camera_id}",
+        json.dumps({"type": "emission_update", **payload}),
+    )
 
 
 def _cleanup_job(job: InferenceJob) -> None:
