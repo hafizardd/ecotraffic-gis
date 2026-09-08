@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
+import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, getPoiCategoryColor, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
 
 interface MapLegendProps {
     visible: Record<MapLayerKey, boolean>;
@@ -11,6 +11,7 @@ interface MapLegendProps {
     cameraFresh: number;
     cameraStale: number;
     cameraTotal: number;
+    poiCategories: string[];
 }
 
 const LAYER_KEYS: MapLayerKey[] = ["cameras", "segments", "pois", "populationZones", "surveyStops"];
@@ -29,7 +30,7 @@ const LAYER_DOT: Record<MapLayerKey, string> = {
     surveyStops: SPATIAL_COLORS.surveyStop,
 };
 
-export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFresh, cameraStale, cameraTotal }: MapLegendProps) {
+export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFresh, cameraStale, cameraTotal, poiCategories }: MapLegendProps) {
     const [open, setOpen] = useState(true);
 
     return (
@@ -62,6 +63,14 @@ export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFre
                             <li><i style={{ background: FRESHNESS_COLORS.aging }} />Menua</li>
                             <li><i style={{ background: FRESHNESS_COLORS.stale }} />Basi</li>
                             <li><i style={{ background: FRESHNESS_COLORS.unknown }} />Tidak diketahui</li>
+                        </ul>
+                    </section>
+                    <section className="map-legend-section">
+                        <h3>POI per kategori</h3>
+                        <ul className="legend-swatches">
+                            {poiCategories.length > 0
+                                ? poiCategories.map((category) => <li key={category}><i style={{ background: getPoiCategoryColor(category) }} />{category}</li>)
+                                : <li><i style={{ background: SPATIAL_COLORS.poi }} />Memuat kategori...</li>}
                         </ul>
                     </section>
                     <section className="map-legend-section">

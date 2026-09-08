@@ -17,6 +17,7 @@ import {
     CAMERA_TIER_COLORS,
     DEFAULT_VISIBLE_LAYERS,
     MapLayerKey,
+    getPoiCategoryColor,
 } from "@/constants/mapColors";
 
 const TIER_NUM: Record<string, number> = { unavailable: 0, low: 1, medium: 2, high: 3 };
@@ -79,6 +80,17 @@ export default function MapView() {
             };
         }),
     }), [cameras, emissionMap]);
+
+    const coloredPois = useMemo(() => ({
+        ...pois,
+        features: pois.features.map((feature) => ({
+            ...feature,
+            properties: {
+                ...feature.properties,
+                poi_color: getPoiCategoryColor(String(feature.properties.category ?? "")),
+            },
+        })),
+    }), [pois]);
 
     if (loading) {
         return (
@@ -199,7 +211,7 @@ export default function MapView() {
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
              </Source>}
-             {visible.pois && <Source id="pois" type="geojson" data={pois as never} cluster clusterMaxZoom={14} clusterRadius={45}><Layer id="poi-clusters" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": "#14b8a6", "circle-radius": 12 }} /><Layer id="poi-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": "#14b8a6", "circle-radius": 4 }} /></Source>}
+             {visible.pois && <Source id="pois" type="geojson" data={coloredPois as never} cluster clusterMaxZoom={14} clusterRadius={45}><Layer id="poi-clusters" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": "#0f766e", "circle-radius": 12 }} /><Layer id="poi-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["get", "poi_color"], "circle-radius": 4, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.cameras && <Source id="camera-source" type="geojson" data={cameraGeoJSON} cluster clusterMaxZoom={14} clusterRadius={50} clusterProperties={{ maxTier: ["max", ["get", "tier"]] }}>
                 <Layer id="camera-cluster" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": ["step", ["get", "maxTier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 25, 26, 100, 32], "circle-opacity": 0.85 }} />
                 <Layer id="camera-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 }} />
@@ -237,7 +249,8 @@ export default function MapView() {
                 cameraFresh={hoverCounts.fresh}
                 cameraStale={hoverCounts.stale}
                 cameraTotal={hoverCounts.total}
-              />
+                poiCategories={poiCategories}
+            />
               {visible.pois && (
                 <div className="map-poi-filter">
                     <label>Kategori POI<select value={poiCategory} onChange={(e) => setPoiCategory(e.target.value)} aria-label="Filter kategori POI"><option value="">Semua</option>{poiCategories.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>

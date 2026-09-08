@@ -26,6 +26,30 @@ export const SPATIAL_COLORS = {
     surveyStop: "#06b6d4",
 };
 
+export const POI_CATEGORY_COLORS: Record<string, string> = {
+    Kesehatan: "#ef4444",
+    Kuliner: "#f97316",
+    Pariwisata: "#8b5cf6",
+    Pendidikan: "#3b82f6",
+    Perdagangan: "#eab308",
+    Peribadatan: "#ec4899",
+    Perkantoran: "#84cc16",
+    Transportasi: "#14b8a6",
+};
+
+const POI_FALLBACK_COLORS = ["#0ea5e9", "#84cc16", "#f43f5e", "#c026d3"];
+
+export function getPoiCategoryColor(category: string): string {
+    const normalizedCategory = category.trim();
+    if (!normalizedCategory) return SPATIAL_COLORS.poi;
+    if (POI_CATEGORY_COLORS[normalizedCategory]) return POI_CATEGORY_COLORS[normalizedCategory];
+
+    // Keep new/unmapped categories deterministic instead of assigning a random color.
+    let hash = 0;
+    for (const character of normalizedCategory) hash = (hash * 31 + character.charCodeAt(0)) | 0;
+    return POI_FALLBACK_COLORS[Math.abs(hash) % POI_FALLBACK_COLORS.length];
+}
+
 export const LAYER_LABELS = {
     cameras: "CCTV kamera",
     segments: "Segmen jalan",
