@@ -24,9 +24,14 @@ import redis
 
 from app.core.config import settings
 from app.services.camera_management import get_active_camera_source
+from app.services.emission_aggregation import EmissionObservation, EmissionWindowAggregator
+from app.services.historical_emission_store import HistoricalEmissionStore
+from app.services.latest_emission_state import LatestEmissionStateStore
 from cv.detector import VEHICLE_CLASSES, VehicleDetector
 from cv.frame_store import RedisFrameStore
 from cv.rois import to_normalized
+from cv.emission_factors import calculate_emission
+from cv.track_emission import FlowCounter, occupancy_counts
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +116,12 @@ def _open_capture(cv2_module, stream_url: str, referer: str | None):
                 except Exception:
                     pass
         backend = getattr(cv2_module, "CAP_FFMPEG", 0)
+        buffer_prop = getattr(cv2_module, "CAP_PROP_BUFFERSIZE", None)
+        if buffer_prop is not None:
+            try:
+                cap.set(buffer_prop, 1)
+            except Exception:
+                pass
         if not cap.open(stream_url, backend) or not cap.isOpened():
             try:
                 cap.release()
@@ -135,6 +146,18 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
     detector = _build_tracker(camera_id)
     options = _track_options(detector)
     redis_client = redis.Redis.from_url(settings.REDIS_URL)
+    latest_state_store = LatestEmissionStateStore(
+        redis_client,
+        ttl_seconds=settings.LATEST_EMISSION_STATE_TTL_SECONDS,
+    )
+    aggregator = EmissionWindowAggregator(
+        window_seconds=settings.TRACK_DB_FLUSH_SECONDS,
+    )
+    flow = FlowCounter(
+        min_frames=settings.TRACK_FLOW_MIN_FRAMES,
+        exit_frames=settings.TRACK_FLOW_EXIT_FRAMES,
+    )
+    historical_store = HistoricalEmissionStore()
     snapshots = RedisFrameStore(
         redis_client,
         ttl_seconds=settings.TRACK_SNAPSHOT_TTL_SECONDS,
@@ -143,6 +166,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
         key_prefix=SNAPSHOT_KEY_PREFIX,
     )
     interval = 1.0 / float(settings.TRACK_FPS)
+    next_deadline = time.monotonic()
 
     cap = _open_capture(cv2, camera.stream_url, camera.referer)
     if cap is None:
@@ -164,7 +188,13 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                     continue
                 consecutive_misses = 0
                 continue
-            ok, frame = cap.read()
+            # Read the newest available frame instead of allowing a decoder
+            # buffer to turn inference into a delayed replay.
+            ok = cap.grab()
+            if ok:
+                ok, frame = cap.retrieve()
+            else:
+                frame = None
             if not ok or frame is None:
                 consecutive_misses += 1
                 logger.warning("tracking_frame_missed", extra={"camera_id": camera_id})
@@ -175,7 +205,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                         pass
                     cap = None
                     continue
-                time.sleep(interval)
+                time.sleep(min(interval, 0.1))
                 continue
             consecutive_misses = 0
             try:
@@ -191,6 +221,41 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                 continue
             result = results[0]
             tracks = _parse_tracks(detector, frame, result)
+            occupancy = occupancy_counts(tracks)
+            flow_exits = flow.update(tracks)
+            captured_at = datetime.now(timezone.utc)
+            current = aggregator.add(
+                EmissionObservation(
+                    camera_id=camera_id,
+                    camera_database_id=str(camera.id),
+                    job_id=f"track-{camera_id}-{captured_at.timestamp()}",
+                    captured_at=captured_at,
+                    vehicle_counts=occupancy,
+                )
+            )
+            instant_emission = calculate_emission(occupancy)
+            latest = latest_state_store.payload_for(current.current)
+            latest.update({
+                "type": "emission_update",
+                "source": "tracking",
+                "occupancy": occupancy,
+                "flow_exits": flow_exits,
+                "instant_emission": instant_emission,
+            })
+            try:
+                redis_client.setex(
+                    latest_state_store.key_for(camera_id),
+                    settings.LATEST_EMISSION_STATE_TTL_SECONDS,
+                    json.dumps(latest, separators=(",", ":")),
+                )
+                redis_client.publish(f"emissions:{camera_id}", json.dumps(latest))
+            except Exception:
+                logger.exception("tracking_emission_publish_failed", extra={"camera_id": camera_id})
+            for completed in current.completed:
+                try:
+                    historical_store.save_many((completed,))
+                except Exception:
+                    logger.exception("tracking_historical_emission_store_failed", extra={"camera_id": camera_id})
             # Annotated snapshot: filled ROI + dimmed outside boxes, IDs on labels.
             _, annotated = detector._parse_result(frame, result, annotate=True)
             try:
@@ -202,13 +267,21 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                 "camera_id": camera_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "tracks": tracks,
+                "occupancy": occupancy,
+                "flow_exits": flow_exits,
+                "instant_emission": instant_emission,
                 "roi": to_normalized(camera_id),
             }
             try:
                 redis_client.publish(f"{TRACK_CHANNEL_PREFIX}{camera_id}", json.dumps(payload))
             except Exception:
                 logger.warning("tracking_publish_failed", extra={"camera_id": camera_id})
-            time.sleep(interval)
+            next_deadline += interval
+            delay = next_deadline - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                next_deadline = time.monotonic()
     finally:
         if cap is not None:
             try:

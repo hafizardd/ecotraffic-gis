@@ -30,6 +30,7 @@ export interface CameraFeatureCollection {
 }
 
 export interface EmissionUpdate {
+    type?: "emission_update";
     camera_id: string;
     timestamp: string;
     captured_at?: string;
@@ -78,6 +79,10 @@ export interface EmissionUpdate {
     source_mode?: "LIVE" | "HISTORICAL" | "REPLAY" | "SYNTHETIC";
     processed_at?: string;
     calculation_version?: string;
+    source?: "tracking" | "snapshot";
+    occupancy?: Record<string, number>;
+    flow_exits?: Record<string, number>;
+    instant_emission?: Record<string, number>;
 }
 
 export interface EmissionRow {

@@ -127,6 +127,7 @@ async def send_initial_state(websocket: WebSocket) -> None:
 
 def _legacy_emission_payload(camera_id: str, emission: Emission) -> dict:
     payload = {
+        "type": "emission_update",
         "camera_id": camera_id,
         "timestamp": emission.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "car": emission.car,

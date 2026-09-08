@@ -17,10 +17,13 @@ type StreamStatus = "loading" | "streaming" | "error";
 export default function VideoFeed({ cameraId }: VideoFeedProps) {
     const [status, setStatus] = useState<StreamStatus>("loading");
     const [reloadKey, setReloadKey] = useState(0);
+    const [isVisible, setIsVisible] = useState(() =>
+        typeof document === "undefined" || !document.hidden
+    );
     const backoffRef = useRef(INITIAL_BACKOFF);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const streamUrl = API_BASE
+    const streamUrl = isVisible && API_BASE
         ? `${API_BASE}/api/cameras/${cameraId}/tracked.mjpg${
             reloadKey > 0 ? `?_t=${reloadKey}` : ""
         }`
@@ -36,7 +39,16 @@ export default function VideoFeed({ cameraId }: VideoFeedProps) {
     }, []);
 
     useEffect(() => {
-        return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+        const updateVisibility = () => {
+            const visible = !document.hidden;
+            setIsVisible(visible);
+            if (visible) setReloadKey((key) => key + 1);
+        };
+        document.addEventListener("visibilitychange", updateVisibility);
+        return () => {
+            document.removeEventListener("visibilitychange", updateVisibility);
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
     }, []);
 
     const handleLoad = useCallback(() => {
@@ -73,6 +85,8 @@ export default function VideoFeed({ cameraId }: VideoFeedProps) {
                     src={streamUrl}
                     className="video-element"
                     alt={`Tracked CCTV ${cameraId}`}
+                    decoding="async"
+                    fetchPriority="low"
                     onLoad={handleLoad}
                     onError={handleError}
                     style={{ display: status === "streaming" ? "block" : "none" }}

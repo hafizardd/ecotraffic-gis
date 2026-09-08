@@ -5,7 +5,7 @@ Relative coords (0.0-1.0) so one polygon works across resolutions.
 """
 
 ROIS = {
-    "jl_balaikota_timur": [(0.06, 0.65), (0.38, 0.38), (0.64, 0.16), (0.79, 0.18), (0.70, 0.45), (0.50, 0.99)],
+    "jl_balaikota_timur": [(0.03, 0.63), (0.38, 0.33), (0.60, 0.16), (0.79, 0.18), (0.70, 0.45), (0.50, 0.99)],
     "simpang_jlagran": [(0.00, 0.79), (0.30, 0.42), (0.50, 0.20), (0.66, 0.23), (0.60, 1.00), (0.00, 1.00)],
 }
 FILL = (0, 255, 0, 80)  # ponytail: fixed green fill; per-camera colors if boxes get confusing.
