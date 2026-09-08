@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     TRACK_FPS: float = Field(default=10.0, gt=0)
     TRACK_CAMS: str = "atcs_jlagran,atcs_balaikota_timur"
     TRACK_SNAPSHOT_TTL_SECONDS: int = Field(default=180, gt=0)
+    # Annotated MJPEG display stream: the tracking worker writes annotated
+    # JPEGs to tracks:snapshot:{id}; the /tracked.mjpg endpoint polls that key.
+    STREAM_JPEG_QUALITY: int = Field(default=80, ge=1, le=100)
+    STREAM_FPS: float = Field(default=10.0, gt=0)
 
     STREAM_REFERER: str = "https://cctv.jogjakota.go.id/"
 

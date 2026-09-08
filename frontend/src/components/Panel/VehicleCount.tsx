@@ -13,10 +13,10 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
     }
 
     const vehicles = [
-        { label: "Car", count: emission.car, Icon: Car },
-        { label: "Motorcycle", count: emission.motorcycle, Icon: Bike },
-        { label: "Bus", count: emission.bus, Icon: Bus },
-        { label: "Truck", count: emission.truck, Icon: Truck },
+        { label: "Car", count: emission.car ?? 0, Icon: Car },
+        { label: "Motorcycle", count: emission.motorcycle ?? 0, Icon: Bike },
+        { label: "Bus", count: emission.bus ?? 0, Icon: Bus },
+        { label: "Truck", count: emission.truck ?? 0, Icon: Truck },
     ];
     
     return (

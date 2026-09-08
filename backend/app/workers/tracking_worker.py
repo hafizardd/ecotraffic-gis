@@ -2,8 +2,10 @@
 
 Runs outside the snapshot inference path: one thread per camera holds its own
 YOLO tracker state (persist=True) so IDs survive across frames. Publishes
-lightweight track payloads on ``tracks:{camera_id}`` for the UI canvas overlay
-and stores the latest annotated JPEG (filled ROI + dimmed outside boxes).
+lightweight track payloads on ``tracks:{camera_id}`` (Redis/analytics) and
+stores the latest annotated JPEG (filled ROI + dimmed outside boxes) under
+``tracks:snapshot:{camera_id}`` — the single source for the browser MJPEG
+display stream at ``GET /api/cameras/{id}/tracked.mjpg``.
 
 Run: ``python -m app.workers.tracking_worker`` (separate process/container).
 Snapshot emissions path is untouched.
@@ -137,7 +139,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
         redis_client,
         ttl_seconds=settings.TRACK_SNAPSHOT_TTL_SECONDS,
         max_bytes=settings.INFERENCE_FRAME_MAX_BYTES,
-        jpeg_quality=settings.INFERENCE_JPEG_QUALITY,
+        jpeg_quality=settings.STREAM_JPEG_QUALITY,
         key_prefix=SNAPSHOT_KEY_PREFIX,
     )
     interval = 1.0 / float(settings.TRACK_FPS)

@@ -83,7 +83,10 @@ def _get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None:
         _http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(10.0, connect=5.0),
+            # Playlists are tiny (fast); segments are multi-MB over a slow
+            # upstream link, so reads get a generous per-read timeout and
+            # segments stream chunk-by-chunk instead of buffering.
+            timeout=httpx.Timeout(60.0, connect=5.0),
             follow_redirects=True,
             headers={"User-Agent": "EcoTrafficGIS/1.0"},
         )
@@ -158,30 +161,99 @@ async def get_live_playlist(camera_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{camera_id}/live/{filename}")
 async def get_live_segment(camera_id: str, filename: str, db: AsyncSession = Depends(get_db)):
-    """Proxied HLS segment/chunklist with Referer injection."""
+    """Proxied HLS segment/chunklist with Referer injection.
+
+    Media segments stream chunk-by-chunk (first bytes flow immediately)
+    because the upstream link is slow (~60KB/s for multi-MB segments).
+    """
     safe = _safe_live_filename(filename)
     if safe is None:
         raise HTTPException(status_code=404, detail="Segment not found.")
     stream_url, referer = await _get_live_source(camera_id, db)
     upstream = f"{_upstream_base(stream_url)}/{safe}"
     headers = {"Referer": referer} if referer else {}
-    try:
-        resp = await _get_http_client().get(upstream, headers=headers)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=503, detail=f"Upstream segment unavailable for '{camera_id}'.")
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code if resp.status_code in (403, 404) else 503,
-                            detail="Upstream segment unavailable.")
     media_type = _segment_media_type(safe)
     if safe.endswith(".m3u8"):
         # The master playlist is rewritten, but its child media playlist also
         # contains relative segment names and must be rewritten here.
+        try:
+            resp = await _get_http_client().get(upstream, headers=headers)
+        except httpx.HTTPError:
+            raise HTTPException(status_code=503, detail=f"Upstream segment unavailable for '{camera_id}'.")
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code if resp.status_code in (403, 404) else 503,
+                                detail="Upstream segment unavailable.")
         body = _rewrite_playlist(resp.text, camera_id)
         return Response(content=body, media_type=media_type,
                         headers={"Cache-Control": "no-cache"})
-    cache = "no-cache" if safe.endswith(".m3u8") else "max-age=2"
-    return StreamingResponse(iter([resp.content]), media_type=media_type,
-                             headers={"Cache-Control": cache})
+
+    async def _stream_upstream():
+        try:
+            async with _get_http_client().stream("GET", upstream, headers=headers) as resp:
+                if resp.status_code != 200:
+                    return
+                async for chunk in resp.aiter_bytes(64 * 1024):
+                    yield chunk
+        except httpx.HTTPError:
+            return
+
+    return StreamingResponse(_stream_upstream(), media_type=media_type,
+                             headers={"Cache-Control": "max-age=2"})
+
+
+@router.get("/{camera_id}/tracked.mjpg")
+async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db)):
+    """Annotated MJPEG stream: frames already contain boxes + track IDs.
+
+    The tracking worker (one per camera, independent of viewers) writes the
+    latest annotated JPEG to ``tracks:snapshot:{camera_id}``. This endpoint
+    only polls that key — it never runs YOLO. Multiple clients share the
+    same tracker.
+    """
+    result = await db.execute(select(Camera).where(Camera.camera_id == camera_id))
+    camera = result.scalar_one_or_none()
+    if camera is None or not camera.is_active:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found.")
+
+    interval = 1.0 / float(settings.STREAM_FPS)
+
+    async def _generate():
+        client = redis.Redis.from_url(
+            settings.REDIS_URL, socket_connect_timeout=5, socket_timeout=5
+        )
+        try:
+            last_payload: bytes | None = None
+            while True:
+                try:
+                    payload = await asyncio.to_thread(
+                        client.get, f"tracks:snapshot:{camera_id}"
+                    )
+                except Exception:
+                    await asyncio.sleep(interval)
+                    continue
+                if payload is not None and payload != last_payload:
+                    last_payload = bytes(payload)
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n"
+                        b"Content-Length: " + str(len(last_payload)).encode() + b"\r\n"
+                        b"\r\n" + last_payload + b"\r\n"
+                    )
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            # Browser disconnected; tracker keeps running untouched.
+            raise
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        _generate(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.get("/{camera_id}", response_model=CameraProperties)
