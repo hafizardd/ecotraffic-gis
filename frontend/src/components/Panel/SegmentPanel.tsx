@@ -98,7 +98,16 @@ function SegmentDetailPanel({
             <div className="panel-content">
                 {!detail && !error && <div className="segment-state"><span className="loading-spinner" />Memuat detail segmen...</div>}
                 {error && <div className="segment-state error-state"><strong>Data segmen tidak tersedia</strong><span>{error.message}</span></div>}
-                {liveDetail && <><div className="segment-state">{liveDetail.calculated_at ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}${liveDetail.freshness_status ? ` · Data: ${liveDetail.freshness_status}` : ""}` : "Belum ada perhitungan emisi"}</div><SegmentDetails detail={liveDetail} fallback={fallback} /></>}
+                {liveDetail && (
+                    <>
+                        <div className="segment-update-status" aria-live="polite">
+                            {liveDetail.calculated_at
+                                ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}${liveDetail.freshness_status ? ` · Data: ${liveDetail.freshness_status}` : ""}`
+                                : "Belum ada perhitungan emisi"}
+                        </div>
+                        <SegmentDetails detail={liveDetail} fallback={fallback} />
+                    </>
+                )}
             </div>
         </aside>
     );
@@ -155,14 +164,14 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                     {detail.priority ?? "Belum dinilai"}
                 </b>
             </div>
-            <section className="panel-section">
+            <section className="panel-section segment-emission-section">
                 <div className="section-heading"><div><span>EMISI SEGMEN</span><small>Nilai agregat dalam g/jam · {sourceBadge}</small></div></div>
                 {hasAny && shown ? (
                     <div className="stat-grid">
                         {EMISSION_DEFINITIONS.map(({ key, label }) => (
                             <div className={`stat-card pollutant-${key}`} key={key}>
                                 <span className="stat-label"><i className="pollutant-dot" />{label}</span>
-                                <strong className="stat-value">{fmtEmissionId(shown[key])}</strong>
+                                <strong className={`stat-value${shown[key] == null ? " data-missing" : ""}`}>{fmtEmissionId(shown[key])}</strong>
                             </div>
                         ))}
                     </div>
@@ -170,16 +179,16 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                     <p className="data-empty">Belum ada perhitungan emisi — data CCTV belum teragregasi</p>
                 )}
                 {fallback && !hasEmission && (
-                    <p className="data-empty">Estimasi dari CCTV {fallback.camId} — bukan volume per jam terukur{fallback.at ? ` · ${fmtDateTimeId(fallback.at)}` : ""}</p>
+                    <p className="segment-note">Estimasi dari CCTV {fallback.camId} — bukan volume per jam terukur{fallback.at ? ` · ${fmtDateTimeId(fallback.at)}` : ""}</p>
                 )}
             </section>
-            <section className="panel-section">
-                <div className="segment-score"><span>DECISION SCORE</span><strong>{detail.decision_score == null ? MISSING_LABEL : fmtFloatId(detail.decision_score, 2)}</strong></div>
+            <section className="panel-section segment-decision-section">
+                <div className="segment-score"><span>DECISION SCORE</span><strong className={detail.decision_score == null ? "data-missing" : undefined}>{detail.decision_score == null ? MISSING_LABEL : fmtFloatId(detail.decision_score, 2)}</strong></div>
                 <p className="criteria-status">Kriteria spasial: {fmtSpatialStatus(detail.spatial_criteria_status)}</p>
                 <div className="criteria-grid">{CRITERIA_ORDER.map((key) => {
                     const value = (detail.raw_criteria as Record<string, unknown> | null)?.[key] as number | null | undefined;
                     const text = value == null ? MISSING_LABEL : key === "K1" || key === "K2" ? fmtEmissionId(Number(value)) : fmtFloatId(Number(value), 2);
-                    return <div key={key}><span>{key}</span><strong>{text}</strong></div>;
+                    return <div className="criteria-item" key={key}><span>{key}</span><strong className={value == null ? "data-missing" : undefined}>{text}</strong></div>;
                 })}</div>
             </section>
             <PopulationSection context={detail.population_context} />
@@ -195,21 +204,33 @@ function PopulationSection({ context }: { context: SegmentEmissionDetail["popula
     const intersecting = context?.intersecting ?? [];
     const formatPopulation = (value: number | null | undefined) => value == null ? MISSING_LABEL : `${fmtIntId(value)} jiwa`;
     return (
-        <section className="panel-section">
+        <section className="panel-section segment-population-section">
             <div className="section-heading"><div><span>POPULASI WILAYAH</span><small>Konteks administratif segmen</small></div></div>
             {!primary && intersecting.length === 0 && <p className="data-empty">{MISSING_LABEL}</p>}
             {primary && (
-                <>
-                    <p><strong>Kecamatan:</strong> {primary.district_name ?? MISSING_LABEL}</p>
-                    <p><strong>Populasi wilayah:</strong> {formatPopulation(primary.population)}</p>
-                    <p><strong>Metode:</strong> {primary.method ?? MISSING_LABEL}</p>
-                </>
+                <dl className="population-summary">
+                    <div>
+                        <dt>Kecamatan</dt>
+                        <dd className={primary.district_name == null ? "data-missing" : undefined}>{primary.district_name ?? MISSING_LABEL}</dd>
+                    </div>
+                    <div className="population-value">
+                        <dt>Populasi wilayah</dt>
+                        <dd className={primary.population == null ? "data-missing" : undefined}>{formatPopulation(primary.population)}</dd>
+                    </div>
+                    <div className="population-method">
+                        <dt>Metode</dt>
+                        <dd className={primary.method == null ? "data-missing" : undefined}>{primary.method ?? MISSING_LABEL}</dd>
+                    </div>
+                </dl>
             )}
             {intersecting.length > 0 && (
-                <details>
+                <details className="population-boundaries">
                     <summary>Wilayah berbatasan ({fmtIntId(intersecting.length)})</summary>
                     {intersecting.map((zone, index) => (
-                        <p key={index}><strong>{zone.district_name}:</strong> {formatPopulation(zone.population)} — {zone.overlap_share == null ? MISSING_LABEL : `${fmtPercentId(zone.overlap_share, 0)}`} tumpang tindih</p>
+                        <div className="population-boundary" key={index}>
+                            <strong>{zone.district_name}</strong>
+                            <span>{formatPopulation(zone.population)} · {zone.overlap_share == null ? MISSING_LABEL : `${fmtPercentId(zone.overlap_share, 0)}`} tumpang tindih</span>
+                        </div>
                     ))}
                 </details>
             )}
@@ -234,13 +255,25 @@ function SpatialCriteriaSection({ details, ahpMetadata, rawCriteria }: { details
     const k5 = detailsRecord?.["K5"];
     const normalized = (ahpMetadata as Record<string, unknown> | undefined)?.["normalized_values"] as Record<string, number> | undefined;
     return (
-        <section className="panel-section">
+        <section className="panel-section segment-spatial-section">
             <div className="section-heading"><div><span>KRITERIA SPASIAL</span><small>K3, K4, K5</small></div></div>
-            <div className="criterion-card"><span>K3 — Akses Halte</span><strong>{rawCriteria["K3"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K3"]), 2)}</strong><small>Survei terdekat: {k3?.nearby_observation_count == null ? MISSING_LABEL : fmtIntId(k3.nearby_observation_count)} · Skor halte: {k3?.composite_stop_score == null ? MISSING_LABEL : fmtFloatId(Number(k3.composite_stop_score), 2)} · Versi: {k3?.scoring_version ?? MISSING_LABEL}</small></div>
-            <div className="criterion-card"><span>K4 — Aktivitas</span><strong>{rawCriteria["K4"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K4"]), 2)}</strong><small>POI dalam buffer: {k4?.poi_count == null ? MISSING_LABEL : fmtIntId(k4.poi_count)} · Berbobot: {k4?.weighted_poi_count == null ? MISSING_LABEL : fmtIntId(k4.weighted_poi_count)} · Buffer: {k4?.buffer_distance_m == null ? MISSING_LABEL : `${fmtIntId(k4.buffer_distance_m)} m`}</small></div>
-            <div className="criterion-card"><span>K5 — Populasi (est.)</span><strong>{rawCriteria["K5"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K5"]), 2)}</strong><small>{k5?.method ?? MISSING_LABEL} · Sumber tingkat kecamatan (perkiraan, bukan jumlah pasti di sepanjang jalan)</small></div>
+            <div className="criterion-card">
+                <div className="criterion-card-header"><span>K3 — Akses Halte</span><strong className={rawCriteria["K3"] == null ? "data-missing" : undefined}>{rawCriteria["K3"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K3"]), 2)}</strong></div>
+                <small>Survei terdekat: {k3?.nearby_observation_count == null ? MISSING_LABEL : fmtIntId(k3.nearby_observation_count)} · Skor halte: {k3?.composite_stop_score == null ? MISSING_LABEL : fmtFloatId(Number(k3.composite_stop_score), 2)} · Versi: {k3?.scoring_version ?? MISSING_LABEL}</small>
+            </div>
+            <div className="criterion-card">
+                <div className="criterion-card-header"><span>K4 — Aktivitas</span><strong className={rawCriteria["K4"] == null ? "data-missing" : undefined}>{rawCriteria["K4"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K4"]), 2)}</strong></div>
+                <small>POI dalam buffer: {k4?.poi_count == null ? MISSING_LABEL : fmtIntId(k4.poi_count)} · Berbobot: {k4?.weighted_poi_count == null ? MISSING_LABEL : fmtIntId(k4.weighted_poi_count)} · Buffer: {k4?.buffer_distance_m == null ? MISSING_LABEL : `${fmtIntId(k4.buffer_distance_m)} m`}</small>
+            </div>
+            <div className="criterion-card">
+                <div className="criterion-card-header"><span>K5 — Populasi (est.)</span><strong className={rawCriteria["K5"] == null ? "data-missing" : undefined}>{rawCriteria["K5"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K5"]), 2)}</strong></div>
+                <small>{k5?.method ?? MISSING_LABEL} · Sumber tingkat kecamatan (perkiraan, bukan jumlah pasti di sepanjang jalan)</small>
+            </div>
             {normalized && (
-                <div className="criteria-grid">{Object.entries(normalized).map(([key, value]) => <div key={key}><span>{key} (norm)</span><strong>{value == null ? MISSING_LABEL : fmtFloatId(Number(value), 2)}</strong></div>)}</div>
+                <div className="normalized-values">
+                    <span className="subsection-label">NILAI NORMALISASI</span>
+                    <div className="criteria-grid">{Object.entries(normalized).map(([key, value]) => <div className="criteria-item" key={key}><span>{key} (norm)</span><strong className={value == null ? "data-missing" : undefined}>{value == null ? MISSING_LABEL : fmtFloatId(Number(value), 2)}</strong></div>)}</div>
+                </div>
             )}
         </section>
     );
@@ -261,19 +294,19 @@ function VehicleMetrics({
 }) {
     if (values == null) {
         return (
-            <section className="panel-section">
+            <section className="panel-section segment-vehicle-section">
                 <div className="section-heading"><div><span>{title}</span><small>{subtitle}</small></div>{estimated && <b className="estimate-badge">Estimasi</b>}</div>
                 <p className="data-empty">{unavailableLabel}</p>
             </section>
         );
     }
     return (
-        <section className="panel-section">
+        <section className="panel-section segment-vehicle-section">
             <div className="section-heading"><div><span>{title}</span><small>{subtitle}</small></div>{estimated && <b className="estimate-badge">Estimasi</b>}</div>
             <div className="vehicle-summary">
                 {VEHICLE_TYPES.map((key) => {
                     const value = values?.[key];
-                    return <div key={key}><span>{key}</span><strong>{value == null ? MISSING_LABEL : fmtVehicleId(Number(value))}</strong></div>;
+                    return <div key={key}><span>{key}</span><strong className={value == null ? "data-missing" : undefined}>{value == null ? MISSING_LABEL : fmtVehicleId(Number(value))}</strong></div>;
                 })}
             </div>
         </section>
