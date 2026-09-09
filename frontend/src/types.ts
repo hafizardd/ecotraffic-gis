@@ -185,12 +185,33 @@ export interface SegmentUpdate { type: "segment_update"; segment_id: string; dat
 
 export interface EmissionSummary {
     total_cameras_active: number;
+    total_tsp_g_per_min: number;
+    total_tsp_kg_per_hr: number;
+    total_nox_g_per_min: number;
+    total_nox_kg_per_hr: number;
+    total_so2_g_per_min: number;
+    total_so2_kg_per_hr: number;
+    total_hc_g_per_min: number;
+    total_hc_kg_per_hr: number;
+    total_co_g_per_min: number;
+    total_co_kg_per_hr: number;
+    total_co2_g_per_min: number;
+    total_co2_kg_per_hr: number;
+    total_ch4_g_per_min: number;
+    total_ch4_kg_per_hr: number;
+    total_n2o_g_per_min: number;
+    total_n2o_kg_per_hr: number;
     by_vehicle: { car: number; motorcycle: number; bus: number; truck: number };
     last_updated: string | null;
     freshness_status?: string;
     active_cameras?: number;
     live_cameras?: number;
-    [key: string]: unknown;
+    historical_cameras?: number;
+    fresh_camera_states?: number;
+    stale_camera_states?: number;
+    latest_observation_at?: string | null;
+    latest_processing_at?: string | null;
+    source?: string;
 }
 
 export interface ChartPoint {

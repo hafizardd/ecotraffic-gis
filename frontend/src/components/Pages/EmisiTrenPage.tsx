@@ -8,13 +8,38 @@ import { fmtDateTimeId, fmtEmissionId, fmtFloatId, fmtIntId } from "@/utils/form
 
 export default function EmisiTrenPage() {
     const [summary, setSummary] = useState<EmissionSummary | null>(null);
+    const [summaryStatus, setSummaryStatus] = useState<"loading" | "success" | "error">("loading");
     const [history, setHistory] = useState<SegmentHistoryBucket[]>([]);
-    const { segments } = useMergedSegments();
+    const [historyStatus, setHistoryStatus] = useState<"loading" | "success" | "error">("loading");
+    const { segments, loading: segmentsLoading, error: segmentsError } = useMergedSegments();
 
     useEffect(() => {
         let mounted = true;
-        fetchEmissionsSummary().then((v) => mounted && setSummary(v)).catch(() => {});
-        fetchSegmentEmissionHistory().then((v) => mounted && setHistory(v.slice(-12))).catch(() => {});
+
+        const loadSummary = async () => {
+            try {
+                const value = await fetchEmissionsSummary();
+                if (!mounted) return;
+                setSummary(value);
+                setSummaryStatus("success");
+            } catch {
+                if (mounted) setSummaryStatus("error");
+            }
+        };
+
+        const loadHistory = async () => {
+            try {
+                const value = await fetchSegmentEmissionHistory();
+                if (!mounted) return;
+                setHistory(value.slice(-12));
+                setHistoryStatus("success");
+            } catch {
+                if (mounted) setHistoryStatus("error");
+            }
+        };
+
+        void loadSummary();
+        void loadHistory();
         return () => { mounted = false; };
     }, []);
 
@@ -33,14 +58,29 @@ export default function EmisiTrenPage() {
                         : "Ringkasan agregat kota dari kamera aktif."}
                 </p>
             </div>
-            <div className="page-card-grid">
+            <div className="page-card-grid" aria-busy={summaryStatus === "loading"}>
                 {EMISSION_DEFINITIONS.map(({ key, label, hourlyField }) => {
-                    const v = summary?.[hourlyField] as number | undefined;
+                    const value = summary?.[hourlyField];
+                    const hasValue = typeof value === "number" && Number.isFinite(value);
+                    const displayValue = summaryStatus === "loading"
+                        ? "Memuat..."
+                        : summaryStatus === "error"
+                            ? "Gagal memuat data"
+                            : hasValue
+                                ? fmtEmissionId(value, "kg/jam")
+                                : "Data tidak tersedia";
+                    const statusLabel = summaryStatus === "loading"
+                        ? "Menunggu ringkasan agregat kota"
+                        : summaryStatus === "error"
+                            ? "Ringkasan agregat kota gagal dimuat"
+                            : hasValue
+                                ? "Agregat kota"
+                                : "Belum ada data agregat kota";
                     return (
                         <div className={`page-card summary-metric pollutant-${key}`} key={key}>
                             <span><i className="pollutant-dot" />{label}</span>
-                            <strong>{v == null ? "Data tidak tersedia" : fmtEmissionId(Number(v), "kg/jam")}</strong>
-                            <small>{summary ? "Agregat kota" : "Memuat..."}</small>
+                            <strong>{displayValue}</strong>
+                            <small>{statusLabel}</small>
                         </div>
                     );
                 })}
@@ -48,9 +88,21 @@ export default function EmisiTrenPage() {
             <div className="page-card">
                 <div className="card-header">
                     <strong>Tren per jam</strong>
-                    <span className="unavailable-badge">{history.length ? `${history.length} BUCKET` : "BELUM TERSEDIA"}</span>
+                    <span className="unavailable-badge">
+                        {historyStatus === "loading"
+                            ? "MEMUAT..."
+                            : historyStatus === "error"
+                                ? "GAGAL DIMUAT"
+                                : history.length
+                                    ? `${history.length} BUCKET`
+                                    : "BELUM TERSEDIA"}
+                    </span>
                 </div>
-                {history.length === 0 ? (
+                {historyStatus === "loading" ? (
+                    <div className="unavailable-state">Memuat tren emisi per jam...</div>
+                ) : historyStatus === "error" ? (
+                    <div className="unavailable-state">Gagal memuat tren emisi per jam.</div>
+                ) : history.length === 0 ? (
                     <div className="unavailable-state">Belum ada perhitungan emisi — data CCTV belum teragregasi.</div>
                 ) : (
                     <div className="trend-list">
@@ -67,9 +119,21 @@ export default function EmisiTrenPage() {
             <div className="page-card">
                 <div className="card-header">
                     <strong>Koridor prioritas</strong>
-                    <span className="unavailable-badge">{top.length ? `${top.length} SEGMEN` : "BELUM TERSEDIA"}</span>
+                    <span className="unavailable-badge">
+                        {segmentsLoading
+                            ? "MEMUAT..."
+                            : segmentsError
+                                ? "GAGAL DIMUAT"
+                                : top.length
+                                    ? `${top.length} SEGMEN`
+                                    : "BELUM TERSEDIA"}
+                    </span>
                 </div>
-                {top.length === 0 ? (
+                {segmentsLoading ? (
+                    <div className="unavailable-state">Memuat data koridor prioritas...</div>
+                ) : segmentsError ? (
+                    <div className="unavailable-state">Gagal memuat data koridor prioritas.</div>
+                ) : top.length === 0 ? (
                     <div className="unavailable-state">Belum ada perhitungan emisi — data CCTV belum teragregasi.</div>
                 ) : (
                     <div className="table-wrap">

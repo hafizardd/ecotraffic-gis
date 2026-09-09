@@ -41,11 +41,11 @@ class CameraEmissionsResponse(BaseModel):
  
  
 class VehicleSummary(BaseModel):
-    """Aggregated vehicle counts across all cameras."""
-    car: int
-    motorcycle: int
-    bus: int
-    truck: int
+    """Aggregated mean snapshot counts across all cameras."""
+    car: float
+    motorcycle: float
+    bus: float
+    truck: float
  
  
 class EmissionSummaryResponse(BaseModel):
