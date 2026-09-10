@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
+import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, SPATIAL_COLORS, FIVE_TIER_COLORS, FIVE_TIER_LEGEND, LAYER_LABELS, MapLayerKey } from "@/constants/mapColors";
 import Checkbox from "@/components/ui/Checkbox";
 
 interface MapLegendProps {
@@ -14,16 +14,12 @@ interface MapLegendProps {
     cameraTotal: number;
 }
 
-const LAYER_KEYS: MapLayerKey[] = ["cameras", "segments", "surveyStops"];
-const LAYER_LABELS: Record<MapLayerKey, string> = {
-    cameras: "CCTV kamera",
-    segments: "Segmen jalan",
-    surveyStops: "Halte survei",
-};
+const LAYER_KEYS = Object.keys(LAYER_LABELS) as MapLayerKey[];
 const LAYER_DOT: Record<MapLayerKey, string> = {
     cameras: CAMERA_TIER_COLORS.low,
     segments: "#facc15",
     surveyStops: SPATIAL_COLORS.surveyStop,
+    activityGrid: FIVE_TIER_COLORS.high,
 };
 
 export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFresh, cameraStale, cameraTotal }: MapLegendProps) {
@@ -60,6 +56,10 @@ export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFre
                             <li><i style={{ background: FRESHNESS_COLORS.stale }} />Basi</li>
                             <li><i style={{ background: FRESHNESS_COLORS.unknown }} />Tidak diketahui</li>
                         </ul>
+                    </section>
+                    <section className="map-legend-section">
+                        <h3>Potensi aktivitas & prioritas halte</h3>
+                        <ul className="legend-swatches">{FIVE_TIER_LEGEND.map((tier) => <li key={tier.label}><i style={{ background: tier.color }} />{tier.label}</li>)}</ul>
                     </section>
                     <section className="map-legend-section">
                         <h3>Lapisan</h3>

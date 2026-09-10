@@ -144,6 +144,24 @@ def compute_k4_for_segment(db, segment) -> dict:
     }
 
 
+def compute_stop_accessibility(db, stop: SurveyStopObservation) -> dict:
+    """POI count within K4_BUFFER_M of the stop itself (mirrors compute_k4_for_segment)."""
+    rows = db.execute(
+        select(PointOfInterest).where(
+            SurveyStopObservation.id == stop.id,
+            func.ST_DWithin(
+                cast(SurveyStopObservation.geometry, _geog), cast(PointOfInterest.geometry, _geog), K4_BUFFER_M
+            ),
+        )
+    ).scalars().all()
+    categories = Counter(row.category or "Tidak diketahui" for row in rows)
+    weighted = sum(POI_CATEGORY_WEIGHTS.get(category, 0.8) * count for category, count in categories.items())
+    return {
+        "poi_count": len(rows), "category_counts": dict(categories), "weighted_score": weighted,
+        "buffer_distance_m": K4_BUFFER_M, "weight_version": POI_WEIGHT_VERSION,
+    }
+
+
 def compute_k5_for_segment(db, segment, population_context: dict | None) -> dict:
     if not population_context or not population_context.get("intersecting"):
         return {"value": None, "details": {"status": "pending", "method": "areal_weighted_population_density"}}

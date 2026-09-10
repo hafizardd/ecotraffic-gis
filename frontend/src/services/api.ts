@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
+import { ActivityGridFeature, ActivityGridFeatureCollection, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
@@ -68,6 +68,38 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
 }
 
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);
+
+export async function fetchActivityGrid(bbox?: string): Promise<ActivityGridFeatureCollection> {
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${bbox ? `?bbox=${encodeURIComponent(bbox)}` : ""}`);
+    if (!response.ok) throw new Error(`Failed to fetch activity grid: ${response.statusText}`);
+    return response.json();
+}
+
+export async function fetchActivityGridHex(hexId: number): Promise<ActivityGridFeature> {
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}`);
+    if (!response.ok) throw new Error(`Failed to fetch activity grid hex: ${response.statusText}`);
+    return response.json();
+}
+
+export async function fetchBusStopDetail(sourceId: string): Promise<BusStopDetail> {
+    const response = await fetch(`${API_BASE}/api/spatial/survey-stops/${encodeURIComponent(sourceId)}`);
+    if (!response.ok) throw new Error(`Failed to fetch bus stop: ${response.statusText}`);
+    return response.json();
+}
+
+export async function fetchBangJoReply(
+    message: string,
+    roadSegmentId: string | null,
+    history: { role: string; content: string }[],
+): Promise<BangJoReply> {
+    const response = await fetch(`${API_BASE}/api/chat/bangjo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, road_segment_id: roadSegmentId, history }),
+    });
+    if (!response.ok) throw new Error(`Bang Jo tidak dapat dihubungi (${response.status})`);
+    return response.json();
+}
 
 function analyticsUrl(path: string, query: Partial<AnalyticsQuery> = {}, extra: Record<string, string> = {}) {
     const params = new URLSearchParams(extra);

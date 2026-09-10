@@ -29,6 +29,10 @@ class SurveyStopObservation(Base):
     survey_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     manual_score_override: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_method: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    accessibility_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intervention_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intervention_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    intervention_class: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 

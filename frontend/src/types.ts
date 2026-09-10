@@ -332,3 +332,80 @@ export interface ChartPoint {
     ch4: number;
     n2o: number;
 }
+
+export interface ActivityGridProperties {
+    hex_id: number;
+    luas_km2: number;
+    poi_total: number;
+    poi_breakdown: Record<string, number>;
+    penduduk: number;
+    volume_mean: number;
+    norm_volume: number;
+    norm_poi: number;
+    norm_penduduk: number;
+    skor_total_ahp: number;
+    ranking: number;
+    klasifikasi_potensi: string;
+    ahp_weight_version: string;
+    source: string;
+}
+
+export interface ActivityGridFeature {
+    type: "Feature";
+    geometry: { type: string; coordinates: unknown };
+    properties: ActivityGridProperties;
+}
+
+export interface ActivityGridFeatureCollection {
+    type: "FeatureCollection";
+    features: ActivityGridFeature[];
+}
+
+export interface SurveyStopProperties extends Record<string, string | number | null> {
+    source_id: string;
+    title: string;
+    facility_score: number | null;
+    environment_score: number | null;
+    accessibility_score: number | null;
+    intervention_score: number | null;
+    intervention_rank: number | null;
+    intervention_class: string | null;
+}
+
+export interface BusStopDetail {
+    source_id: string;
+    title: string;
+    description: string | null;
+    observed_at: string | null;
+    media: { url?: string; type?: string }[];
+    observer_name: string | null;
+    facility_score: number | null;
+    pedestrian_access_score: number | null;
+    environment_score: number | null;
+    user_activity_score: number | null;
+    survey_score: number | null;
+    score_method: string | null;
+    accessibility_score: number | null;
+    intervention_score: number | null;
+    intervention_rank: number | null;
+    intervention_class: string | null;
+    accessibility_breakdown: { category: string; count: number }[];
+    accessibility_buffer_m: number;
+}
+
+export interface BangJoAnswer {
+    summary: string;
+    drivers: string[];
+    asi_category: string;
+    recommendation: string;
+    evidence: string[];
+    source?: string;
+}
+
+export interface BangJoReply {
+    needs_selection: boolean;
+    answer: BangJoAnswer | null;
+    context_label: string | null;
+    candidates?: { road_segment_id: string; name: string }[];
+    detail?: string;
+}

@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     SNAPSHOT_FAILURES_BEFORE_OFFLINE: int = Field(default=5, gt=0)
     SNAPSHOT_DRY_RUN: bool = False
 
+    # Bang Jo assistant (OpenRouter, OpenAI-compatible). The route degrades to
+    # a deterministic, context-grounded summary when no key is configured, so a
+    # missing key never 500s the WebGIS.
+    OPENROUTER_API_KEY: str | None = None
+    BANGJO_MODEL: str = "nvidia/nemotron-3.5-lightning:free"
+    BANGJO_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
+    BANGJO_MAX_TOKENS: int = Field(default=1024, gt=0)
+    BANGJO_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
+
     # Deployments may define settings for adjacent services; they should not
     # prevent this application from starting when those keys are unrelated.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

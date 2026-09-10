@@ -5,19 +5,25 @@ import Map, { MapRef, NavigationControl, Source, Layer, Popup } from "react-map-
 import maplibregl from "maplibre-gl";
 import SidePanel from "../Panel/SidePanel";
 import SegmentPanel from "../Panel/SegmentPanel";
+import ActivityGridPanel from "../Panel/ActivityGridPanel";
+import BusStopPanel from "../Panel/BusStopPanel";
 import MapLegend from "./MapLegend";
 import Skeleton from "@/components/ui/Skeleton";
 import { getCameraTier } from "@/utils/markerColor";
 import useCameras from "@/hooks/useCameras";
-import { CameraFeature, SpatialFeature } from "@/types";
+import { CameraFeature } from "@/types";
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import useSegments from "@/hooks/useSegments";
 import useSpatialLayers from "@/hooks/useSpatialLayers";
+import useActivityGrid from "@/hooks/useActivityGrid";
+import { setSelectedSegmentId as publishSelectedSegment } from "@/utils/selectionStore";
 import {
     SEGMENT_COLORS,
     CAMERA_TIER_COLORS,
+    FIVE_TIER_COLORS,
     DEFAULT_VISIBLE_LAYERS,
     MapLayerKey,
+    classificationTier,
 } from "@/constants/mapColors";
 
 const TIER_NUM: Record<string, number> = { unavailable: 0, low: 1, medium: 2, high: 3 };
@@ -42,8 +48,10 @@ export default function MapView() {
     const [style, setStyle] = useState<"street-2d-building" | "dark">("street-2d-building");
     const [visible, setVisible] = useState<Record<MapLayerKey, boolean>>(() => ({ ...DEFAULT_VISIBLE_LAYERS, ...readStoredLayers() }));
     const [bbox, setBbox] = useState<string | null>(null);
-    const [selectedSpatial, setSelectedSpatial] = useState<(SpatialFeature & { kind?: string }) | null>(null);
+    const [selectedHexId, setSelectedHexId] = useState<number | null>(null);
+    const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
     const { surveyStops } = useSpatialLayers(bbox, { surveyStops: visible.surveyStops });
+    const { activityGrid } = useActivityGrid(bbox, visible.activityGrid);
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
@@ -79,6 +87,22 @@ export default function MapView() {
             };
         }),
     }), [cameras, emissionMap]);
+
+    const activityGridGeoJSON = useMemo(() => ({
+        type: "FeatureCollection" as const,
+        features: activityGrid.features.map((feature) => ({
+            ...feature,
+            properties: { ...feature.properties, potential: classificationTier(feature.properties.klasifikasi_potensi) },
+        })),
+    }), [activityGrid]);
+
+    const surveyStopGeoJSON = useMemo(() => ({
+        type: "FeatureCollection" as const,
+        features: surveyStops.features.map((feature) => ({
+            ...feature,
+            properties: { ...feature.properties, intervention: classificationTier(feature.properties.intervention_class as string | null) },
+        })),
+    }), [surveyStops]);
 
     if (loading) {
         return (
@@ -127,18 +151,13 @@ export default function MapView() {
         total: cameras.length,
     };
 
-    const spatialCoords = selectedSpatial?.geometry?.coordinates as unknown;
-    const spatialLngLat = Array.isArray(spatialCoords) && spatialCoords.length === 2
-        && typeof spatialCoords[0] === "number" && typeof spatialCoords[1] === "number"
-        && Number.isFinite(spatialCoords[0]) && Number.isFinite(spatialCoords[1])
-        ? (spatialCoords as [number, number])
-        : null;
+    const isAnyPanelOpen = Boolean(selectedCamera || selectedSegmentId || selectedHexId != null || selectedStopId);
 
     return (
-        <div className={`map-panel-layout ${selectedCamera || selectedSegmentId ? "has-panel" : ""}`}>
+        <div className={`map-panel-layout ${isAnyPanelOpen ? "has-panel" : ""}`}>
         <div className="map-area" ref={mapAreaRef}>
             <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
-             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "survey-circles"]}
+             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "survey-circles", "activity-grid-fill"]}
              onMove={(event) => { const b = event.target.getBounds(); setBbox(`${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`); }}
              onMouseMove={(event) => {
                  const segment = event.features?.find((item) => item.layer?.id === "segments-line");
@@ -168,25 +187,28 @@ export default function MapView() {
                 const camera = event.features?.find((item) => item.layer?.id === "camera-points");
                 if (camera?.properties?.camera_id) {
                     const found = camerasById.get(String(camera.properties.camera_id));
-                    if (found) { setSelectedCamera(found); setSelectedSegmentId(null); setHoveredCamera(null); setHoveredPoint(null); return; }
+                    if (found) { setSelectedCamera(found); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedHexId(null); setSelectedStopId(null); setHoveredCamera(null); setHoveredPoint(null); return; }
                 }
                 const feature = event.features?.find((item) => item.layer?.id === "segments-line");
-                if (feature?.properties?.segment_id) { setSelectedSegmentId(feature.properties.segment_id); setSelectedCamera(null); return; }
-                 const spatial = event.features?.find((item) => item.layer?.id === "survey-circles");
-                 if (spatial) {
-                    const geom = spatial.geometry as unknown as { type?: string; coordinates?: unknown };
-                    const raw = geom?.coordinates;
-                    const isLngLat = Array.isArray(raw) && raw.length === 2
-                        && typeof raw[0] === "number" && typeof raw[1] === "number"
-                        && Number.isFinite(raw[0]) && Number.isFinite(raw[1]);
-                    const coords: [number, number] = isLngLat
-                        ? [raw[0] as number, raw[1] as number]
-                        : [event.lngLat.lng, event.lngLat.lat];
-                     setSelectedSpatial({ type: "Feature", geometry: { type: "Point", coordinates: coords }, properties: spatial.properties as SpatialFeature["properties"], kind: spatial.layer?.id ?? "" });
-                 }
+                if (feature?.properties?.segment_id) {
+                    setSelectedSegmentId(feature.properties.segment_id); publishSelectedSegment(feature.properties.segment_id);
+                    setSelectedCamera(null); setSelectedHexId(null); setSelectedStopId(null); return;
+                }
+                const hexFeature = event.features?.find((item) => item.layer?.id === "activity-grid-fill");
+                if (hexFeature?.properties?.hex_id != null) {
+                    setSelectedHexId(Number(hexFeature.properties.hex_id)); setSelectedCamera(null); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedStopId(null); return;
+                }
+                const spatial = event.features?.find((item) => item.layer?.id === "survey-circles");
+                if (spatial?.properties?.source_id) {
+                    setSelectedStopId(String(spatial.properties.source_id)); setSelectedCamera(null); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedHexId(null);
+                }
              }}>
              <NavigationControl position="bottom-right" showCompass={false} />
-             {visible.surveyStops && <Source id="survey-stops" type="geojson" data={surveyStops as never}><Layer id="survey-circles" type="circle" paint={{ "circle-color": "#06b6d4", "circle-radius": 6, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
+             {visible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
+                 <Layer id="activity-grid-fill" type="fill" paint={{ "fill-color": ["step", ["get", "potential"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "fill-opacity": 0.55 }} />
+                 <Layer id="activity-grid-outline" type="line" paint={{ "line-color": "#ffffff", "line-width": 0.5, "line-opacity": 0.5 }} />
+             </Source>}
+             {visible.surveyStops && <Source id="survey-stops" type="geojson" data={surveyStopGeoJSON as never}><Layer id="survey-circles" type="circle" paint={{ "circle-color": ["step", ["get", "intervention"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "circle-radius": ["case", ["==", ["get", "source_id"], selectedStopId ?? ""], 9, ["step", ["get", "intervention"], 6, 4, 8, 5, 10]], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
              </Source>}
@@ -195,21 +217,7 @@ export default function MapView() {
                 <Layer id="camera-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 }} />
                 <Layer id="camera-selected-ring" type="circle" filter={["all", ["!", ["has", "point_count"]], ["==", ["get", "camera_id"], selectedCamera?.properties.camera_id ?? ""]]} paint={{ "circle-color": "#ffffff", "circle-radius": ["step", ["get", "tier"], 16, 1, 17, 2, 19, 3, 21], "circle-opacity": 0.35 }} />
                 <Layer id="camera-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["step", ["get", "tier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "tier"], 11, 1, 12, 2, 14, 3, 16], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-opacity": ["step", ["get", "freshness"], 1, 1, 0.8, 2, 0.35, 3, 0.6] }} />
-</Source>}
-              {selectedSpatial && spatialLngLat && (
-                 <Popup longitude={spatialLngLat[0]} latitude={spatialLngLat[1]} closeOnClick={false} className="popup-dark" onClose={() => setSelectedSpatial(null)}>
-                    <div className="spatial-popup">
-                        <span className="spatial-popup-eyebrow">Observasi lapangan</span>
-                        <strong className="spatial-popup-title">{String(selectedSpatial.properties.title ?? "Halte survei")}</strong>
-                        <dl className="spatial-popup-meta">
-                            <div><dt>Skor</dt><dd>{String(selectedSpatial.properties.score ?? "N/A")}</dd></div>
-                            <div><dt>Diamati</dt><dd>{selectedSpatial.properties.observed_at ? new Date(String(selectedSpatial.properties.observed_at)).toLocaleString("id-ID") : "Waktu tidak tersedia"}</dd></div>
-                            {selectedSpatial.properties.source_id && <div><dt>ID sumber</dt><dd>{String(selectedSpatial.properties.source_id)}</dd></div>}
-                            {selectedSpatial.properties.media_count != null && <div><dt>Media</dt><dd>{String(selectedSpatial.properties.media_count)}</dd></div>}
-                        </dl>
-                    </div>
-                </Popup>
-              )}
+ </Source>}
               {hoveredCamera && hoveredPoint && visible.cameras && (
                 <Popup longitude={hoveredPoint[0]} latitude={hoveredPoint[1]} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
                     <div className="marker-popup">
@@ -250,7 +258,13 @@ export default function MapView() {
             </button>
          </Map>
         </div>
-        {selectedCamera ? <SidePanel camera={selectedCamera} onClose={() => setSelectedCamera(null)} /> : <SegmentPanel segmentId={selectedSegmentId} onClose={() => setSelectedSegmentId(null)} />}
+        {selectedCamera
+            ? <SidePanel camera={selectedCamera} onClose={() => setSelectedCamera(null)} />
+            : selectedStopId
+                ? <BusStopPanel sourceId={selectedStopId} onClose={() => setSelectedStopId(null)} />
+                : selectedSegmentId
+                    ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); publishSelectedSegment(null); }} />
+                    : <ActivityGridPanel hexId={selectedHexId} onClose={() => setSelectedHexId(null)} />}
         </div>
     );
 }
