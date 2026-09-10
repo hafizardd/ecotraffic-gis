@@ -5,12 +5,14 @@ import { useEmissionsContext } from "@/context/EmissionsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchLatestSegmentEmissions } from "@/services/api";
 import { analyticsLiveStatus, isNewerSegment } from "@/utils/emissionAnalytics";
-import { fmtDateTimeId, fmtFloatId } from "@/utils/format";
+import { fmtFloatId } from "@/utils/format";
 import type { LatestSegmentEmissionsResponse } from "@/types";
+import SectionTitle from "@/components/ui/SectionTitle";
+import Skeleton from "@/components/ui/Skeleton";
 
 export default function RealtimePollutants() {
     const { filter } = useEmissionAnalytics();
-    const { segmentEmissionMap, connectionStatus } = useEmissionsContext();
+    const { segmentEmissionMap } = useEmissionsContext();
     const [now, setNow] = useState(() => Date.now());
     const [result, setResult] = useState<{ key: string; value?: LatestSegmentEmissionsResponse; error?: string }>({ key: "" });
     const key = `${filter.segmentId ?? ""}:${filter.corridorId ?? ""}`;
@@ -49,20 +51,24 @@ export default function RealtimePollutants() {
     const isLoading = loading && !matches;
     const state = analyticsLiveStatus(summary?.observed_at ?? null, summary?.stale_after_seconds ?? 180, summary?.source_mode ?? "", now);
     const age = summary?.observed_at ? Math.max(0, Math.floor((now - Date.parse(summary.observed_at)) / 1000)) : null;
-    return <section aria-label="Delapan polutan terkini" aria-busy={isLoading}>
-        <div className="card-header analytics-live-header"><strong>Emisi segmen terkini</strong><span className={`analytics-status status-${state.toLowerCase().replace(" ", "-")}`}>{isLoading ? "MEMUAT" : result.error && !matches ? "ERROR" : state}</span></div>
-        <p className="analytics-note">{summary?.segment_count ?? 0} segmen · {age === null ? "Menunggu pengamatan" : `Pengamatan tertua ${age} detik lalu`} · WebSocket {connectionStatus}
-            {summary?.processed_at ? ` · Diproses ${fmtDateTimeId(summary.processed_at)}` : ""}
-            {summary?.estimated_segment_count ? ` · ${summary.estimated_segment_count} segmen estimated (occupancy)` : ""}</p>
-        <p className="analytics-note">Nilai terbaru mengikuti filter lokasi. Rentang waktu berlaku untuk visual historis di bawah.</p>
+    const meta = isLoading
+        ? "Memuat pengamatan terbaru…"
+        : `${summary?.segment_count ?? 0} segmen · Pengamatan terakhir ${age === null ? "belum tersedia" : `${age} detik lalu`}${summary?.estimated_segment_count ? ` · ${summary.estimated_segment_count} estimasi` : ""}`;
+    return <section aria-label="Delapan polutan terkini" aria-busy={isLoading} className="animate-in">
+        <SectionTitle title="Emisi segmen terkini" eyebrow="Data live" meta={meta}
+            aside={<span className={`analytics-status status-${state.toLowerCase().replace(" ", "-")}`}>{isLoading ? "Memuat" : result.error && !matches ? "Error" : state}</span>} />
         {!isLoading && result.error && !matches && <p role="alert" className="analytics-error">{result.error}</p>}
-        <div className="page-card-grid analytics-pollutants">{EMISSION_DEFINITIONS.map(({ key: pollutant, label }) => {
-            const value = summary?.emissions_kg_h[pollutant];
-            return <div key={pollutant} className={`page-card summary-metric pollutant-${pollutant}`}>
-                <span><i className="pollutant-dot" />{label}</span>
-                <strong>{isLoading ? "Memuat…" : value == null ? "—" : fmtFloatId(value, value < 0.01 ? 6 : 3)}</strong>
-                <small>kg/hour · {summary?.segment_count ? state : "Tidak ada data"}</small>
-            </div>;
-        })}</div>
+        <div className="page-card-grid analytics-pollutants">{isLoading
+            ? EMISSION_DEFINITIONS.map(({ key: pollutant }) => <div className="page-card summary-metric" key={pollutant}>
+                <Skeleton height={12} width="55%" /><Skeleton height={26} width="80%" /><Skeleton height={10} width="45%" />
+            </div>)
+            : EMISSION_DEFINITIONS.map(({ key: pollutant, label }) => {
+                const value = summary?.emissions_kg_h[pollutant];
+                return <div key={pollutant} className={`page-card summary-metric pollutant-${pollutant}`}>
+                    <span><i className="pollutant-dot" />{label}</span>
+                    <strong>{value == null ? "—" : fmtFloatId(value, value < 0.01 ? 6 : 3)}</strong>
+                    <small>kg/hour · {summary?.segment_count ? state : "Tidak ada data"}</small>
+                </div>;
+            })}</div>
     </section>;
 }

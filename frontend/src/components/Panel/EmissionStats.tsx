@@ -2,6 +2,7 @@
 
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
+import Skeleton from "@/components/ui/Skeleton";
 
 interface EmissionStatsProps {
     cameraId: string;
@@ -12,7 +13,9 @@ export default function EmissionStats({ cameraId }: EmissionStatsProps) {
     const liveEmission = emissionMap.get(cameraId) ?? null;
     
     if(!liveEmission) {
-        return <div className="data-empty"><span className="loading-spinner small" />Menunggu data emisi real-time...</div>
+        return <div className="stat-grid">{EMISSION_DEFINITIONS.map(({ key }) => (
+            <div key={key} className="stat-card"><Skeleton height={10} width="58%" /><Skeleton height={18} width="72%" /></div>
+        ))}</div>
     }
 
     const emissions = liveEmission.source === "tracking" && liveEmission.instant_emission

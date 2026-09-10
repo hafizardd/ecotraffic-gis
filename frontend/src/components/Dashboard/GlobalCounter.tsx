@@ -2,6 +2,7 @@
 
 import { useEmissionsContext } from "@/context/EmissionsContext"
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
+import Skeleton from "@/components/ui/Skeleton";
 
 export default function GlobalCounter() {
     const { emissionMap } = useEmissionsContext();
@@ -30,7 +31,13 @@ export default function GlobalCounter() {
                         </div>
                     ))
                 ) : (
-                    <div className="empty-inline"><span className="loading-spinner small" />Menunggu data emisi real-time...</div>
+                    EMISSION_DEFINITIONS.map(({ key }) => (
+                        <div key={key} className="emission-total">
+                            <span className="summary-label"><Skeleton height={10} width="68%" /></span>
+                            <span className="summary-value"><Skeleton height={16} width="82%" /></span>
+                            <span className="hourly"><Skeleton height={8} width="56%" /></span>
+                        </div>
+                    ))
                 )}
             </div>
         </section>

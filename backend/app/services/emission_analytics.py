@@ -7,6 +7,8 @@ silently mixed into observed segment analytics.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import reduce
+from operator import add
 
 from sqlalchemy import Float, cast, func, select
 
@@ -128,7 +130,10 @@ def trend_query(filters: AnalyticsFilter, seconds: int):
 def top_query(filters: AnalyticsFilter, limit: int, pollutant: str = "co2"):
     means = segment_means(filters)
     value = func.sum(means.c[f"{pollutant}_kg_h"]).label("emission_kg_h")
+    # Per-pollutant columns let the client render one bar series per selected
+    # pollutant without re-aggregating anything itself.
     return select(means.c.corridor_id, means.c.corridor_name, value,
+        *[func.sum(means.c[f"{p.lower()}_kg_h"]).label(f"{p.lower()}_kg_h") for p in POLLUTANTS],
         func.array_agg(means.c.segment_id).label("segment_ids"),
         func.sum(means.c.sample_count).label("sample_count"),
         func.sum(means.c.estimated_sample_count).label("estimated_sample_count"),
@@ -143,9 +148,72 @@ def composition_query(filters: AnalyticsFilter):
         func.sum(means.c.estimated_sample_count).label("estimated_sample_count"))
 
 
-def history_query(filters: AnalyticsFilter):
+VEHICLE_KEYS = tuple(VEHICLE_CATEGORIES)
+
+
+def vehicle_segment_means(filters: AnalyticsFilter, bucket_seconds: int | None = None):
+    """Per-segment mean volume/VKT per vehicle type, optionally bucketed in time."""
     facts = fact_query(filters).cte("facts")
-    return select(facts).order_by(facts.c.period_start.desc(), facts.c.segment_id)
+    keys = [facts.c.segment_id, facts.c.segment_name, facts.c.corridor_id, facts.c.corridor_name]
+    if bucket_seconds:
+        keys.insert(0, func.to_timestamp(func.floor(func.extract("epoch", facts.c.period_start) / bucket_seconds) * bucket_seconds).label("timestamp"))
+    return select(*keys,
+        *[func.avg(cast(facts.c.volume_per_hour[key].astext, Float)).label(f"{key}_veh_h") for key in VEHICLE_KEYS],
+        *[func.avg(cast(facts.c.vkt_km_h[key].astext, Float)).label(f"{key}_vkt") for key in VEHICLE_KEYS],
+        func.count().label("sample_count"),
+        func.count().filter(facts.c.vehicle_count_semantics == "snapshot_occupancy").label("estimated_sample_count"),
+    ).group_by(*keys).cte("vehicle_means")
+
+
+def _vehicle_total(means, suffix: str):
+    return reduce(add, [means.c[f"{key}_{suffix}"] for key in VEHICLE_KEYS])
+
+
+def vehicle_totals_query(filters: AnalyticsFilter):
+    means = vehicle_segment_means(filters)
+    return select(
+        *[func.sum(means.c[f"{key}_veh_h"]).label(f"{key}_veh_h") for key in VEHICLE_KEYS],
+        *[func.sum(means.c[f"{key}_vkt"]).label(f"{key}_vkt") for key in VEHICLE_KEYS],
+        func.sum(means.c.sample_count).label("sample_count"),
+        func.sum(means.c.estimated_sample_count).label("estimated_sample_count"))
+
+
+def vehicle_series_query(filters: AnalyticsFilter, seconds: int):
+    means = vehicle_segment_means(filters, seconds)
+    return select(means.c.timestamp,
+        *[func.sum(means.c[f"{key}_veh_h"]).label(f"{key}_veh_h") for key in VEHICLE_KEYS],
+        func.count().label("segment_count"),
+    ).group_by(means.c.timestamp).order_by(means.c.timestamp)
+
+
+def vehicle_ranking_query(filters: AnalyticsFilter, limit: int):
+    means = vehicle_segment_means(filters)
+    total = _vehicle_total(means, "veh_h").label("total_veh_h")
+    return select(means.c.segment_id, means.c.segment_name, means.c.corridor_name,
+        *[means.c[f"{key}_veh_h"] for key in VEHICLE_KEYS], total,
+        means.c.sample_count, means.c.estimated_sample_count,
+    ).order_by(total.desc().nullslast(), means.c.segment_id).limit(limit)
+
+
+def vehicle_composition(totals: dict) -> list[dict]:
+    """Composition share per vehicle type from backend-computed totals."""
+    values = {key: totals.get(key) for key in VEHICLE_KEYS}
+    total = sum(value for value in values.values() if value is not None)
+    return [{"key": key, "vehicles_per_hour": values[key],
+        "share": (values[key] / total) if (total and values[key] is not None) else None} for key in VEHICLE_KEYS]
+
+
+HISTORY_SORTS = {
+    "period_start": "period_start", "segment_name": "segment_name",
+    "corridor_name": "corridor_name", "source_mode": "source_mode",
+}
+
+
+def history_query(filters: AnalyticsFilter, sort: str = "period_start", order: str = "desc"):
+    facts = fact_query(filters).cte("facts")
+    column = facts.c[HISTORY_SORTS[sort]]
+    ordering = column.asc() if order == "asc" else column.desc()
+    return select(facts).order_by(ordering, facts.c.segment_id)
 
 
 def serialize_fact(row, now: datetime | None = None) -> dict:
@@ -181,6 +249,35 @@ def serialize_fact(row, now: datetime | None = None) -> dict:
         "aggregation_policy": row["aggregation_policy"],
         "category_pollutant_breakdown_g_h": row["category_pollutant_breakdown_g_h"],
         "calculation_metadata": metadata.get("calculation_metadata", {}), "units": UNITS,
+    }
+
+
+def serialize_history(row, now: datetime | None = None) -> dict:
+    """Curated, user-facing history record. Raw provenance sits under `detail`."""
+    fact = serialize_fact(row, now)
+    emissions = fact["emissions_kg_h"]
+    total_emissions = (sum(emissions[p.lower()] for p in POLLUTANTS)
+        if all(emissions[p.lower()] is not None for p in POLLUTANTS) else None)
+    volume = fact["volume_per_hour"]
+    return {
+        "id": fact["id"], "period_start": fact["period_start"], "period_end": fact["period_end"],
+        "observed_at": fact["observed_at"], "processed_at": fact["processed_at"],
+        "segment_id": fact["segment_id"], "segment_name": fact["segment_name"],
+        "corridor_id": fact["corridor_id"], "corridor_name": fact["corridor_name"],
+        "source_mode": fact["source_mode"], "quality_status": fact["quality_status"],
+        "freshness_status": fact["freshness_status"],
+        "vehicle_count_semantics": fact["vehicle_count_semantics"],
+        "emissions_kg_h": emissions, "total_emissions_kg_h": total_emissions,
+        "volume_per_hour": volume,
+        "total_vehicles_per_hour": sum(volume.values()) if volume else None,
+        "units": fact["units"],
+        "detail": {
+            "calculation_version": fact["calculation_version"],
+            "calculation_mode": fact["calculation_mode"], "vkt_km_h": fact["vkt_km_h"],
+            "source_cameras": fact["source_cameras"], "source_streams": fact["source_streams"],
+            "source_observation_count": fact["source_observation_count"],
+            "observation_duration_seconds": fact["observation_duration_seconds"],
+        },
     }
 
 

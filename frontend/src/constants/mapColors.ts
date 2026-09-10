@@ -21,21 +21,12 @@ export const FRESHNESS_COLORS = {
 };
 
 export const SPATIAL_COLORS = {
-    populationZone: "#8b5cf6",
     surveyStop: "#06b6d4",
 };
-
-export const POPULATION_SCALE = [
-    { color: "#ede9fe", label: "< 25.000 jiwa" },
-    { color: "#c4b5fd", label: "25.000–99.999 jiwa" },
-    { color: "#8b5cf6", label: "100.000–249.999 jiwa" },
-    { color: "#6d28d9", label: "≥ 250.000 jiwa" },
-] as const;
 
 export const LAYER_LABELS = {
     cameras: "CCTV kamera",
     segments: "Segmen jalan",
-    populationZones: "Wilayah populasi",
     surveyStops: "Halte survei",
 } as const;
 
@@ -44,6 +35,5 @@ export type MapLayerKey = keyof typeof LAYER_LABELS;
 export const DEFAULT_VISIBLE_LAYERS: Record<MapLayerKey, boolean> = {
     cameras: true,
     segments: true,
-    populationZones: false,
     surveyStops: false,
 };

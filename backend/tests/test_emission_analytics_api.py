@@ -130,6 +130,21 @@ async def test_history_pagination_and_exports_use_identical_facts(api):
     assert float(rows[0]["car_vehicles_h"]) == records[0]["volume_per_hour"]["car"]
 
 
+async def test_vehicle_analytics_are_aggregated_server_side(api):
+    client, params, _ = api
+    response = await client.get("/api/analytics/emissions/vehicles", params=params)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body["totals"]) == {"car", "motorcycle", "bus", "truck"}
+    assert body["totals"]["car"] == 120  # mean(A=60) + mean(B=60), synthetic excluded
+    assert body["composition"][0]["share"] == 0.25
+    assert [row["key"] for row in body["composition"]] == ["car", "motorcycle", "bus", "truck"]
+    assert len(body["ranking"]) == 2
+    assert body["ranking"][0]["total_veh_h"] == 240  # four categories x 60 per segment
+    assert body["vkt"]["car"] == 60
+    assert body["series"][0]["car_veh_h"] == 120
+
+
 async def test_empty_ranges_and_invalid_inputs(api):
     client, params, _ = api
     for extra, expected in [({"from": params["to"], "to": params["from"]}, 422), ({"from": "bad-date"}, 422),

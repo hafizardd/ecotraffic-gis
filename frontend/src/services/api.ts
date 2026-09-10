@@ -2,7 +2,7 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
 import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
-import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor } from "@/types";
+import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
@@ -67,7 +67,6 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
     return response.json();
 }
 
-export const fetchPopulationZones = () => fetchSpatial("/api/spatial/population-zones");
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);
 
 function analyticsUrl(path: string, query: Partial<AnalyticsQuery> = {}, extra: Record<string, string> = {}) {
@@ -96,10 +95,12 @@ export const fetchPollutantComposition = (query: AnalyticsQuery, signal?: AbortS
     analyticsFetch<AnalyticsResponse<PollutantComposition> & { sample_count: number }>("composition", query, signal);
 export const fetchLatestSegmentEmissions = (query: Partial<AnalyticsQuery> = {}, signal?: AbortSignal) =>
     analyticsFetch<LatestSegmentEmissionsResponse>("latest", query, signal);
-export const fetchEmissionHistory = (query: AnalyticsQuery, page = 1, signal?: AbortSignal) =>
-    analyticsFetch<EmissionHistoryResponse>("history", query, signal, { page: String(page), page_size: "25" });
+export const fetchEmissionHistory = (query: AnalyticsQuery, page = 1, sort = "period_start", order: "asc" | "desc" = "desc", signal?: AbortSignal) =>
+    analyticsFetch<EmissionHistoryResponse>("history", query, signal, { page: String(page), page_size: "25", sort, order });
 export const fetchAnalyticsOptions = (signal?: AbortSignal) =>
     analyticsFetch<{ segments: AnalyticsSegmentOption[] }>("options", {}, signal);
+export const fetchVehicleAnalytics = (query: AnalyticsQuery, signal?: AbortSignal) =>
+    analyticsFetch<VehicleAnalyticsResponse>("vehicles", query, signal);
 
 export async function exportEmissionHistory(query: AnalyticsQuery, format: "csv" | "json"): Promise<void> {
     const response = await fetch(analyticsUrl("export", query, { format }), { cache: "no-store" });

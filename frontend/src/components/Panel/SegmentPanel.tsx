@@ -6,6 +6,8 @@ import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchSegmentEmission } from "@/services/api";
 import { EmissionUpdate, SegmentEmissionDetail } from "@/types";
 import { useEmissionsContext } from "@/context/EmissionsContext";
+import Skeleton from "@/components/ui/Skeleton";
+import SectionTitle from "@/components/ui/SectionTitle";
 import {
     MISSING_LABEL,
     fmtDateTimeId,
@@ -96,7 +98,15 @@ function SegmentDetailPanel({
                 <button onClick={onClose} className="panel-close" aria-label="Tutup panel segmen"><X aria-hidden="true" /></button>
             </div>
             <div className="panel-content">
-                {!detail && !error && <div className="segment-state"><span className="loading-spinner" />Memuat detail segmen...</div>}
+                {!detail && !error && <div aria-hidden="true">
+                    <div className="segment-overview"><Skeleton height={16} width="62%" /><Skeleton height={14} width="28%" /></div>
+                    <section className="panel-section">
+                        <Skeleton height={12} width="42%" />
+                        <div className="stat-grid" style={{ marginTop: 14 }}>{Array.from({ length: 8 }, (_, index) => (
+                            <div className="stat-card" key={index}><Skeleton height={10} width="56%" /><Skeleton height={18} width="72%" /></div>
+                        ))}</div>
+                    </section>
+                </div>}
                 {error && <div className="segment-state error-state"><strong>Data segmen tidak tersedia</strong><span>{error.message}</span></div>}
                 {liveDetail && (
                     <>
@@ -165,7 +175,7 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                 </b>
             </div>
             <section className="panel-section segment-emission-section">
-                <div className="section-heading"><div><span>EMISI SEGMEN</span><small>Nilai agregat dalam g/jam · {sourceBadge}</small></div></div>
+                <SectionTitle title="Emisi segmen" meta={`Nilai agregat dalam g/jam · ${sourceBadge}`} />
                 {hasAny && shown ? (
                     <div className="stat-grid">
                         {EMISSION_DEFINITIONS.map(({ key, label }) => (
@@ -205,7 +215,7 @@ function PopulationSection({ context }: { context: SegmentEmissionDetail["popula
     const formatPopulation = (value: number | null | undefined) => value == null ? MISSING_LABEL : `${fmtIntId(value)} jiwa`;
     return (
         <section className="panel-section segment-population-section">
-            <div className="section-heading"><div><span>POPULASI WILAYAH</span><small>Konteks administratif segmen</small></div></div>
+            <SectionTitle title="Populasi wilayah" meta="Konteks administratif segmen" />
             {!primary && intersecting.length === 0 && <p className="data-empty">{MISSING_LABEL}</p>}
             {primary && (
                 <dl className="population-summary">
@@ -256,7 +266,7 @@ function SpatialCriteriaSection({ details, ahpMetadata, rawCriteria }: { details
     const normalized = (ahpMetadata as Record<string, unknown> | undefined)?.["normalized_values"] as Record<string, number> | undefined;
     return (
         <section className="panel-section segment-spatial-section">
-            <div className="section-heading"><div><span>KRITERIA SPASIAL</span><small>K3, K4, K5</small></div></div>
+            <SectionTitle title="Kriteria spasial" meta="K3, K4, K5" />
             <div className="criterion-card">
                 <div className="criterion-card-header"><span>K3 — Akses Halte</span><strong className={rawCriteria["K3"] == null ? "data-missing" : undefined}>{rawCriteria["K3"] == null ? MISSING_LABEL : fmtFloatId(Number(rawCriteria["K3"]), 2)}</strong></div>
                 <small>Survei terdekat: {k3?.nearby_observation_count == null ? MISSING_LABEL : fmtIntId(k3.nearby_observation_count)} · Skor halte: {k3?.composite_stop_score == null ? MISSING_LABEL : fmtFloatId(Number(k3.composite_stop_score), 2)} · Versi: {k3?.scoring_version ?? MISSING_LABEL}</small>
@@ -295,14 +305,14 @@ function VehicleMetrics({
     if (values == null) {
         return (
             <section className="panel-section segment-vehicle-section">
-                <div className="section-heading"><div><span>{title}</span><small>{subtitle}</small></div>{estimated && <b className="estimate-badge">Estimasi</b>}</div>
+                <SectionTitle title={title} meta={subtitle} aside={estimated ? <b className="estimate-badge">Estimasi</b> : undefined} />
                 <p className="data-empty">{unavailableLabel}</p>
             </section>
         );
     }
     return (
         <section className="panel-section segment-vehicle-section">
-            <div className="section-heading"><div><span>{title}</span><small>{subtitle}</small></div>{estimated && <b className="estimate-badge">Estimasi</b>}</div>
+            <SectionTitle title={title} meta={subtitle} aside={estimated ? <b className="estimate-badge">Estimasi</b> : undefined} />
             <div className="vehicle-summary">
                 {VEHICLE_TYPES.map((key) => {
                     const value = values?.[key];

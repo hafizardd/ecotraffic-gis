@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, POPULATION_SCALE, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
+import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, SPATIAL_COLORS, MapLayerKey } from "@/constants/mapColors";
+import Checkbox from "@/components/ui/Checkbox";
 
 interface MapLegendProps {
     visible: Record<MapLayerKey, boolean>;
@@ -13,17 +14,15 @@ interface MapLegendProps {
     cameraTotal: number;
 }
 
-const LAYER_KEYS: MapLayerKey[] = ["cameras", "segments", "populationZones", "surveyStops"];
+const LAYER_KEYS: MapLayerKey[] = ["cameras", "segments", "surveyStops"];
 const LAYER_LABELS: Record<MapLayerKey, string> = {
     cameras: "CCTV kamera",
     segments: "Segmen jalan",
-    populationZones: "Wilayah populasi",
     surveyStops: "Halte survei",
 };
 const LAYER_DOT: Record<MapLayerKey, string> = {
     cameras: CAMERA_TIER_COLORS.low,
     segments: "#facc15",
-    populationZones: SPATIAL_COLORS.populationZone,
     surveyStops: SPATIAL_COLORS.surveyStop,
 };
 
@@ -63,21 +62,12 @@ export default function MapLegend({ visible, onToggle, segmentBuckets, cameraFre
                         </ul>
                     </section>
                     <section className="map-legend-section">
-                        <h3>Populasi wilayah</h3>
-                        <ul className="legend-swatches">{POPULATION_SCALE.map((stop) => <li key={stop.label}><i style={{ background: stop.color }} />{stop.label}</li>)}</ul>
-                        <p className="legend-note">Skala berdasarkan jumlah penduduk, bukan kepadatan.</p>
-                    </section>
-                    <section className="map-legend-section">
                         <h3>Lapisan</h3>
                         <ul className="legend-layers">
                             {LAYER_KEYS.map((key) => (
                                 <li key={key}>
-                                    <label className={visible[key] ? "active" : ""}>
-                                        <input type="checkbox" checked={visible[key]} onChange={() => onToggle(key)} />
-                                        <span className="checkbox-indicator" style={{ borderColor: LAYER_DOT[key], background: visible[key] ? LAYER_DOT[key] : "transparent" }} />
-                                        <i style={{ background: LAYER_DOT[key] }} />
-                                        {LAYER_LABELS[key]}
-                                    </label>
+                                    <Checkbox className={visible[key] ? "active" : ""} checked={visible[key]} onChange={() => onToggle(key)}
+                                        label={<><i style={{ background: LAYER_DOT[key] }} />{LAYER_LABELS[key]}</>} />
                                 </li>
                             ))}
                         </ul>
