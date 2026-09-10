@@ -1,8 +1,13 @@
-"""24h synthetic HISTORICAL backfill for `data_source != LIVE` cameras.
+"""DEPRECATED — dev-seed only. 24h synthetic HISTORICAL backfill.
 
-Gives map/panel fallback before live tracking; never run on a non-empty
-table without `--only-missing` (non-idempotent otherwise: reruns duplicate
-24 rows per segment).
+Superseded by the real historical snapshot sampler
+(`app.workers.snapshot_worker`, source_mode=SNAPSHOT_REAL). Kept for local
+development on an empty database.
+
+Never run on a non-empty table without `--only-missing` (non-idempotent
+otherwise: reruns duplicate 24 rows per segment), and never run over
+SNAPSHOT_REAL rows at all — the upsert key `uq_segment_emission_period_version`
+would silently overwrite real observations.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -24,11 +29,24 @@ from app.services.spatial_integration import compute_all_spatial_criteria
 DEFAULT_BASE_VOLUME = 120
 
 
+def _has_snapshot_real(db) -> bool:
+    return db.execute(
+        select(SegmentEmission.id).where(
+            SegmentEmission.ahp_metadata["source_mode"].astext == "SNAPSHOT_REAL"
+        ).limit(1)
+    ).first() is not None
+
+
 def generate(seed: int | None = None, only_missing: bool = False) -> int:
     rng = random.Random(seed)
     created = 0
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     with get_sync_db() as db:
+        if not only_missing and _has_snapshot_real(db):
+            raise SystemExit(
+                "Refusing to run: SNAPSHOT_REAL rows exist. Use --only-missing, or "
+                "target an empty segment_emissions table."
+            )
         rows = db.execute(select(Camera, CameraRoadSegment, RoadSegment).join(
             CameraRoadSegment, CameraRoadSegment.camera_id == Camera.id
         ).join(RoadSegment, CameraRoadSegment.road_segment_id == RoadSegment.id).where(

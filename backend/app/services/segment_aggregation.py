@@ -29,6 +29,30 @@ class SegmentAggregation:
     observed_at: object
 
 
+def select_one_camera_per_stream(observations):
+    """One camera per stream per window: latest ``captured_at`` wins, tie-break
+    smallest ``camera_id``. Returns ``(selected, dropped_by_stream)``.
+
+    Resolves camera collisions before scoring so a colliding segment still
+    produces facts instead of tripping the aggregation guard.
+    """
+    by_stream: dict[str, list[SegmentTrafficObservation]] = defaultdict(list)
+    for item in observations:
+        by_stream[item.lane_or_stream_id].append(item)
+    selected = []
+    dropped: dict[str, list[str]] = {}
+    for stream, stream_observations in by_stream.items():
+        cameras = {item.camera_id for item in stream_observations}
+        if len(cameras) <= 1:
+            selected.extend(stream_observations)
+            continue
+        latest = max(item.captured_at for item in stream_observations)
+        winner = min(item.camera_id for item in stream_observations if item.captured_at == latest)
+        selected.extend(item for item in stream_observations if item.camera_id == winner)
+        dropped[stream] = sorted(cameras - {winner})
+    return selected, dropped
+
+
 def aggregate_segment_observations(
     observations: Iterable[SegmentTrafficObservation],
     *,

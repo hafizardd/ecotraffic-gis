@@ -15,6 +15,7 @@ from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
 from app.models.segment_traffic_observation import SegmentTrafficObservationRecord
 from app.services.emission_analytics import serialize_model
+from app.services.segment_aggregation import select_one_camera_per_stream
 from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_emission_store import persist_segment_emission_sync
 from app.services.segment_latest_state import SegmentLatestStateStore
@@ -117,6 +118,13 @@ def recalculate_segment_emissions():
                 spatial = None
                 for period_start, window in sorted(windows.items()):
                     observations, note = _pick_observations(window, segment.road_segment_id)
+                    observations, dropped = select_one_camera_per_stream(observations)
+                    if dropped:
+                        logger.info("segment_duplicate_stream_deduped", extra={
+                            "segment_id": segment.road_segment_id,
+                            "dropped_cameras": dropped,
+                            "kept_cameras": sorted({o.camera_id for o in observations}),
+                        })
                     signature = hashlib.sha256(json.dumps(sorted((o.to_payload() for o in observations),
                         key=lambda o: (o["camera_id"], o["captured_at"])), sort_keys=True).encode()).hexdigest()
                     previous = existing.get(period_start)
@@ -131,6 +139,9 @@ def recalculate_segment_emissions():
                         period_end=period_start + timedelta(seconds=seconds), road_length_km=segment.length_km,
                         spatial_criteria=spatial["raw_values"], spatial_details=spatial)
                     result["calculation_metadata"].update(observation_signature=signature, selection_note=note)
+                    if dropped:
+                        result["calculation_metadata"]["selection_note"] = "duplicate_stream_camera_deduped"
+                        result["calculation_metadata"]["dropped_cameras"] = dropped
                     emission = persist_segment_emission_sync(db, segment.id, result)
                     db.commit()
                     calculated += 1

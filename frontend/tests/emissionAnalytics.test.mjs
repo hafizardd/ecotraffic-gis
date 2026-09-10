@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyticsQuery, analyticsLiveStatus, isNewerSegment, validRealtimeSegment } from "../src/utils/emissionAnalytics.ts";
+import { analyticsQuery, analyticsLiveStatus, filterSelectOptions, isNewerSegment, numberDuplicateNames, pageWindow, validRealtimeSegment } from "../src/utils/emissionAnalytics.ts";
 
 const now = "2026-09-10T12:00:00.000Z";
 const filter = { timeRange: "1h", segmentId: "A", corridorId: "C", from: null, to: null };
@@ -40,4 +40,26 @@ test("all eight zero pollutants are valid; missing/nonfinite payloads are reject
     assert.equal(validRealtimeSegment({ ...row, emissions_kg_h: { co2: 1 } }), false);
     assert.equal(validRealtimeSegment({ ...row, emissions_kg_h: { ...row.emissions_kg_h, co2: Infinity } }), false);
     assert.equal(validRealtimeSegment(null), false);
+});
+
+test("pagination window keeps first/last and collapses gaps", () => {
+    assert.deepEqual(pageWindow(1, 1), [1]);
+    assert.deepEqual(pageWindow(1, 5), [1, 2, 3, 4, 5]);
+    assert.deepEqual(pageWindow(10, 20), [1, "gap", 8, 9, 10, 11, 12, "gap", 20]);
+    assert.deepEqual(pageWindow(1, 20), [1, 2, 3, "gap", 20]);
+    assert.deepEqual(pageWindow(20, 20), [1, "gap", 18, 19, 20]);
+});
+
+test("duplicate road names are numbered in order; singletons are untouched", () => {
+    assert.deepEqual(numberDuplicateNames(["Jalan Kenari", "Jalan Kenari", "Jalan Kenari"]), ["Jalan Kenari 1", "Jalan Kenari 2", "Jalan Kenari 3"]);
+    assert.deepEqual(numberDuplicateNames(["A", "B", "A", "A", "B", "C"]), ["A 1", "B 1", "A 2", "A 3", "B 2", "C"]);
+    assert.deepEqual(numberDuplicateNames([]), []);
+});
+
+test("select search is case-insensitive and trims the query", () => {
+    const options = [{ value: "1", label: "Jalan Kenari 1" }, { value: "2", label: "Jalan Magelang" }, { value: "3", label: "Jalan Veteran" }];
+    assert.deepEqual(filterSelectOptions(options, "kenari"), [options[0]]);
+    assert.deepEqual(filterSelectOptions(options, "  JALAN  "), options);
+    assert.deepEqual(filterSelectOptions(options, ""), options);
+    assert.deepEqual(filterSelectOptions(options, "zzz"), []);
 });

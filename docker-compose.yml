@@ -56,6 +56,20 @@ services:
       - postgres
       - redis
 
+  # Historical snapshot sampler: one YOLO frame per camera per cycle.
+  # Needs the CV image (ultralytics/OpenCV), unlike the calc-only segment-worker.
+  snapshot-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: celery -A app.workers.celery_app worker -Q snapshot --loglevel=info --concurrency=1
+    env_file: ./backend/.env
+    volumes:
+      - ./backend/yolo:/app/yolo
+    depends_on:
+      - postgres
+      - redis
+
   frontend:
     build: ./frontend
     ports:

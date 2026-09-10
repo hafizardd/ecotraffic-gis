@@ -2,7 +2,7 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
 import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
-import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
+import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
@@ -97,6 +97,27 @@ export const fetchLatestSegmentEmissions = (query: Partial<AnalyticsQuery> = {},
     analyticsFetch<LatestSegmentEmissionsResponse>("latest", query, signal);
 export const fetchEmissionHistory = (query: AnalyticsQuery, page = 1, sort = "period_start", order: "asc" | "desc" = "desc", signal?: AbortSignal) =>
     analyticsFetch<EmissionHistoryResponse>("history", query, signal, { page: String(page), page_size: "25", sort, order });
+
+export interface DeleteEmissionHistoryOptions {
+    page?: number; page_size?: number; sort?: string; order?: "asc" | "desc";
+    scope?: "beyond" | "page"; dry_run?: boolean;
+}
+
+export async function deleteEmissionHistory(
+    query: AnalyticsQuery, options: DeleteEmissionHistoryOptions = {},
+): Promise<EmissionHistoryDeleteResponse> {
+    const { page = 1, page_size = 25, sort = "period_start", order = "desc", scope = "beyond", dry_run = false } = options;
+    const params = new URLSearchParams({
+        page: String(page), page_size: String(page_size), sort, order, scope, dry_run: String(dry_run),
+    });
+    for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
+    const response = await fetch(`${API_BASE ?? ""}/api/analytics/emissions/history?${params}`, { method: "DELETE", cache: "no-store" });
+    if (!response.ok) {
+        const body: { detail?: unknown } = await response.json().catch(() => ({}));
+        throw new Error(typeof body.detail === "string" ? body.detail : `Gagal menghapus riwayat (${response.status})`);
+    }
+    return response.json();
+}
 export const fetchAnalyticsOptions = (signal?: AbortSignal) =>
     analyticsFetch<{ segments: AnalyticsSegmentOption[] }>("options", {}, signal);
 export const fetchVehicleAnalytics = (query: AnalyticsQuery, signal?: AbortSignal) =>
