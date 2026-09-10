@@ -8,6 +8,7 @@ import EmissionStats from "./EmissionStats";
 import VehicleCount from "./VehicleCount";
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import EmissionChart from "./EmissionChart";
+import SectionTitle from "@/components/ui/SectionTitle";
 
 interface SidePanelProps {
     camera: CameraFeature | null;
@@ -50,18 +51,18 @@ export default function SidePanel({ camera, onClose }: SidePanelProps) {
                     <small>{ageSeconds == null ? "Belum ada data" : `${ageSeconds}s sejak capture terakhir`}</small>
                 </div>
                 <section className="panel-section video-section">
-                    {isTrackingSource && <><div className="section-heading"><div><span>PELACAKAN VISUAL</span><small>Deteksi dan tracking kendaraan real-time</small></div></div><VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} onStatusChange={setTrackingStatus} /></>}
+                    {isTrackingSource && <><SectionTitle title="Pelacakan visual" meta="Deteksi dan tracking kendaraan real-time" /><VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} onStatusChange={setTrackingStatus} /></>}
                 </section>
                 <section className="panel-section">
-                    <div className="section-heading"><div><span>CURRENT EMISSIONS</span><small>Emisi saat ini dalam g/min</small></div></div>
+                    <SectionTitle title="Emisi saat ini" meta="Nilai dalam g/min" />
                     <EmissionStats cameraId={camera.properties.camera_id} />
                 </section>
                 <section className="panel-section">
-                    <div className="section-heading"><div><span>VEHICLE COUNT</span><small>Deteksi kendaraan terkini</small></div></div>
+                    <SectionTitle title="Deteksi kendaraan" meta="Hitungan kendaraan terkini" />
                     <VehicleCount emission={liveEmission} />
                 </section>
                 <section className="panel-section chart-section">
-                    <div className="section-heading"><div><span>EMISSION TREND</span><small>Monitoring emisi real-time</small></div></div>
+                    <SectionTitle title="Tren emisi" meta="Monitoring emisi real-time" />
                     <EmissionChart cameraId={camera.properties.camera_id} liveEmission={liveEmission} />
                 </section>
             </div>

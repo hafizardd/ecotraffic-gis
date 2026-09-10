@@ -1,5 +1,5 @@
 "use client";
-import { Map, TrendingUp, CarFront, History, FileText, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Map, TrendingUp, CarFront, History, ChevronsLeft, ChevronsRight } from "lucide-react";
 import type { ActiveView } from "./DashboardShell";
 
 interface SidebarProps {
@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-    { label: "Peta Live", icon: Map, view: "peta" as const }, { label: "Emisi & Tren", icon: TrendingUp, view: "emisi" as const }, { label: "Kendaraan", icon: CarFront, view: "kendaraan" as const }, { label: "Riwayat", icon: History, view: "riwayat" as const }, { label: "Laporan", icon: FileText, view: "laporan" as const },
+    { label: "Peta Live", icon: Map, view: "peta" as const }, { label: "Emisi & Tren", icon: TrendingUp, view: "emisi" as const }, { label: "Kendaraan", icon: CarFront, view: "kendaraan" as const }, { label: "Riwayat", icon: History, view: "riwayat" as const },
 ];
 
 export default function Sidebar({ open, onToggle, activeView, onViewChange }: SidebarProps) {

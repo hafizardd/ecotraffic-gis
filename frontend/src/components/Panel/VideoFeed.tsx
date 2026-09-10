@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { API_BASE } from "@/services/api"
+import Skeleton from "@/components/ui/Skeleton"
 
 interface VideoFeedProps {
     cameraId: string;
@@ -71,8 +72,7 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
         <div className="video-frame" style={{ position: "relative" }}>
             {status === "loading" && (
                 <div className="video-loading">
-                    <span className="loading-spinner" />
-                    Menghubungkan ke kamera...
+                    <Skeleton height="100%" width="100%" radius={0} />
                 </div>
             )}
             {status === "error" && (

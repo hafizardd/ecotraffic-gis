@@ -173,7 +173,6 @@ export interface SegmentEmissionDetail {
 }
 export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
 export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
-export type SpatialLayerData = { populationZones: SpatialFeatureCollection; surveyStops: SpatialFeatureCollection };
 // WS `segment_update` payload uses `pollutant_totals` (= `pollutant_totals_g_h` in REST detail).
 // Map via SegmentPanel liveDetail mapper; do not rename without updating both.
 export interface SegmentUpdateData {
@@ -200,11 +199,11 @@ export interface AnalyticsQuery { from: string; to: string; segment_id?: string;
 export type EmissionTrendPoint = Record<`${PollutantKey}_kg_h`, number | null> & {
     timestamp: string; segment_count: number; sample_count: number; estimated_sample_count: number;
 };
-export interface TopEmissionCorridor {
+export type TopEmissionCorridor = {
     rank: number; corridor_id: string; corridor_name: string; segment_ids: string[];
     pollutant: PollutantKey; emission_kg_h: number | null; sample_count: number;
     estimated_sample_count: number; observed_at: string;
-}
+} & Record<`${PollutantKey}_kg_h`, number | null>;
 export interface PollutantComposition { pollutant: string; key: PollutantKey; kg_h: number | null; }
 export interface RealtimeSegmentEmission {
     id: string; segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
@@ -220,19 +219,64 @@ export interface RealtimeSegmentEmission {
     category_pollutant_breakdown_g_h: Record<string, Record<string, number>>;
     calculation_metadata: Record<string, unknown>;
 }
-export type EmissionHistoryRecord = RealtimeSegmentEmission;
+export interface HistoryRecordDetail {
+    calculation_version: number;
+    calculation_mode: string;
+    vkt_km_h: VehicleRates | null;
+    source_cameras: string[];
+    source_streams: string[];
+    source_observation_count: number;
+    observation_duration_seconds: number;
+}
+export interface EmissionHistoryRecord {
+    id: string;
+    period_start: string; period_end: string; observed_at: string; processed_at: string;
+    segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
+    source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY";
+    quality_status: "observed" | "estimated";
+    freshness_status: "fresh" | "stale";
+    vehicle_count_semantics: string;
+    emissions_kg_h: PollutantRates;
+    total_emissions_kg_h: number | null;
+    volume_per_hour: VehicleRates | null;
+    total_vehicles_per_hour: number | null;
+    units: { emissions: string; volume_per_hour: string; vkt_km_h: string };
+    detail: HistoryRecordDetail;
+}
 export interface AnalyticsResponse<T> { from: string; to: string; data: T[]; }
 export interface EmissionHistoryResponse extends AnalyticsResponse<EmissionHistoryRecord> {
-    total: number; page: number; page_size: number;
+    total: number; page: number; page_size: number; sort: string; order: "asc" | "desc";
+    units: { emissions: string; volume_per_hour: string; vkt_km_h: string };
 }
-export interface LatestSegmentEmissionsResponse {
-    timestamp: string; segments: RealtimeSegmentEmission[];
+export interface LatestSegmentEmissionsResponse {    timestamp: string; segments: RealtimeSegmentEmission[];
     summary: { emissions_kg_h: PollutantRates; segment_count: number; estimated_segment_count: number;
         freshness_seconds: number | null; stale_after_seconds: number; observed_at: string | null;
         processed_at: string | null; source_mode: "LIVE" | "HISTORICAL";
     };
 }
 export interface AnalyticsSegmentOption { segment_id: string; segment_name: string; corridor_id: string; corridor_name: string; }
+export type VehicleKey = "car" | "motorcycle" | "bus" | "truck";
+export type VehicleTotals = Record<VehicleKey, number | null>;
+export interface VehicleCompositionSlice { key: VehicleKey; vehicles_per_hour: number | null; share: number | null; }
+export interface VehicleRankingRow {
+    rank: number; segment_id: string; segment_name: string; corridor_name: string;
+    car_veh_h: number | null; motorcycle_veh_h: number | null; bus_veh_h: number | null; truck_veh_h: number | null;
+    total_veh_h: number | null; sample_count: number; estimated_sample_count: number;
+}
+export interface VehicleSeriesPoint {
+    timestamp: string; car_veh_h: number | null; motorcycle_veh_h: number | null;
+    bus_veh_h: number | null; truck_veh_h: number | null; segment_count: number;
+}
+export interface VehicleAnalyticsResponse {
+    from: string; to: string; bucket: string;
+    units: { volume_per_hour: string; vkt_km_h: string };
+    totals: VehicleTotals; total_vehicles_per_hour: number | null;
+    vkt: VehicleTotals; total_vkt_km_h: number | null;
+    composition: VehicleCompositionSlice[];
+    ranking: VehicleRankingRow[];
+    series: VehicleSeriesPoint[];
+    sample_count: number; estimated_sample_count: number;
+}
 export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: SegmentUpdateData; }
 
 export interface EmissionSummary {

@@ -1,7 +1,12 @@
 "use client";
 import AnalyticsFilters from "../Analytics/AnalyticsFilters";
-import EmissionHistory from "../Analytics/EmissionHistory";
+import HistoryTable from "../Analytics/HistoryTable";
+import SectionTitle from "@/components/ui/SectionTitle";
 
 export default function RiwayatPage() {
-    return <div className="page-container analytics-page"><div className="page-header-section"><span>DATA HISTORIS</span><h1>Riwayat</h1><p>Perhitungan emisi segmen dengan waktu pengamatan, sumber, dan versi perhitungan.</p></div><AnalyticsFilters /><EmissionHistory /></div>;
+    return <div className="page-container analytics-page">
+        <SectionTitle page eyebrow="Data historis" title="Riwayat" meta="Catatan perhitungan emisi segmen dalam bentuk tabel yang dapat disortir dan diekspor." />
+        <AnalyticsFilters />
+        <HistoryTable />
+    </div>;
 }

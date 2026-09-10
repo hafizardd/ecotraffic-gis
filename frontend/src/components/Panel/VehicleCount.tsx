@@ -2,6 +2,7 @@
 
 import { Car, Bike, Bus, Truck } from "lucide-react";
 import { EmissionUpdate } from "@/types";
+import Skeleton from "@/components/ui/Skeleton";
 
 interface VehicleCountProps {
     emission: EmissionUpdate | null;
@@ -9,7 +10,9 @@ interface VehicleCountProps {
 
 export default function VehicleCount({ emission }: VehicleCountProps) {
     if (!emission) {
-        return <div className="data-empty"><span className="loading-spinner small" />Menunggu data kendaraan...</div>;
+        return <div className="vehicle-grid">{[0, 1, 2, 3].map((key) => (
+            <div key={key} className="vehicle-card"><Skeleton height={34} width={34} radius={7} /><Skeleton height={16} width="60%" /></div>
+        ))}</div>;
     }
 
     const counts = emission.source === "tracking" && emission.occupancy

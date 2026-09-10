@@ -16,9 +16,10 @@ from starlette.background import BackgroundTask
 from app.core.database import get_db
 from app.models.road_segment import RoadSegment
 from app.services.emission_analytics import (
-    AnalyticsFilter, EXPORT_FIELDS, POLLUTANTS, UNITS, composition_query,
+    AnalyticsFilter, EXPORT_FIELDS, HISTORY_SORTS, POLLUTANTS, UNITS, VEHICLE_KEYS, composition_query,
     corridor_columns, export_row, fact_query, history_query, serialize_fact,
-    top_query, trend_query,
+    serialize_history, top_query, trend_query, vehicle_composition, vehicle_ranking_query,
+    vehicle_series_query, vehicle_totals_query,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,14 +117,44 @@ async def composition(filters: AnalyticsFilter = Depends(get_filters), db=Depend
         "data": [{"pollutant": p, "key": p.lower(), "kg_h": row[p]} for p in POLLUTANTS]}
 
 
+@router.get("/vehicles")
+async def vehicles(ranking_limit: int = Query(8, ge=1, le=50), bucket: str | None = Query(None),
+    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    try:
+        name, seconds = filters.bucket(bucket)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    totals = (await db.execute(vehicle_totals_query(filters))).mappings().one()
+    ranking = (await db.execute(vehicle_ranking_query(filters, ranking_limit))).mappings().all()
+    series = (await db.execute(vehicle_series_query(filters, seconds))).mappings().all()
+    volume = {key: totals[f"{key}_veh_h"] for key in VEHICLE_KEYS}
+    vkt = {key: totals[f"{key}_vkt"] for key in VEHICLE_KEYS}
+    present = any(value is not None for value in volume.values())
+    vkt_present = any(value is not None for value in vkt.values())
+    return {**envelope(filters), "bucket": name,
+        "units": {"volume_per_hour": "vehicles/hour", "vkt_km_h": "km/hour"},
+        "totals": volume,
+        "total_vehicles_per_hour": sum(value for value in volume.values() if value is not None) if present else None,
+        "vkt": vkt,
+        "total_vkt_km_h": sum(value for value in vkt.values() if value is not None) if vkt_present else None,
+        "composition": vehicle_composition(volume),
+        "ranking": [{"rank": rank, **dict(row)} for rank, row in enumerate(ranking, 1)],
+        "series": [dict(row) for row in series],
+        "sample_count": totals["sample_count"] or 0,
+        "estimated_sample_count": totals["estimated_sample_count"] or 0}
+
+
 @router.get("/history")
 async def history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=200),
+    sort: str = Query("period_start"), order: Literal["asc", "desc"] = "desc",
     filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
-    query = history_query(filters)
+    if sort not in HISTORY_SORTS:
+        raise HTTPException(422, "sort must be one of: " + ", ".join(HISTORY_SORTS))
+    query = history_query(filters, sort, order)
     total = (await db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()
     rows = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).mappings().all()
     return {**envelope(filters), "page": page, "page_size": page_size, "total": total,
-        "data": [serialize_fact(row) for row in rows]}
+        "sort": sort, "order": order, "data": [serialize_history(row) for row in rows]}
 
 
 @router.get("/export")

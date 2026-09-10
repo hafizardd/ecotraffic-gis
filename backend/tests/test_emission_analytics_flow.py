@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.emission_analytics import AnalyticsFilter, export_row, serialize_fact
+from app.services.emission_analytics import AnalyticsFilter, export_row, serialize_fact, serialize_history, vehicle_composition
 from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_latest_state import SegmentLatestStateStore
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
@@ -98,6 +98,36 @@ def test_filter_rejects_reversed_and_naive_ranges():
         AnalyticsFilter(BASE, BASE)
     with pytest.raises(ValueError):
         AnalyticsFilter(BASE.replace(tzinfo=None), BASE + timedelta(hours=1))
+
+
+def test_history_record_is_curated_with_server_side_totals():
+    row = {
+        "id": "1", "segment_id": "A", "segment_name": "Segment A", "corridor_id": "C", "corridor_name": "Corridor C",
+        "period_start": BASE, "period_end": BASE + timedelta(minutes=1), "calculated_at": BASE + timedelta(minutes=1, seconds=2),
+        "calculation_version": 2, "source_mode": "LIVE", "vehicle_count_semantics": "interval_count",
+        "pollutant_totals_g_h": {p: 2000 for p in POLLUTANTS},
+        "volume_per_hour": {"car": 60, "motorcycle": 30, "bus": 5, "truck": 5},
+        "vkt_km_h": {"car": 30, "motorcycle": 15, "bus": 10, "truck": 10},
+        "raw_counts": {}, "source_cameras": ["cam"], "source_streams": ["main"],
+        "source_observation_count": 1, "observation_duration_seconds": 60,
+        "aggregation_policy": "sum_independent_streams", "category_pollutant_breakdown_g_h": {},
+        "ahp_metadata": {"observed_at": BASE.isoformat()},
+    }
+    record = serialize_history(row, now=BASE + timedelta(minutes=2))
+    assert record["total_emissions_kg_h"] == 16  # 8 pollutants x 2000 g/h -> 2 kg/h each
+    assert record["total_vehicles_per_hour"] == 100
+    assert record["units"]["emissions"] == "kg/hour"
+    assert record["detail"]["calculation_version"] == 2
+    assert "pollutant_totals_g_h" not in record and "raw_counts" not in record
+
+
+def test_vehicle_composition_is_server_side_and_null_safe():
+    composition = vehicle_composition({"car": 60, "motorcycle": 30, "bus": 5, "truck": 5})
+    assert [row["key"] for row in composition] == ["car", "motorcycle", "bus", "truck"]
+    assert composition[0]["share"] == 0.6
+    assert round(sum(row["share"] for row in composition), 6) == 1
+    empty = vehicle_composition({"car": None, "motorcycle": None, "bus": None, "truck": None})
+    assert all(row["share"] is None for row in empty)
 
 
 def test_late_processed_old_observation_cannot_replace_newer_redis_state():
