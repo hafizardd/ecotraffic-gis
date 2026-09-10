@@ -1,0 +1,167 @@
+{
+  "generated_at": "2026-09-10T12:35:52.050896+00:00",
+  "source": {
+    "source_file": "D:\\Coolyeah\\MAPID\\ecotraffic-gis\\backend\\data\\output\\activities.csv",
+    "row_count": 68,
+    "column_count": 14,
+    "columns": [
+      "id",
+      "title",
+      "description",
+      "geometry.coordinates",
+      "medias",
+      "total_comment",
+      "created_at",
+      "likes",
+      "user_name",
+      "user_full_name",
+      "user_profile_picture",
+      "community_name",
+      "community_picture",
+      "community_description"
+    ],
+    "data_types": {
+      "id": [
+        "string"
+      ],
+      "title": [
+        "string"
+      ],
+      "description": [
+        "string"
+      ],
+      "geometry.coordinates": [
+        "list"
+      ],
+      "medias": [
+        "list"
+      ],
+      "total_comment": [
+        "integer_string"
+      ],
+      "created_at": [
+        "string"
+      ],
+      "likes": [
+        "list"
+      ],
+      "user_name": [
+        "string"
+      ],
+      "user_full_name": [
+        "string"
+      ],
+      "user_profile_picture": [
+        "dict"
+      ],
+      "community_name": [
+        "string"
+      ],
+      "community_picture": [
+        "string"
+      ],
+      "community_description": [
+        "string"
+      ]
+    },
+    "null_counts": {
+      "id": 0,
+      "title": 0,
+      "description": 0,
+      "geometry.coordinates": 0,
+      "medias": 0,
+      "total_comment": 0,
+      "created_at": 0,
+      "likes": 0,
+      "user_name": 0,
+      "user_full_name": 0,
+      "user_profile_picture": 0,
+      "community_name": 0,
+      "community_picture": 0,
+      "community_description": 0
+    },
+    "duplicate_count": 0,
+    "duplicate_source_id_count": 0,
+    "content_duplicate_count": 1,
+    "unique_id_count": 68,
+    "coordinate_validity": {
+      "valid": 68,
+      "invalid": 0
+    },
+    "timestamp_validity": {
+      "valid": 68,
+      "invalid": 0
+    },
+    "description_completeness": {
+      "present": 68,
+      "missing": 0,
+      "word_count_min": 56,
+      "word_count_max": 190,
+      "word_count_average": 95.72,
+      "explicit_time_mentions": 67
+    },
+    "media_format": {
+      "valid_json_arrays": 68,
+      "invalid": 0,
+      "image_count": 340,
+      "video_count": 78
+    }
+  },
+  "total_records": 68,
+  "duplicate_records": 2,
+  "invalid_coordinates": 0,
+  "missing_descriptions": 0,
+  "missing_observed_time": 1,
+  "missing_observed_at": 38,
+  "missing_stop_name": 4,
+  "unresolved_stop_entities": 4,
+  "low_confidence_records": 1,
+  "validation_failures": 0,
+  "field_coverage": {
+    "usage": {
+      "count": 59,
+      "percent": 86.76
+    },
+    "facility": {
+      "count": 54,
+      "percent": 79.41
+    },
+    "accessibility": {
+      "count": 9,
+      "percent": 13.24
+    },
+    "condition": {
+      "count": 26,
+      "percent": 38.24
+    },
+    "environment": {
+      "count": 2,
+      "percent": 2.94
+    },
+    "issue": {
+      "count": 26,
+      "percent": 38.24
+    }
+  },
+  "entity_resolution": {
+    "resolved_unique": 62,
+    "unresolved_missing_stop_name": 4,
+    "resolved_same_name_nearby": 2,
+    "unique_stop_ids": 63
+  },
+  "llm": {
+    "provider": "openrouter",
+    "model": "nvidia/nemotron-3.5-lightning:free",
+    "number_of_calls": 0,
+    "successful_calls": 0,
+    "failed_calls": 0,
+    "retry_count": 0,
+    "cache_hits": 0,
+    "rate_limit_errors": 0,
+    "validation_failures": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "structured_output_fallbacks": 0
+  }
+}

@@ -148,7 +148,7 @@ docker compose exec backend python -m app.core.seed     # seed cameras + road se
 # Import spatial source layers (idempotent — safe to re-run)
 docker compose exec backend python -m scripts.import_pois                # points_of_interest  (data/poi.geojson)
 docker compose exec backend python -m scripts.import_population          # population_zones     (data/populations.geojson)
-docker compose exec backend python -m scripts.import_survey_activities   # survey_stop_observations (data/output/activities.csv)
+docker compose exec backend python -m scripts.import_survey_activities   # survey_stop_observations (prefers data/cleaned)
 docker compose exec backend python -m scripts.backfill_spatial_context   # segment spatial_metadata + population
 
 # Generate 24h synthetic historical fallback (NOT idempotent — skip if data already exists)
@@ -158,6 +158,23 @@ docker compose exec backend python -m scripts.generate_historical_segment_data
 Ctrl + C
 docker compose up
 ```
+
+Standardize survey activities and prepare validated knowledge/RAG files before the
+database import:
+
+```bash
+cd backend
+python -m data_pipeline.activities inspect
+python -m data_pipeline.activities all --dry-run
+python -m data_pipeline.activities all
+python -m scripts.import_survey_activities
+```
+
+The activities pipeline preserves the original CSV under `data/raw`, separates upload
+timestamps from observation timestamps, resolves repeated stop entities, validates
+OpenRouter semantic extraction, and builds metadata-filterable documents/chunks. See
+[`backend/data_pipeline/activities/README.md`](backend/data_pipeline/activities/README.md)
+for configuration and deterministic-only operation.
 
 #### 3. Update an Existing Checkout (git pull)
 

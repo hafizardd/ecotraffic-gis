@@ -1,4 +1,4 @@
-"""Idempotently import survey stop observations from activities.csv."""
+"""Idempotently import standardized survey stop observations."""
 
 import csv
 import json
@@ -12,7 +12,9 @@ from app.core.database import get_sync_db
 from app.models.spatial_sources import SurveyStopObservation
 from app.services.spatial_integration import score_survey_description
 
-CSV_PATH = Path(__file__).resolve().parents[1] / "data" / "output" / "activities.csv"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+CLEANED_CSV_PATH = DATA_DIR / "cleaned" / "activities_cleaned.csv"
+LEGACY_CSV_PATH = DATA_DIR / "output" / "activities.csv"
 
 
 def _parse_timestamp(value) -> datetime | None:
@@ -40,42 +42,75 @@ def _parse_coordinates(raw) -> tuple[float, float] | None:
     return lon, lat
 
 
-def import_survey_activities() -> dict:
+def import_survey_activities(csv_path: Path | None = None) -> dict:
+    csv_path = csv_path or (CLEANED_CSV_PATH if CLEANED_CSV_PATH.exists() else LEGACY_CSV_PATH)
     inserted = updated = rejected = 0
     with get_sync_db() as db:
-        with open(CSV_PATH, encoding="utf-8-sig") as handle:
+        with open(csv_path, encoding="utf-8-sig") as handle:
             reader = csv.DictReader(handle)
             for row in reader:
-                source_id = (row.get("id") or "").strip()
+                standardized = "source_activity_id" in row
+                source_id = (row.get("source_activity_id") or row.get("id") or "").strip()
                 if not source_id:
                     rejected += 1
                     continue
-                coords = _parse_coordinates(row.get("geometry.coordinates"))
+                if standardized:
+                    try:
+                        coords = (float(row["longitude"]), float(row["latitude"])) if row.get("coordinates_valid", "").lower() == "true" else None
+                    except (TypeError, ValueError):
+                        coords = None
+                else:
+                    coords = _parse_coordinates(row.get("geometry.coordinates"))
                 if coords is None:
                     print(f"invalid coordinates for source_id={source_id}", file=sys.stderr)
                     rejected += 1
                     continue
                 lon, lat = coords
                 existing = db.query(SurveyStopObservation).filter_by(source_id=source_id).one_or_none()
-                media = row.get("medias")
-                try:
-                    media_list = json.loads(media) if media else []
-                except (json.JSONDecodeError, TypeError):
+                if standardized:
                     media_list = []
-                evidence = score_survey_description(row.get("description"))
+                    for field in ("image_urls", "video_urls"):
+                        try:
+                            media_list.extend(json.loads(row.get(field) or "[]"))
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    description = row.get("description_raw")
+                    title = row.get("title_normalized") or row.get("title_raw") or source_id
+                    observed_at = _parse_timestamp(row.get("observed_at"))
+                    observer = row.get("user_full_name") or row.get("user_name")
+                else:
+                    media = row.get("medias")
+                    try:
+                        media_list = json.loads(media) if media else []
+                    except (json.JSONDecodeError, TypeError):
+                        media_list = []
+                    description = row.get("description")
+                    title = (row.get("title") or source_id).strip()
+                    # Legacy input only has upload time; do not mislabel it as observation time.
+                    observed_at = None
+                    observer = row.get("observer") or row.get("observer_name")
+                evidence = score_survey_description(description)
                 values = {
-                    "title": (row.get("title") or source_id).strip(),
-                    "description": row.get("description"),
+                    "title": title,
+                    "description": description,
                     "geometry": WKTElement(f"POINT({lon} {lat})", srid=4326),
                     "media": media_list,
-                    "observed_at": _parse_timestamp(row.get("created_at")),
-                    "observer_name": row.get("observer") or row.get("observer_name"),
+                    "observed_at": observed_at,
+                    "observer_name": observer,
                     "facility_score": evidence["facility"],
                     "pedestrian_access_score": evidence["pedestrian_access"],
                     "environment_score": evidence["environment"],
                     "user_activity_score": evidence["user_activity"],
                     "score_method": "survey-keyword-v1",
-                    "source_metadata": {"source_file": "activities.csv", "original_row": row},
+                    "source_metadata": {
+                        "source_file": row.get("source_file") or csv_path.name,
+                        "source_row": row.get("source_row"),
+                        "observation_id": row.get("observation_id"),
+                        "stop_id": row.get("stop_id"),
+                        "created_at_utc": row.get("created_at_utc") or row.get("created_at"),
+                        "observed_time_source": row.get("observed_time_source"),
+                        "original_row": row,
+                    },
                 }
                 if existing is None:
                     db.add(SurveyStopObservation(source_id=source_id, **values))
