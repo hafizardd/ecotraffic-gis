@@ -25,6 +25,7 @@ from app.core.database import get_sync_db
 from app.models.road_segment import RoadSegment
 from app.models.segment_traffic_observation import SegmentTrafficObservationRecord
 from app.services.segment_emission_pipeline import calculate_segment_emission
+from app.services.segment_aggregation import select_one_camera_per_stream
 from app.services.segment_emission_store import persist_segment_emission_sync
 from app.services.segment_mapping import CameraSegmentMapping, MappingResolutionError, resolve_camera_mapping
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
@@ -242,6 +243,14 @@ def sample_historical_cameras(dry_run: bool | None = None) -> dict:
     return dict(stats)
 
 
+def _select_stream_observations(items):
+    """Thin wrapper over the shared selector for ``(observation, segment, roi)``
+    tuples. Returns ``(selected, dropped_by_stream)``."""
+    selected, dropped = select_one_camera_per_stream([item[0] for item in items])
+    kept = {id(observation) for observation in selected}
+    return [item for item in items if id(item[0]) in kept], dropped
+
+
 def _calculate_emissions(db, collected, stats: Counter) -> None:
     if not collected:
         return
@@ -255,6 +264,13 @@ def _calculate_emissions(db, collected, stats: Counter) -> None:
     spatial_cache: dict[str, dict] = {}
     for (_segment_db_id, period_start), items in groups.items():
         segment = items[0][1]
+        items, dropped = _select_stream_observations(items)
+        if dropped:
+            logger.info("snapshot_duplicate_stream_deduped", extra={
+                "segment_id": segment.road_segment_id,
+                "dropped_cameras": dropped,
+                "kept_cameras": sorted({observation.camera_id for observation, _, _ in items}),
+            })
         try:
             spatial = spatial_cache.get(str(segment.id))
             if spatial is None:
@@ -283,6 +299,9 @@ def _calculate_emissions(db, collected, stats: Counter) -> None:
             result["calculation_metadata"]["roi_status"] = (
                 "calibrated" if all(has_roi for _, _, has_roi in items) else "uncalibrated"
             )
+            if dropped:
+                result["calculation_metadata"]["selection_note"] = "duplicate_stream_camera_deduped"
+                result["calculation_metadata"]["dropped_cameras"] = dropped
             persist_segment_emission_sync(db, segment.id, result)
             db.commit()
             stats["emissions"] += 1

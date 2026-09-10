@@ -6,6 +6,8 @@ import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchEmissionHistory } from "@/services/api";
 import useAnalyticsResource from "@/hooks/useAnalyticsResource";
 import { fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
+import { pageWindow } from "@/utils/emissionAnalytics";
+import EmissionBulkDelete from "./EmissionBulkDelete";
 import EmissionExport from "./EmissionExport";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { SkeletonRows } from "@/components/ui/Skeleton";
@@ -58,15 +60,17 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
 }
 
 export default function HistoryTable() {
-    const { query } = useEmissionAnalytics();
+    const { query, refresh } = useEmissionAnalytics();
     const queryKey = JSON.stringify(query);
     const [view, setView] = useState({ key: "", page: 1, sort: "period_start" as SortKey, order: "desc" as "asc" | "desc" });
+    const [reload, setReload] = useState(0);
     const [expanded, setExpanded] = useState<string | null>(null);
-    const page = view.key === queryKey ? view.page : 1;
     const { sort, order } = view;
-    const load = useCallback((signal: AbortSignal) => fetchEmissionHistory(query, page, sort, order, signal), [query, page, sort, order]);
-    const { data, loading, error } = useAnalyticsResource(`${queryKey}:${page}:${sort}:${order}`, load);
+    const requestedPage = view.key === queryKey ? view.page : 1;
+    const load = useCallback((signal: AbortSignal) => fetchEmissionHistory(query, requestedPage, sort, order, signal), [query, requestedPage, sort, order]);
+    const { data, loading, error } = useAnalyticsResource(`${queryKey}:${requestedPage}:${sort}:${order}:${reload}`, load);
     const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
+    const page = Math.min(requestedPage, totalPages);
 
     function changeSort(next: SortKey) {
         setView((current) => {
@@ -77,6 +81,12 @@ export default function HistoryTable() {
         setExpanded(null);
     }
     function goPage(next: number) { setView((current) => ({ ...current, key: queryKey, page: next })); setExpanded(null); }
+    function handleDeleted() {
+        setView((current) => ({ ...current, key: queryKey, page: 1 }));
+        setReload((value) => value + 1);
+        refresh();
+        setExpanded(null);
+    }
     function sortHeader(label: string, key: SortKey) {
         const active = sort === key;
         return <button type="button" className={`history-sort${active ? " is-active" : ""}`} onClick={() => changeSort(key)}>
@@ -87,13 +97,14 @@ export default function HistoryTable() {
     return <section className="page-card history-card animate-in" aria-label="Riwayat emisi segmen" aria-busy={loading}>
         <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${data?.units.emissions ?? "kg/hour"}; hasil sintetis dan replay dikecualikan.`} aside={`${fmtIntId(data?.total ?? 0)} catatan`} />
         <EmissionExport />
+        <EmissionBulkDelete page={page} totalPages={totalPages} sort={sort} order={order} onDeleted={handleDeleted} />
         {!data && loading ? <SkeletonRows rows={6} height={54} />
             : !data && error ? <p role="alert" className="analytics-error">{error}</p>
             : !data?.data.length ? <div className="unavailable-state">Tidak ada pengamatan segmen pada rentang dan lokasi ini.</div>
             : <div className="table-wrap history-scroll">
                 <table className="priority-table history-table">
                     <thead><tr>
-                        <th className="history-index">No</th>
+                        <th className="history-index center">No</th>
                         <th>{sortHeader("Waktu", "period_start")}</th>
                         <th>{sortHeader("Lokasi", "segment_name")}</th>
                         <th>Kendaraan / jam</th>
@@ -121,9 +132,22 @@ export default function HistoryTable() {
                 </table>
             </div>}
         <nav className="analytics-pagination" aria-label="Navigasi halaman riwayat">
+            <button type="button" className="pagination-text" disabled={loading || page <= 1} onClick={() => goPage(1)}>« Pertama</button>
             <button type="button" className="pagination-text" disabled={loading || page <= 1} onClick={() => goPage(page - 1)}>‹ Sebelumnya</button>
-            <span className="pagination-status">Halaman {page} dari {totalPages}</span>
+            {pageWindow(page, totalPages).map((entry, index) => entry === "gap"
+                ? <span key={`gap-${index}`} className="pagination-ellipsis" aria-hidden="true">…</span>
+                : <button key={entry} type="button" className={`pagination-page${entry === page ? " is-active" : ""}`}
+                    aria-current={entry === page ? "page" : undefined} disabled={loading} onClick={() => goPage(entry)}>{entry}</button>)}
             <button type="button" className="pagination-text" disabled={loading || !data || page >= totalPages} onClick={() => goPage(page + 1)}>Berikutnya ›</button>
+            <button type="button" className="pagination-text" disabled={loading || !data || page >= totalPages} onClick={() => goPage(totalPages)}>Terakhir »</button>
+            <label className="pagination-jump">Ke halaman
+                <input key={page} type="number" min={1} max={totalPages} defaultValue={page} disabled={loading}
+                    onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        const next = Number((event.target as HTMLInputElement).value);
+                        if (Number.isFinite(next)) goPage(Math.min(Math.max(1, next), totalPages));
+                    }} />
+            </label>
         </nav>
     </section>;
 }

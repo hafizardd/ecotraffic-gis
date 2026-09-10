@@ -209,11 +209,21 @@ HISTORY_SORTS = {
 }
 
 
-def history_query(filters: AnalyticsFilter, sort: str = "period_start", order: str = "desc"):
-    facts = fact_query(filters).cte("facts")
+def _history_order_by(facts, sort: str, order: str):
     column = facts.c[HISTORY_SORTS[sort]]
     ordering = column.asc() if order == "asc" else column.desc()
-    return select(facts).order_by(ordering, facts.c.segment_id)
+    return ordering, facts.c.segment_id
+
+
+def history_query(filters: AnalyticsFilter, sort: str = "period_start", order: str = "desc"):
+    facts = fact_query(filters).cte("facts")
+    return select(facts).order_by(*_history_order_by(facts, sort, order))
+
+
+def history_id_query(filters: AnalyticsFilter, sort: str = "period_start", order: str = "desc"):
+    """Same ordered, deduped facts as ``history_query`` but ids + segment ids only."""
+    facts = fact_query(filters).cte("facts")
+    return select(facts.c.id, facts.c.segment_id).order_by(*_history_order_by(facts, sort, order))
 
 
 def serialize_fact(row, now: datetime | None = None) -> dict:

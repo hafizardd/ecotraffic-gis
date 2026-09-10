@@ -248,6 +248,9 @@ export interface EmissionHistoryResponse extends AnalyticsResponse<EmissionHisto
     total: number; page: number; page_size: number; sort: string; order: "asc" | "desc";
     units: { emissions: string; volume_per_hour: string; vkt_km_h: string };
 }
+export interface EmissionHistoryDeleteResponse {
+    deleted?: number; matched?: number; truncated: boolean;
+}
 export interface LatestSegmentEmissionsResponse {    timestamp: string; segments: RealtimeSegmentEmission[];
     summary: { emissions_kg_h: PollutantRates; segment_count: number; estimated_segment_count: number;
         freshness_seconds: number | null; stale_after_seconds: number; observed_at: string | null;

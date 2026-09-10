@@ -9,21 +9,26 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.background import BackgroundTask
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.road_segment import RoadSegment
+from app.models.segment_emission import SegmentEmission
 from app.services.emission_analytics import (
     AnalyticsFilter, EXPORT_FIELDS, HISTORY_SORTS, POLLUTANTS, UNITS, VEHICLE_KEYS, composition_query,
-    corridor_columns, export_row, fact_query, history_query, serialize_fact,
+    corridor_columns, export_row, fact_query, history_id_query, history_query, serialize_fact,
     serialize_history, top_query, trend_query, vehicle_composition, vehicle_ranking_query,
     vehicle_series_query, vehicle_totals_query,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics/emissions", tags=["emission-analytics"])
+
+_DELETE_BATCH_SIZE = 2000
+_DELETE_MAX = 100_000
 
 
 async def analytics_db():
@@ -156,6 +161,61 @@ async def history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, l
     rows = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).mappings().all()
     return {**envelope(filters), "page": page, "page_size": page_size, "total": total,
         "sort": sort, "order": order, "data": [serialize_history(row) for row in rows]}
+
+
+def _chunks(items, size):
+    for index in range(0, len(items), size):
+        yield items[index:index + size]
+
+
+async def _evict_segment_latest_states(segment_ids):
+    """Best-effort Redis eviction so the map cannot keep showing deleted rows."""
+    if not segment_ids:
+        return
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2)
+        try:
+            await client.delete(*[f"emission:segment:{segment_id}" for segment_id in segment_ids])
+        finally:
+            await client.aclose()
+    except Exception:
+        logger.warning("emission_history_redis_eviction_failed", exc_info=True)
+
+
+@router.delete("/history")
+async def delete_history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=200),
+    sort: str = Query("period_start"), order: Literal["asc", "desc"] = "desc",
+    scope: Literal["beyond", "page"] = "beyond", dry_run: bool = False,
+    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    if sort not in HISTORY_SORTS:
+        raise HTTPException(422, "sort must be one of: " + ", ".join(HISTORY_SORTS))
+    query = history_id_query(filters, sort, order)
+    total = (await db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()
+    # `beyond` keeps pages 1..N and deletes from page N+1; `page` deletes page N only.
+    offset = page * page_size if scope == "beyond" else (page - 1) * page_size
+    matched = max(0, total - offset) if scope == "beyond" else max(0, min(page_size, total - offset))
+    if dry_run:
+        return {"matched": matched, "truncated": scope == "beyond" and matched > _DELETE_MAX}
+
+    # Same ordered facts the history table shows, so deletes stay on-screen.
+    statement = query.offset(offset)
+    if scope == "beyond":
+        statement = statement.limit(_DELETE_MAX + 1)
+    else:
+        statement = statement.limit(page_size)
+    rows = (await db.execute(statement)).all()
+    truncated = len(rows) > _DELETE_MAX
+    ids = [row[0] for row in rows[:_DELETE_MAX]]
+    segment_ids = {row[1] for row in rows[:_DELETE_MAX]}
+    deleted = 0
+    for batch in _chunks(ids, _DELETE_BATCH_SIZE):
+        result = await db.execute(delete(SegmentEmission).where(SegmentEmission.id.in_(batch)))
+        deleted += result.rowcount or 0
+    await db.commit()
+    await _evict_segment_latest_states(segment_ids)
+    return {"deleted": deleted, "truncated": truncated}
 
 
 @router.get("/export")

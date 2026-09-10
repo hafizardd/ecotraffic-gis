@@ -145,6 +145,37 @@ async def test_vehicle_analytics_are_aggregated_server_side(api):
     assert body["series"][0]["car_veh_h"] == 120
 
 
+async def test_history_delete_beyond_scope_matches_dry_run(api):
+    client, params, _ = api
+    options = {**params, "page": 1, "page_size": 2, "scope": "beyond"}
+    preview = await client.request("DELETE", "/api/analytics/emissions/history", params={**options, "dry_run": "true"})
+    assert preview.status_code == 200, preview.text
+    assert preview.json() == {"matched": 1, "truncated": False}
+    deleted = await client.request("DELETE", "/api/analytics/emissions/history", params={**options, "dry_run": "false"})
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"deleted": 1, "truncated": False}
+    remaining = (await client.get("/api/analytics/emissions/history", params=params)).json()
+    assert remaining["total"] == 2
+    assert all(row["segment_id"] == "A" for row in remaining["data"])
+
+
+async def test_history_delete_page_scope_respects_segment_filter(api):
+    client, params, _ = api
+    options = {**params, "segment_id": "A", "page": 1, "page_size": 1, "scope": "page"}
+    deleted = await client.request("DELETE", "/api/analytics/emissions/history", params={**options, "dry_run": "false"})
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["deleted"] == 1
+    remaining = (await client.get("/api/analytics/emissions/history", params=params)).json()
+    assert remaining["total"] == 2
+    assert any(row["segment_id"] == "B" for row in remaining["data"])
+
+
+async def test_history_delete_rejects_unknown_sort(api):
+    client, params, _ = api
+    response = await client.request("DELETE", "/api/analytics/emissions/history", params={**params, "sort": "nope"})
+    assert response.status_code == 422
+
+
 async def test_empty_ranges_and_invalid_inputs(api):
     client, params, _ = api
     for extra, expected in [({"from": params["to"], "to": params["from"]}, 422), ({"from": "bad-date"}, 422),

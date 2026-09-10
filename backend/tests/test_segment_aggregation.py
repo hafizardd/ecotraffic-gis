@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.services.segment_aggregation import SegmentAggregationError, aggregate_segment_observations
+from app.services.segment_aggregation import SegmentAggregationError, aggregate_segment_observations, select_one_camera_per_stream
 from app.services.segment_observation import SegmentTrafficObservation
 
 
@@ -44,3 +44,18 @@ def test_authoritative_policy_selects_one_camera_per_stream():
     )
     assert result.raw_counts["motorcycle"] == 4
     assert result.source_cameras == ("camera-a",)
+
+
+def test_select_one_camera_per_stream_keeps_latest_and_reports_drops():
+    earlier = SegmentTrafficObservation(
+        camera_id="camera-a", road_segment_id="segment-1", lane_or_stream_id="northbound",
+        captured_at=BASE, observation_duration_seconds=60, raw_detected_count={"motorcycle": 4},
+    )
+    later = SegmentTrafficObservation(
+        camera_id="camera-b", road_segment_id="segment-1", lane_or_stream_id="northbound",
+        captured_at=BASE + timedelta(seconds=10), observation_duration_seconds=60,
+        raw_detected_count={"motorcycle": 5},
+    )
+    selected, dropped = select_one_camera_per_stream([earlier, later])
+    assert [item.camera_id for item in selected] == ["camera-b"]
+    assert dropped == {"northbound": ["camera-a"]}
