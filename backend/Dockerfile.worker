@@ -17,4 +17,4 @@ RUN pip install --upgrade pip && \
 
 COPY . .
 
-CMD ["celery", "-A", "app.workers.inference_worker", "worker", "--loglevel=info"]
+CMD ["python", "-m", "app.workers.tracking_worker"]

@@ -174,12 +174,97 @@ export interface SegmentEmissionDetail {
 export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
 export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
 export type SpatialLayerData = { populationZones: SpatialFeatureCollection; surveyStops: SpatialFeatureCollection };
+// WS `segment_update` payload uses `pollutant_totals` (= `pollutant_totals_g_h` in REST detail).
+// Map via SegmentPanel liveDetail mapper; do not rename without updating both.
 export interface SegmentUpdateData {
+    emissions_kg_h?: PollutantRates;
+    processed_at?: string;
+    calculation_version?: number;
     decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string;
     observed_at?: string | null; data_age_seconds?: number | null; freshness_status?: string;
     population?: number | null; population_district?: string | null; population_context?: PopulationContext | null;
 }
+
+export type PollutantKey = "tsp" | "co" | "nox" | "so2" | "hc" | "co2" | "ch4" | "n2o";
+export type PollutantRates = Record<PollutantKey, number | null>;
+export type VehicleRates = Record<"car" | "motorcycle" | "bus" | "truck", number>;
+
+export interface EmissionAnalyticsFilter {
+    timeRange: "1h" | "3h" | "12h" | "24h";
+    segmentId: string | null;
+    corridorId: string | null;
+    from: string | null;
+    to: string | null;
+}
+export interface AnalyticsQuery { from: string; to: string; segment_id?: string; corridor_id?: string; }
+export type EmissionTrendPoint = Record<`${PollutantKey}_kg_h`, number | null> & {
+    timestamp: string; segment_count: number; sample_count: number; estimated_sample_count: number;
+};
+export interface TopEmissionCorridor {
+    rank: number; corridor_id: string; corridor_name: string; segment_ids: string[];
+    pollutant: PollutantKey; emission_kg_h: number | null; sample_count: number;
+    estimated_sample_count: number; observed_at: string;
+}
+export interface PollutantComposition { pollutant: string; key: PollutantKey; kg_h: number | null; }
+export interface RealtimeSegmentEmission {
+    id: string; segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
+    period_start: string; period_end: string; observed_at: string; processed_at: string;
+    calculation_version: number; source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY";
+    vehicle_count_semantics: "interval_count" | "snapshot_occupancy" | "vehicles_per_hour" | "unknown";
+    calculation_mode: "flow_based_segment" | "live_occupancy_estimate";
+    quality_status: "observed" | "estimated";
+    freshness_seconds: number; stale_after_seconds: number; freshness_status: "fresh" | "stale";
+    emissions_kg_h: PollutantRates; volume_per_hour: VehicleRates | null; vkt_km_h: VehicleRates | null;
+    raw_counts: VehicleRates; source_cameras: string[]; source_streams: string[];
+    source_observation_count: number; observation_duration_seconds: number; aggregation_policy: string;
+    category_pollutant_breakdown_g_h: Record<string, Record<string, number>>;
+    calculation_metadata: Record<string, unknown>;
+}
+export type EmissionHistoryRecord = RealtimeSegmentEmission;
+export interface AnalyticsResponse<T> { from: string; to: string; data: T[]; }
+export interface EmissionHistoryResponse extends AnalyticsResponse<EmissionHistoryRecord> {
+    total: number; page: number; page_size: number;
+}
+export interface LatestSegmentEmissionsResponse {
+    timestamp: string; segments: RealtimeSegmentEmission[];
+    summary: { emissions_kg_h: PollutantRates; segment_count: number; estimated_segment_count: number;
+        freshness_seconds: number | null; stale_after_seconds: number; observed_at: string | null;
+        processed_at: string | null; source_mode: "LIVE" | "HISTORICAL";
+    };
+}
+export interface AnalyticsSegmentOption { segment_id: string; segment_name: string; corridor_id: string; corridor_name: string; }
 export interface SegmentUpdate { type: "segment_update"; segment_id: string; data: SegmentUpdateData; }
+
+export interface EmissionSummary {
+    total_cameras_active: number;
+    total_tsp_g_per_min: number;
+    total_tsp_kg_per_hr: number;
+    total_nox_g_per_min: number;
+    total_nox_kg_per_hr: number;
+    total_so2_g_per_min: number;
+    total_so2_kg_per_hr: number;
+    total_hc_g_per_min: number;
+    total_hc_kg_per_hr: number;
+    total_co_g_per_min: number;
+    total_co_kg_per_hr: number;
+    total_co2_g_per_min: number;
+    total_co2_kg_per_hr: number;
+    total_ch4_g_per_min: number;
+    total_ch4_kg_per_hr: number;
+    total_n2o_g_per_min: number;
+    total_n2o_kg_per_hr: number;
+    by_vehicle: { car: number; motorcycle: number; bus: number; truck: number };
+    last_updated: string | null;
+    freshness_status?: string;
+    active_cameras?: number;
+    live_cameras?: number;
+    historical_cameras?: number;
+    fresh_camera_states?: number;
+    stale_camera_states?: number;
+    latest_observation_at?: string | null;
+    latest_processing_at?: string | null;
+    source?: string;
+}
 
 export interface ChartPoint {
     timestamp: string;

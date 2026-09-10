@@ -1,5 +1,6 @@
 import { API_BASE, WS_URL, fetchCameraEmissions } from "@/services/api";
-import { EmissionUpdate, SegmentUpdate, SegmentUpdateData } from "@/types";
+import { EmissionUpdate, RealtimeSegmentEmission, SegmentUpdate, SegmentUpdateData } from "@/types";
+import { isNewerSegment, validRealtimeSegment } from "@/utils/emissionAnalytics";
 import { useEffect, useRef, useState } from "react";
 
 const MAX_BACKOFF = 30000;
@@ -11,7 +12,7 @@ function timestampOf(value: Partial<EmissionUpdate>): number {
 }
 
 function segmentTimestampOf(value: SegmentUpdateData): number {
-    const timestamp = value.calculated_at ?? value.observed_at;
+    const timestamp = value.observed_at ?? value.calculated_at;
     return timestamp ? Date.parse(timestamp) : 0;
 }
 
@@ -32,6 +33,7 @@ function validSegmentMessage(value: unknown): value is SegmentUpdate {
 export default function useEmissions() {
     const [emissionMap, setEmissionMap] = useState<Map<string, EmissionUpdate>>(new Map());
     const [segmentMap, setSegmentMap] = useState<Map<string, SegmentUpdateData>>(new Map());
+    const [segmentEmissionMap, setSegmentEmissionMap] = useState<Map<string, RealtimeSegmentEmission>>(new Map());
 
     const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
     const [lastMessageAt, setLastMessageAt] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export default function useEmissions() {
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         let backoff = INITIAL_BACKOFF;
+        let socket: WebSocket | undefined;
 
         const hydrate = async () => {
             try {
@@ -69,6 +72,7 @@ export default function useEmissions() {
             if (cancelled) return;
             setConnectionStatus("connecting");
             const ws = new WebSocket(`${WS_URL}/ws/emissions`);
+            socket = ws;
             ws.onopen = () => { backoff = INITIAL_BACKOFF; setConnectionStatus("connected"); setError(null); };
             ws.onmessage = (event) => {
                 if (cancelled) return;
@@ -77,8 +81,13 @@ export default function useEmissions() {
                     const messageTime = new Date().toISOString();
                     if (validSegmentMessage(data)) {
                         const segment = data as SegmentUpdate;
+                        const analytical = { ...segment.data, segment_id: segment.segment_id };
+                        if (validRealtimeSegment(analytical)) {
+                            setSegmentEmissionMap((previous) => isNewerSegment(analytical, previous.get(segment.segment_id))
+                                ? new Map(previous).set(segment.segment_id, analytical) : previous);
+                        }
                         const time = segmentTimestampOf(segment.data);
-                        if (time > 0 && time < (segmentLatestRef.current.get(segment.segment_id) ?? 0)) {
+                        if (!Number.isFinite(time) || time <= 0 || time < (segmentLatestRef.current.get(segment.segment_id) ?? 0)) {
                             setLastMessageAt(messageTime);
                             return;
                         }
@@ -112,7 +121,7 @@ export default function useEmissions() {
             ws.onerror = () => ws.close();
         };
         connect();
-        return () => { cancelled = true; if (timer) clearTimeout(timer); };
+        return () => { cancelled = true; if (timer) clearTimeout(timer); socket?.close(); };
     }, []);
-    return { emissionMap, segmentMap, connectionStatus, lastMessageAt, error };
+    return { emissionMap, segmentMap, segmentEmissionMap, connectionStatus, lastMessageAt, error };
 }

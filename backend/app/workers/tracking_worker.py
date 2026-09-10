@@ -18,20 +18,28 @@ import logging
 import os
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 import redis
 
 from app.core.config import settings
+from app.core.database import get_sync_db
+from app.models.camera_road_segment import CameraRoadSegment
+from app.models.road_segment import RoadSegment
+from app.models.segment_traffic_observation import SegmentTrafficObservationRecord
 from app.services.camera_management import get_active_camera_source
 from app.services.emission_aggregation import EmissionObservation, EmissionWindowAggregator
 from app.services.historical_emission_store import HistoricalEmissionStore
 from app.services.latest_emission_state import LatestEmissionStateStore
+from app.services.segment_mapping import CameraSegmentMapping, MappingResolutionError, resolve_camera_mapping
+from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
+from app.services.segment_observation_store import observation_row
 from cv.detector import VehicleDetector
 from cv.frame_store import RedisFrameStore
 from cv.rois import to_normalized
 from cv.emission_factors import calculate_emission
-from cv.track_emission import FlowCounter, occupancy_counts
+from cv.track_emission import FlowCounter, FlowObservationWindow, occupancy_counts
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +49,68 @@ SNAPSHOT_KEY_PREFIX = "tracks:snapshot:"
 
 def _track_cams() -> list[str]:
     return [c.strip() for c in settings.TRACK_CAMS.split(",") if c.strip()]
+
+
+_segment_mappings_cache: tuple[float, list[CameraSegmentMapping]] | None = None
+
+
+def _load_segment_mappings_cached() -> list[CameraSegmentMapping]:
+    """Sync mapping cache for tracking threads (standalone loader)."""
+    global _segment_mappings_cache
+    now = time.monotonic()
+    if _segment_mappings_cache is not None and now - _segment_mappings_cache[0] < settings.SEGMENT_MAPPING_CACHE_TTL_SECONDS:
+        return _segment_mappings_cache[1]
+    from sqlalchemy import select
+
+    from app.models.camera import Camera
+
+    with get_sync_db() as db:
+        rows = db.execute(
+            select(
+                Camera.camera_id,
+                RoadSegment.road_segment_id, CameraRoadSegment.lane_or_stream_id,
+                CameraRoadSegment.is_active, CameraRoadSegment.valid_from, CameraRoadSegment.valid_to,
+            ).join(CameraRoadSegment, CameraRoadSegment.camera_id == Camera.id)
+            .join(RoadSegment, CameraRoadSegment.road_segment_id == RoadSegment.id)
+            .where(CameraRoadSegment.is_active.is_(True))
+        ).all()
+    _segment_mappings_cache = (now, [CameraSegmentMapping(*row) for row in rows])
+    return _segment_mappings_cache[1]
+
+
+def _persist_segment_flow(camera_id: str, camera_database_id: str, counts: dict,
+                          captured_at: datetime, duration: float) -> str:
+    """Persist a completed interval of unique track exits with measured duration.
+
+    Returns a segment_pipeline_status string; never raises (loop must survive).
+    """
+    from sqlalchemy import select
+
+    try:
+        mapping = resolve_camera_mapping(_load_segment_mappings_cached(), camera_id=camera_id, captured_at=captured_at)
+    except MappingResolutionError:
+        logger.warning("tracking_segment_no_mapping", extra={"camera_id": camera_id})
+        return "no_mapping"
+    except Exception:
+        logger.exception("tracking_segment_mapping_failed", extra={"camera_id": camera_id})
+        return "failed"
+    observation = SegmentTrafficObservation(
+        camera_id=camera_id, road_segment_id=mapping.road_segment_id,
+        lane_or_stream_id=mapping.lane_or_stream_id, captured_at=captured_at,
+        observation_duration_seconds=duration,
+        raw_detected_count=dict(counts), vehicle_count_semantics=VehicleCountSemantics.INTERVAL_COUNT,
+    )
+    try:
+        with get_sync_db() as db:
+            segment = db.execute(select(RoadSegment).where(RoadSegment.road_segment_id == mapping.road_segment_id)).scalar_one()
+            db.add(SegmentTrafficObservationRecord(**observation_row(observation, road_segment_database_id=segment.id, camera_database_id=camera_database_id)))
+            db.flush()
+    except Exception:
+        logger.exception("tracking_segment_observation_persistence_failed", extra={"camera_id": camera_id})
+        return "failed"
+    logger.info("tracking_flow_window", extra={"camera_id": camera_id, "segment_id": mapping.road_segment_id,
+        "observation_duration_seconds": duration, "flow_count": counts, "vehicle_count_semantics": "interval_count"})
+    return "observation_stored"
 
 
 def _build_tracker(camera_id: str) -> VehicleDetector:
@@ -167,6 +237,10 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
     )
     interval = 1.0 / float(settings.TRACK_FPS)
     next_deadline = time.monotonic()
+    flow_window = FlowObservationWindow(settings.SEGMENT_OBSERVATION_WINDOW_SECONDS,
+                                        max_gap_seconds=max(5, interval * 3))
+    pending_windows = deque()
+    last_flow_frame_at = None
 
     cap = _open_capture(cv2, camera.stream_url, camera.referer)
     if cap is None:
@@ -222,8 +296,23 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
             result = results[0]
             tracks = _parse_tracks(detector, frame, result)
             occupancy = occupancy_counts(tracks)
-            flow_exits = flow.update(tracks)
             captured_at = datetime.now(timezone.utc)
+            if last_flow_frame_at is not None and (captured_at - last_flow_frame_at).total_seconds() > flow_window.max_gap_seconds:
+                # Missing tracks from before a capture outage are not exits.
+                flow = FlowCounter(min_frames=settings.TRACK_FLOW_MIN_FRAMES, exit_frames=settings.TRACK_FLOW_EXIT_FRAMES)
+            last_flow_frame_at = captured_at
+            flow_exits = flow.update(tracks)
+            completed_flow = flow_window.add(flow_exits, captured_at)
+            if completed_flow is not None:
+                if len(pending_windows) >= 10:
+                    logger.error("tracking_flow_retry_buffer_full", extra={"camera_id": camera_id})
+                    pending_windows.popleft()
+                pending_windows.append(completed_flow)
+                while pending_windows:
+                    counts, duration, observed_at = pending_windows[0]
+                    if _persist_segment_flow(camera_id, str(camera.id), counts, observed_at, duration) == "failed":
+                        break
+                    pending_windows.popleft()
             current = aggregator.add(
                 EmissionObservation(
                     camera_id=camera_id,
@@ -241,6 +330,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                 "occupancy": occupancy,
                 "flow_exits": flow_exits,
                 "instant_emission": instant_emission,
+                "calculation_mode": "live_occupancy_estimate",
             })
             try:
                 redis_client.setex(

@@ -13,6 +13,8 @@ class SegmentEmission(Base):
     __table_args__ = (
         UniqueConstraint("road_segment_id", "period_start", "calculation_version", name="uq_segment_emission_period_version"),
         Index("ix_segment_emissions_segment_period", "road_segment_id", "period_end"),
+        Index("ix_segment_emissions_period_segment", "period_start", "road_segment_id"),
+        Index("ix_segment_emissions_calculated_at", "calculated_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

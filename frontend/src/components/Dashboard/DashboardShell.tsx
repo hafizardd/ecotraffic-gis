@@ -9,6 +9,7 @@ import KendaraanPage from "../Pages/KendaraanPage";
 import RiwayatPage from "../Pages/RiwayatPage";
 import LaporanPage from "../Pages/LaporanPage";
 import PengaturanPage from "../Pages/PengaturanPage";
+import { EmissionAnalyticsProvider } from "@/context/EmissionAnalyticsContext";
 
 export type ActiveView = "peta" | "emisi" | "kendaraan" | "riwayat" | "laporan" | "pengaturan";
 const viewMeta: Record<ActiveView, [string, string]> = { peta: ["MONITORING DASHBOARD", "Peta Lalu Lintas Real-time"], emisi: ["ANALISIS EMISI", "Emisi & Tren"], kendaraan: ["ANALISIS LALU LINTAS", "Kendaraan"], riwayat: ["DATA HISTORIS", "Riwayat"], laporan: ["PELAPORAN", "Laporan"], pengaturan: ["KONFIGURASI SISTEM", "Pengaturan"] };
@@ -16,16 +17,17 @@ const viewMeta: Record<ActiveView, [string, string]> = { peta: ["MONITORING DASH
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [activeView, setActiveView] = useState<ActiveView>("peta");
+    const analyticsView = activeView === "emisi" || activeView === "riwayat" || activeView === "laporan";
     const page = { emisi: <EmisiTrenPage />, kendaraan: <KendaraanPage />, riwayat: <RiwayatPage />, laporan: <LaporanPage />, pengaturan: <PengaturanPage /> }[activeView as Exclude<ActiveView, "peta">];
 
     return (
-        <div className="dashboard-shell">
+        <EmissionAnalyticsProvider><div className="dashboard-shell">
             <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} activeView={activeView} onViewChange={setActiveView} />
-            <div className="dashboard-main">
+            <div className={analyticsView ? "dashboard-main dashboard-main-analytics" : "dashboard-main"}>
                 <TopHeader onMenuClick={() => setSidebarOpen((value) => !value)} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
-                <GlobalCounter />
+                {(activeView === "peta" || activeView === "kendaraan" || activeView === "pengaturan") && <GlobalCounter />}
                 <main className="dashboard-workspace">{activeView === "peta" ? children : page}</main>
             </div>
-        </div>
+        </div></EmissionAnalyticsProvider>
     );
 }

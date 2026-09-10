@@ -22,13 +22,14 @@ def observation(camera="camera-a", stream="northbound", duration=60, semantics=V
     )
 
 
-def test_mixed_durations_are_rejected():
-    with pytest.raises(SegmentAggregationError, match="one duration"):
-        aggregate_segment_observations(
+def test_measured_durations_are_normalized_per_stream():
+    result = aggregate_segment_observations(
             [observation(duration=60), observation(camera="camera-b", stream="southbound", duration=30)],
             period_start=BASE,
             period_end=BASE + timedelta(minutes=1),
         )
+    assert result.volume_per_hour["motorcycle"] == 180
+    assert result.stream_durations_seconds == {"northbound": 60, "southbound": 30}
 
 
 def test_snapshot_occupancy_is_averaged_before_hourly_conversion():

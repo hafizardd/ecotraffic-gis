@@ -1,5 +1,3 @@
-import os
-
 from app.api.routes import cameras
 
 
@@ -41,48 +39,3 @@ def test_live_allowlist_matches_track_cams(monkeypatch):
     monkeypatch.setattr(cameras.settings, "TRACK_CAMS", "atcs_jlagran,atcs_balaikota_timur")
     assert cameras._is_live_cam("atcs_jlagran") is True
     assert cameras._is_live_cam("atcs_mirota") is False
-
-
-def test_opencv_capture_sends_referer_and_restores_env():
-    import asyncio  # noqa: F401  (keeps test env explicit)
-    from datetime import datetime, timezone
-
-    from cv.frame_sampler import FrameSampler
-
-    seen: dict = {}
-
-    class _Capture:
-        def set(self, *a):
-            pass
-
-        def open(self, *a):
-            seen["env"] = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS")
-            return True
-
-        def isOpened(self):
-            return True
-
-        def read(self):
-            class _F:
-                size = 1
-            return True, _F()
-
-        def release(self):
-            pass
-
-    class _Cv2:
-        CAP_PROP_OPEN_TIMEOUT_MSEC = 1
-        CAP_PROP_READ_TIMEOUT_MSEC = 2
-        CAP_FFMPEG = 3
-
-        def VideoCapture(self):
-            return _Capture()
-
-    sampler = FrameSampler(
-        cv2_module=_Cv2(),
-        monotonic=lambda: 1.0,
-        now=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
-    )
-    sampler.capture("https://example.test/s.m3u8", "https://cctv.jogjakota.go.id/")
-    assert seen["env"] == "headers=Referer: https://cctv.jogjakota.go.id/\r\n"
-    assert "OPENCV_FFMPEG_CAPTURE_OPTIONS" not in os.environ

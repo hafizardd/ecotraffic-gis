@@ -1,5 +1,5 @@
 "use client";
-import { Map, TrendingUp, CarFront, History, FileText, Settings, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Map, TrendingUp, CarFront, History, FileText, ChevronsLeft, ChevronsRight } from "lucide-react";
 import type { ActiveView } from "./DashboardShell";
 
 interface SidebarProps {

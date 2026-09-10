@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,25 +78,85 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
 async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(RoadSegment, SegmentEmission)
-        .join(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
-        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc())
+        .outerjoin(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
+        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc().nullslast())
     )
     latest = {}
     for segment, emission in result:
         latest.setdefault(segment.road_segment_id, (segment, emission))
-    return [
-        SegmentEmissionMapItem(
+    items = []
+    for segment, emission in latest.values():
+        if emission is None:
+            items.append(SegmentEmissionMapItem(
+                road_segment_id=segment.road_segment_id, decision_score=None,
+                priority=None, total_emission=None, calculated_at=None,
+                observed_at=None, data_age_seconds=None, freshness_status="unknown",
+                vehicle_count_semantics="unknown", source_cameras=[],
+            ))
+            continue
+        freshness = classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings))
+        items.append(SegmentEmissionMapItem(
             road_segment_id=segment.road_segment_id, decision_score=emission.decision_score,
             priority=emission.priority,
             total_emission=(sum(emission.pollutant_totals_g_h.values()) if emission.pollutant_totals_g_h else None),
-             calculated_at=emission.calculated_at, observed_at=emission.period_end,
-             data_age_seconds=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).age_seconds,
-             freshness_status=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).status.value,
-             vehicle_count_semantics=emission.vehicle_count_semantics,
-             source_cameras=emission.source_cameras,
-        )
-        for segment, emission in latest.values()
-    ]
+            calculated_at=emission.calculated_at, observed_at=emission.period_end,
+            data_age_seconds=freshness.age_seconds,
+            freshness_status=freshness.status.value,
+            vehicle_count_semantics=emission.vehicle_count_semantics,
+            source_cameras=emission.source_cameras,
+        ))
+    return items
+
+
+@router.get("/api/emissions/segments/history")
+async def get_segment_emission_history(
+    segment_id: str | None = Query(default=None),
+    from_: str | None = Query(default=None, alias="from"),
+    to: str | None = Query(default=None),
+    bucket: str = Query(default="hour"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hourly history view (read-only, no new table in v1).
+
+    hour_bucket = date_trunc('hour', period_end); hourly values use avg()
+    (rate samples), never sum(); score/priority come from the max
+    decision_score row per bucket.
+    """
+    if bucket != "hour":
+        raise HTTPException(status_code=400, detail="Only bucket=hour is supported in v1.")
+    stmt = select(RoadSegment, SegmentEmission).join(
+        SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id
+    ).order_by(SegmentEmission.period_end)
+    if segment_id:
+        stmt = stmt.where(RoadSegment.road_segment_id == segment_id)
+    for raw, col in ((from_, SegmentEmission.period_end), (to, SegmentEmission.period_end)):
+        if raw:
+            try:
+                bound = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid datetime: {raw}")
+            stmt = stmt.where(col >= bound if raw == from_ else col <= bound)
+    buckets: dict[str, dict] = {}
+    for segment, emission in (await db.execute(stmt)).all():
+        totals = emission.pollutant_totals_g_h or {}
+        total = sum(float(v) for v in totals.values())
+        vol = emission.volume_per_hour or {}
+        volume = sum(float(v) for v in vol.values())
+        bucket_start = emission.period_end.replace(minute=0, second=0, microsecond=0).isoformat()
+        key = (bucket_start, segment.road_segment_id)
+        entry = buckets.setdefault(key, {"bucket_start": bucket_start, "segment_id": segment.road_segment_id,
+            "total_sum": 0.0, "volume_sum": 0.0, "n": 0, "decision_score": None, "priority": None})
+        entry["total_sum"] += total
+        entry["volume_sum"] += volume
+        entry["n"] += 1
+        if emission.decision_score is not None and (entry["decision_score"] is None or emission.decision_score > entry["decision_score"]):
+            entry["decision_score"] = emission.decision_score
+            entry["priority"] = emission.priority
+    return [{"bucket_start": e["bucket_start"], "segment_id": e["segment_id"],
+             "avg_total_emission_g_h": e["total_sum"] / e["n"],
+             "avg_volume_per_hour": e["volume_sum"] / e["n"],
+             "decision_score": e["decision_score"], "priority": e["priority"],
+             "sample_count": e["n"]} for e in buckets.values()]
 
 
 @router.get("/api/emissions/{road_segment_id}", response_model=SegmentEmissionResponse)

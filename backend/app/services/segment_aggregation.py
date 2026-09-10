@@ -24,6 +24,9 @@ class SegmentAggregation:
     aggregation_policy: str
     observation_duration_seconds: float
     vehicle_count_semantics: str
+    volume_per_hour: dict[str, float]
+    stream_durations_seconds: dict[str, float]
+    observed_at: object
 
 
 def aggregate_segment_observations(
@@ -42,9 +45,6 @@ def aggregate_segment_observations(
     if aggregation_policy not in {"sum_independent_streams", "authoritative_camera"}:
         raise SegmentAggregationError(f"unsupported aggregation policy: {aggregation_policy}")
 
-    durations = {item.observation_duration_seconds for item in observations}
-    if len(durations) != 1:
-        raise SegmentAggregationError("observations must use one duration per calculation period")
     semantics = {item.vehicle_count_semantics.value for item in observations}
     if semantics not in ({"interval_count"}, {"vehicles_per_hour"}, {"snapshot_occupancy"}):
         raise SegmentAggregationError("only interval_count, vehicles_per_hour, or snapshot_occupancy observations can be scored")
@@ -58,13 +58,30 @@ def aggregate_segment_observations(
     for stream, stream_observations in by_stream.items():
         if len({item.camera_id for item in stream_observations}) > 1:
             if aggregation_policy == "authoritative_camera":
-                selected.append(sorted(stream_observations, key=lambda item: item.camera_id)[0])
+                camera = min(item.camera_id for item in stream_observations)
+                selected.extend(item for item in stream_observations if item.camera_id == camera)
             else:
                 raise SegmentAggregationError(f"duplicate cameras for stream {stream}")
         else:
             selected.extend(stream_observations)
 
+    # Retries of an identical source window must not count twice.
+    selected = list({(o.camera_id, o.lane_or_stream_id, o.captured_at): o for o in selected}.values())
     counts = {category: 0.0 for category in VEHICLE_CATEGORIES}
+    volume = dict(counts)
+    stream_durations = {}
+    for stream in sorted({o.lane_or_stream_id for o in selected}):
+        samples = [o for o in selected if o.lane_or_stream_id == stream]
+        duration = sum(o.observation_duration_seconds for o in samples)
+        stream_durations[stream] = duration
+        for category in VEHICLE_CATEGORIES:
+            if semantics == {"interval_count"}:
+                volume[category] += sum(o.raw_detected_count[category] for o in samples) * 3600 / duration
+            elif semantics == {"vehicles_per_hour"}:
+                volume[category] += sum(o.raw_detected_count[category] * o.observation_duration_seconds for o in samples) / duration
+            else:
+                # Legacy occupancy extrapolation remains explicitly estimated.
+                volume[category] += sum(o.raw_detected_count[category] for o in samples) * 3600 / duration
     if semantics == {"snapshot_occupancy"}:
         # A live frame is a point-in-time occupancy sample. Average samples per
         # stream for display, but preserve the occupancy semantics downstream.
@@ -92,6 +109,9 @@ def aggregate_segment_observations(
         source_streams=tuple(sorted({item.lane_or_stream_id for item in selected})),
         observation_count=len(selected),
         aggregation_policy=aggregation_policy,
-        observation_duration_seconds=next(iter(durations)),
+        observation_duration_seconds=max(stream_durations.values()),
         vehicle_count_semantics=next(iter(semantics)),
+        volume_per_hour=volume,
+        stream_durations_seconds=stream_durations,
+        observed_at=max(o.captured_at for o in selected),
     )
