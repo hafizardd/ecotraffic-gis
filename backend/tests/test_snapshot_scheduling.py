@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
-from app.workers.snapshot_worker import _effective_interval, _select_stream_observations
+from app.workers.snapshot_worker import _effective_interval, _select_stream_observations, _snapshot_priority
 from cv.proposal_emission_factors import VEHICLE_CATEGORIES
 
 BASE = datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc)
@@ -28,6 +28,12 @@ def test_effective_interval_follows_priority():
 
 def test_effective_interval_per_camera_override_wins():
     assert _effective_interval("high", 42) == 42
+
+
+def test_snapshot_priority_defaults_to_medium():
+    assert _snapshot_priority({"priority": "high"}) == "high"
+    assert _snapshot_priority({"priority": "low"}) == "low"
+    assert _snapshot_priority({"priority": None}) == "medium"
 
 
 def test_duplicate_stream_keeps_latest_camera():

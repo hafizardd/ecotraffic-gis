@@ -96,6 +96,10 @@ def _effective_interval(priority: str | None, sampling_interval_seconds: int | N
     }.get(priority, settings.SNAPSHOT_MEDIUM_INTERVAL_SECONDS)
 
 
+def _snapshot_priority(camera) -> str:
+    return camera["priority"] or "medium"
+
+
 def _claim_due_cameras(db, limit: int):
     return db.execute(_CLAIM_SQL, {
         "limit": limit,
@@ -180,6 +184,8 @@ def sample_historical_cameras(dry_run: bool | None = None) -> dict:
         if dry:
             stats.update(_run_dry_run(cameras))
             stats["claimed"] = len(cameras)
+            for camera in cameras:
+                stats[f"claimed_{_snapshot_priority(camera)}"] += 1
             stats["cycle_seconds"] = round(time.monotonic() - started, 2)
             logger.info("snapshot_cycle", extra=dict(stats))
             return dict(stats)
@@ -189,7 +195,10 @@ def sample_historical_cameras(dry_run: bool | None = None) -> dict:
         detector = _get_detector()
         mappings = _load_active_mappings(db)
         collected: list[tuple[SegmentTrafficObservation, RoadSegment, bool]] = []
+        priorities = {camera["camera_id"]: _snapshot_priority(camera) for camera in cameras}
         stats["claimed"] = len(cameras)
+        for priority in priorities.values():
+            stats[f"claimed_{priority}"] += 1
 
         for chunk in _chunks(list(cameras), settings.SNAPSHOT_CHUNK_SIZE):
             pairs = []
@@ -198,6 +207,7 @@ def sample_historical_cameras(dry_run: bool | None = None) -> dict:
                 if frame is None:
                     _mark_failure(db, camera["id"], datetime.now(timezone.utc))
                     stats["grab_failed"] += 1
+                    stats[f"grab_failed_{_snapshot_priority(camera)}"] += 1
                     continue
                 pairs.append((camera, frame))
             db.commit()
@@ -207,6 +217,7 @@ def sample_historical_cameras(dry_run: bool | None = None) -> dict:
             results = detector.infer_batch([frame for _, frame in pairs])
             for (camera, frame), result in zip(pairs, results):
                 camera_id = camera["camera_id"]
+                priority = _snapshot_priority(camera)
                 try:
                     counts = detector.parse_result_for_camera(frame, result, camera_id)
                     captured_at = datetime.now(timezone.utc)
@@ -228,16 +239,19 @@ def sample_historical_cameras(dry_run: bool | None = None) -> dict:
                     db.commit()
                     collected.append((observation, segment, bool(resolve_roi(camera_id))))
                     stats["observations"] += 1
+                    stats[f"observations_{priority}"] += 1
                 except MappingResolutionError:
                     db.rollback()
                     stats["no_mapping"] += 1
+                    stats[f"no_mapping_{priority}"] += 1
                     logger.warning("snapshot_no_mapping", extra={"camera_id": camera_id})
                 except Exception:
                     db.rollback()
                     stats["camera_failed"] += 1
+                    stats[f"camera_failed_{priority}"] += 1
                     logger.exception("snapshot_camera_failed", extra={"camera_id": camera_id})
 
-        _calculate_emissions(db, collected, stats)
+        _calculate_emissions(db, collected, stats, priorities)
     stats["cycle_seconds"] = round(time.monotonic() - started, 2)
     logger.info("snapshot_cycle", extra=dict(stats))
     return dict(stats)
@@ -251,9 +265,10 @@ def _select_stream_observations(items):
     return [item for item in items if id(item[0]) in kept], dropped
 
 
-def _calculate_emissions(db, collected, stats: Counter) -> None:
+def _calculate_emissions(db, collected, stats: Counter, priorities: dict[str, str] | None = None) -> None:
     if not collected:
         return
+    priorities = priorities or {}
     seconds = settings.SEGMENT_OBSERVATION_WINDOW_SECONDS
     groups: dict[tuple, list] = defaultdict(list)
     for observation, segment, has_roi in collected:
@@ -305,6 +320,8 @@ def _calculate_emissions(db, collected, stats: Counter) -> None:
             persist_segment_emission_sync(db, segment.id, result)
             db.commit()
             stats["emissions"] += 1
+            kept_priorities = {priorities.get(observation.camera_id, "medium") for observation, _, _ in items}
+            stats["emissions_mixed" if len(kept_priorities) > 1 else f"emissions_{next(iter(kept_priorities))}"] += 1
         except Exception:
             db.rollback()
             stats["emission_failed"] += 1

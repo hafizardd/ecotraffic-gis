@@ -31,6 +31,6 @@ celery_app.conf.beat_schedule = {
     # 5-min beat; per-camera cadence follows next_sample_at (claim-lease).
     "snapshot-historical": {
         "task": "app.workers.snapshot_worker.sample_historical_cameras",
-        "schedule": 300,
+        "schedule": 60,
     },
 }
