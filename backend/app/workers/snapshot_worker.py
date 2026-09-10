@@ -30,7 +30,7 @@ from app.services.segment_emission_store import persist_segment_emission_sync
 from app.services.segment_mapping import CameraSegmentMapping, MappingResolutionError, resolve_camera_mapping
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
 from app.services.segment_observation_store import observation_row
-from app.services.spatial_integration import compute_all_spatial_criteria
+from app.services.spatial_integration import compute_population_context
 from app.workers.celery_app import celery_app
 from app.workers.segment_calculation_worker import _window_start
 from cv.rois import resolve as resolve_roi
@@ -287,27 +287,21 @@ def _calculate_emissions(db, collected, stats: Counter, priorities: dict[str, st
                 "kept_cameras": sorted({observation.camera_id for observation, _, _ in items}),
             })
         try:
-            spatial = spatial_cache.get(str(segment.id))
-            if spatial is None:
-                spatial = compute_all_spatial_criteria(db, segment)
-                spatial_cache[str(segment.id)] = spatial
+            population_context = spatial_cache.get(str(segment.id))
+            if population_context is None:
+                population_context = compute_population_context(db, segment)
+                spatial_cache[str(segment.id)] = population_context
                 segment.spatial_metadata = {
                     **(segment.spatial_metadata or {}),
-                    "raw_values": spatial["raw_values"],
-                    "population_context": spatial["population_context"],
-                    "spatial_criteria_details": spatial["spatial_criteria_details"],
-                    "component_status": spatial["component_status"],
-                    "provenance": spatial["provenance"],
+                    "population_context": population_context,
                 }
-                primary = (spatial["population_context"] or {}).get("primary")
+                primary = (population_context or {}).get("primary")
                 segment.population = primary.get("population") if primary else None
             result = calculate_segment_emission(
                 [observation for observation, _, _ in items],
                 period_start=period_start,
                 period_end=period_start + timedelta(seconds=seconds),
                 road_length_km=segment.length_km,
-                spatial_criteria=spatial["raw_values"],
-                spatial_details=spatial,
             )
             result["data_source"] = "HISTORICAL"
             result["source_mode"] = "SNAPSHOT_REAL"

@@ -48,8 +48,6 @@ export interface SegmentHistoryBucket {
     segment_id: string;
     avg_total_emission_g_h: number;
     avg_volume_per_hour: number;
-    decision_score: number | null;
-    priority: string | null;
     sample_count: number;
 }
 
@@ -78,6 +76,14 @@ export async function fetchActivityGrid(bbox?: string): Promise<ActivityGridFeat
 export async function fetchActivityGridHex(hexId: number): Promise<ActivityGridFeature> {
     const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}`);
     if (!response.ok) throw new Error(`Failed to fetch activity grid hex: ${response.statusText}`);
+    return response.json();
+}
+
+// null = segment is outside the imported grid coverage (normal empty state).
+export async function fetchSegmentActivityGrid(segmentId: string): Promise<ActivityGridFeature | null> {
+    const response = await fetch(`${API_BASE}/api/spatial/segments/${encodeURIComponent(segmentId)}/activity-grid`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Failed to fetch segment activity grid: ${response.statusText}`);
     return response.json();
 }
 

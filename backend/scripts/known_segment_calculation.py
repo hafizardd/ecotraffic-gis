@@ -17,7 +17,6 @@ def main() -> None:
         "motorcycle_volume_per_hour": result["volume_per_hour"]["motorcycle"],
         "motorcycle_vkt_km_h": result["vkt_km_h"]["motorcycle"],
         "motorcycle_co_g_h": result["emissions"]["by_category_g_h"]["motorcycle"]["CO"],
-        "spatial_criteria_status": result["spatial_criteria_status"],
     })
 
 

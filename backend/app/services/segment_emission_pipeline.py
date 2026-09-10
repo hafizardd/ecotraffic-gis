@@ -4,11 +4,13 @@ Rates use measured exposure per independent stream. Temporal analytics average
 rate samples per segment and only sum the same pollutant across segments.
 Legacy occupancy extrapolation stays explicitly estimated and versioned;
 camera live estimates retain their separate fuel-based calculation path.
+
+Decision scoring has moved to the hex activity grid; this pipeline only emits
+volume, VKT and emissions.
 """
 
 from datetime import datetime, timezone
 
-from app.services.ahp_calculator import aggregate_emission_criterion, calculate_weights, classify_priority, decision_score, normalize_criteria, validate_ahp_consistency
 from app.services.segment_observation import VehicleCountSemantics
 from app.services.segment_aggregation import aggregate_segment_observations
 from app.services.traffic_calculator import vkt_by_category
@@ -17,31 +19,15 @@ from app.services.tier2_emission_calculator import calculate_tier2_emissions
 
 def calculate_segment_emission(
     observations, *, period_start, period_end, road_length_km,
-    spatial_criteria=None, criterion_ranges=None, pollutant_ranges=None,
-    control_efficiency=0.0, spatial_details=None,
+    control_efficiency=0.0,
 ):
-    # Regression guard: no placeholder (e.g. 0.5) K3/K4/K5 path — when spatial
-    # is pending, decision_score/priority are omitted, not invented.
     aggregation = aggregate_segment_observations(observations, period_start=period_start, period_end=period_end)
     duration = aggregation.observation_duration_seconds
     occupancy = aggregation.vehicle_count_semantics == VehicleCountSemantics.SNAPSHOT_OCCUPANCY.value
     volume = aggregation.volume_per_hour
     vkt = vkt_by_category(volume, road_length_km)
     emissions = calculate_tier2_emissions(vkt, control_efficiency=control_efficiency)
-    raw = {
-        "K1": (
-            aggregate_emission_criterion(emissions["totals_g_h"], pollutant_ranges)
-            if pollutant_ranges is not None
-            else sum(emissions["totals_g_h"].values())
-        ),
-        "K2": sum(volume.values()),
-        "K3": None if spatial_criteria is None else spatial_criteria.get("K3"),
-        "K4": None if spatial_criteria is None else spatial_criteria.get("K4"),
-        "K5": None if spatial_criteria is None else spatial_criteria.get("K5"),
-    }
-    spatial_pending = any(raw[key] is None for key in ("K3", "K4", "K5"))
-    component_status = {key: ("complete" if raw[key] is not None else "pending") for key in ("K3", "K4", "K5")}
-    result = {
+    return {
         "road_segment_id": aggregation.road_segment_id, "period_start": period_start,
         "period_end": period_end, "calculated_at": datetime.now(timezone.utc),
         "raw_counts": aggregation.raw_counts, "observation_duration_seconds": duration,
@@ -60,21 +46,9 @@ def calculate_segment_emission(
         },
         "volume_per_hour": volume,
         "volume_status": "estimated" if occupancy else "calculated",
-        "vkt_km_h": vkt, "emissions": emissions, "raw_criteria": raw,
-        "normalized_values": spatial_details.get("normalized_values") if spatial_details else None,
-        "component_status": component_status,
-        "spatial_criteria_status": "pending" if spatial_pending else "complete",
-        "spatial_details": spatial_details,
+        "vkt_km_h": vkt, "emissions": emissions,
         "provenance": {
             "source_cameras": aggregation.source_cameras, "source_streams": aggregation.source_streams,
             "source_observation_count": aggregation.observation_count, "aggregation_policy": aggregation.aggregation_policy,
-            "spatial": spatial_details.get("provenance") if spatial_details else None,
         },
     }
-    if not spatial_pending:
-        normalized = normalize_criteria(raw, criterion_ranges)
-        weights = calculate_weights()
-        consistency = validate_ahp_consistency()
-        score = decision_score(normalized, weights)
-        result.update({"normalized_criteria": normalized, "ahp_weights": weights, "ahp_consistency": consistency, "decision_score": score, "priority": classify_priority(score)})
-    return result

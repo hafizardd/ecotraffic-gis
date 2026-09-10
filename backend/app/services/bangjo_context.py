@@ -81,6 +81,7 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
     ).scalar() or 0
 
     scores = [hex_cell.skor_total_ahp for hex_cell in hexes]
+    primary_hex = max(hexes, key=lambda hex_cell: hex_cell.skor_total_ahp) if hexes else None
     activity_potential = {
         "hex_count": len(hexes),
         "hex_ids": [hex_cell.hex_id for hex_cell in hexes],
@@ -93,10 +94,9 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "segment": {
             "road_segment_id": segment.road_segment_id, "name": segment.name, "length_km": segment.length_km,
-            "decision_score": emission.decision_score if emission else None,
-            "priority": emission.priority if emission else None,
+            "activity_class": primary_hex.klasifikasi_potensi if primary_hex else None,
+            "activity_score": primary_hex.skor_total_ahp if primary_hex else None,
             "pollutant_totals": emission.pollutant_totals_g_h if emission else None,
-            "raw_criteria": emission.raw_criteria if emission else None,
             "data_source": emission.vehicle_count_semantics if emission else None,
             "observed_at": emission.period_end.isoformat() if emission else None,
         },

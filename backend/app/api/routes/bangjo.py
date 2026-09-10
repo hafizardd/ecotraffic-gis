@@ -34,9 +34,9 @@ SYSTEM_PROMPT = (
     '{"summary": str, "drivers": [str], "asi_category": str, "recommendation": str, "evidence": [str]}.'
 )
 
-PRIORITY_ASI = {
-    "Critical": "Avoid + Shift + Improve", "Very High": "Shift + Improve",
-    "High": "Improve", "Moderate": "Improve", "Low": "Improve",
+CLASS_ASI = {
+    "Sangat Tinggi": "Avoid + Shift + Improve", "Tinggi": "Shift + Improve",
+    "Sedang": "Improve", "Rendah": "Improve", "Sangat Rendah": "Improve",
 }
 
 
@@ -55,12 +55,12 @@ def _fallback_answer(context: dict, message: str) -> dict:
     segment = context["segment"]
     activity = context["activity_potential"]
     stops = context["bus_stops"]
-    priority = segment.get("priority")
+    activity_class = segment.get("activity_class")
     evidence = []
-    if segment.get("decision_score") is not None:
-        evidence.append(f"decision_score={round(segment['decision_score'], 3)}")
-    if priority:
-        evidence.append(f"priority={priority}")
+    if segment.get("activity_score") is not None:
+        evidence.append(f"activity_score={round(segment['activity_score'], 3)}")
+    if activity_class:
+        evidence.append(f"klasifikasi_potensi={activity_class}")
     if activity.get("avg_skor_total_ahp") is not None:
         evidence.append(f"avg_skor_total_ahp={activity['avg_skor_total_ahp']}")
     if stops:
@@ -69,17 +69,17 @@ def _fallback_answer(context: dict, message: str) -> dict:
     dominant = ", ".join(item["category"] for item in activity.get("dominant_poi_categories", [])) or "tidak tersedia"
     return {
         "summary": (
-            f"Koridor {segment['name']} ({segment['road_segment_id']}) memiliki prioritas "
-            f"{priority or 'belum dinilai'}. Potensi aktivitas sekitar didominasi {dominant}."
+            f"Koridor {segment['name']} ({segment['road_segment_id']}) memiliki potensi aktivitas "
+            f"{activity_class or 'belum tersedia'}. Potensi aktivitas sekitar didominasi {dominant}."
         ),
         "drivers": [
             f"Potensi aktivitas rata-rata: {activity.get('avg_skor_total_ahp', 'tidak tersedia')}",
             f"Klasifikasi potensi: {', '.join(activity.get('klasifikasi_potensi') or []) or 'tidak tersedia'}",
         ],
-        "asi_category": PRIORITY_ASI.get(priority, "Improve"),
+        "asi_category": CLASS_ASI.get(activity_class, "Improve"),
         "recommendation": (
-            "Fokuskan intervensi pada koridor ini; lengkapi data segmen bila skor belum tersedia."
-            if priority else "Data skor koridor belum tersedia, jadi rekomendasi spesifik belum dapat dibuat."
+            "Fokuskan intervensi pada koridor ini; lengkapi data segmen bila potensi belum tersedia."
+            if activity_class else "Data potensi koridor belum tersedia, jadi rekomendasi spesifik belum dapat dibuat."
         ),
         "evidence": evidence,
         "source": "fallback",

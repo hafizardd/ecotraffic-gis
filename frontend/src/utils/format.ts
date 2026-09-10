@@ -48,14 +48,3 @@ export function fmtDateTimeId(iso: string | null | undefined): string {
     if (Number.isNaN(d.getTime())) return MISSING_LABEL;
     return d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
 }
-
-export const SPATIAL_STATUS_ID: Record<string, string> = {
-    complete: "Lengkap",
-    pending: "Menunggu",
-    unknown: "Tidak diketahui",
-};
-
-export function fmtSpatialStatus(v: string | null | undefined): string {
-    if (!v) return MISSING_LABEL;
-    return SPATIAL_STATUS_ID[v] ?? v;
-}

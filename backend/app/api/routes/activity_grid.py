@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routes.spatial_layers import _feature, _parse_bbox
 from app.core.database import get_db
 from app.models.activity_grid import ActivityGridHex
+from app.models.road_segment import RoadSegment
+from app.services.spatial_integration import resolve_primary_hex
 
 router = APIRouter(prefix="/api/spatial", tags=["spatial"])
 
@@ -41,4 +43,27 @@ async def get_activity_grid_hex(hex_id: int, db: AsyncSession = Depends(get_db))
     cell = (await db.execute(select(ActivityGridHex).where(ActivityGridHex.hex_id == hex_id))).scalar_one_or_none()
     if cell is None:
         raise HTTPException(status_code=404, detail="Activity grid hex not found")
+    return _feature(geometry, _hex_properties(cell))
+
+
+@router.get("/segments/{road_segment_id}/activity-grid")
+async def get_segment_activity_grid(road_segment_id: str, db: AsyncSession = Depends(get_db)):
+    """Activity-potential hex containing the segment's longest intersection.
+
+    A 404 means "not covered by the grid" and is a normal empty state for the
+    segment panel, not an error.
+    """
+    segment = (
+        await db.execute(select(RoadSegment).where(RoadSegment.road_segment_id == road_segment_id))
+    ).scalar_one_or_none()
+    if segment is None:
+        raise HTTPException(status_code=404, detail=f"Road segment '{road_segment_id}' not found")
+    cell = await resolve_primary_hex(db, segment)
+    if cell is None:
+        raise HTTPException(status_code=404, detail="Segment is not covered by the activity grid")
+    geometry = (
+        await db.execute(
+            select(text("ST_AsGeoJSON(activity_grid_hexes.geometry)::json")).where(ActivityGridHex.hex_id == cell.hex_id)
+        )
+    ).scalar_one()
     return _feature(geometry, _hex_properties(cell))
