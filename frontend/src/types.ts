@@ -266,6 +266,14 @@ export interface EmissionSummary {
     source?: string;
 }
 
+export interface BangJoMessage {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    contextLabel?: string;
+    timestamp: string;
+}
+
 export interface ChartPoint {
     timestamp: string;
     tsp: number;

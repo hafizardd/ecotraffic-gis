@@ -10,6 +10,7 @@ import RiwayatPage from "../Pages/RiwayatPage";
 import LaporanPage from "../Pages/LaporanPage";
 import PengaturanPage from "../Pages/PengaturanPage";
 import { EmissionAnalyticsProvider } from "@/context/EmissionAnalyticsContext";
+import BangJoWidget from "../Chatbot/BangJoWidget";
 
 export type ActiveView = "peta" | "emisi" | "kendaraan" | "riwayat" | "laporan" | "pengaturan";
 const viewMeta: Record<ActiveView, [string, string]> = { peta: ["MONITORING DASHBOARD", "Peta Lalu Lintas Real-time"], emisi: ["ANALISIS EMISI", "Emisi & Tren"], kendaraan: ["ANALISIS LALU LINTAS", "Kendaraan"], riwayat: ["DATA HISTORIS", "Riwayat"], laporan: ["PELAPORAN", "Laporan"], pengaturan: ["KONFIGURASI SISTEM", "Pengaturan"] };
@@ -28,6 +29,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {(activeView === "peta" || activeView === "kendaraan" || activeView === "pengaturan") && <GlobalCounter />}
                 <main className="dashboard-workspace">{activeView === "peta" ? children : page}</main>
             </div>
+            <BangJoWidget />
         </div></EmissionAnalyticsProvider>
     );
 }
