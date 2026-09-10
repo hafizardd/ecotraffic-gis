@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import time
 from collections import deque
@@ -35,6 +34,7 @@ from app.services.latest_emission_state import LatestEmissionStateStore
 from app.services.segment_mapping import CameraSegmentMapping, MappingResolutionError, resolve_camera_mapping
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
 from app.services.segment_observation_store import observation_row
+from cv.capture import open_capture as _open_capture
 from cv.detector import VehicleDetector
 from cv.frame_store import RedisFrameStore
 from cv.rois import to_normalized
@@ -163,47 +163,6 @@ def _parse_tracks(detector: VehicleDetector, frame, result) -> list[dict]:
             }
         )
     return tracks
-
-
-def _open_capture(cv2_module, stream_url: str, referer: str | None):
-    """Open a capture with Referer + timeouts (Wowza requires Referer)."""
-    env_key = "OPENCV_FFMPEG_CAPTURE_OPTIONS"
-    previous = os.environ.get(env_key)
-    try:
-        if referer:
-            os.environ[env_key] = f"headers=Referer: {referer}\r\n"
-        cap = cv2_module.VideoCapture()
-        open_ms = int(float(settings.FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS) * 1000)
-        read_ms = int(float(settings.FRAME_CAPTURE_READ_TIMEOUT_SECONDS) * 1000)
-        for prop, value in (
-            ("CAP_PROP_OPEN_TIMEOUT_MSEC", open_ms),
-            ("CAP_PROP_READ_TIMEOUT_MSEC", read_ms),
-        ):
-            prop_id = getattr(cv2_module, prop, None)
-            if prop_id is not None:
-                try:
-                    cap.set(prop_id, value)
-                except Exception:
-                    pass
-        backend = getattr(cv2_module, "CAP_FFMPEG", 0)
-        buffer_prop = getattr(cv2_module, "CAP_PROP_BUFFERSIZE", None)
-        if buffer_prop is not None:
-            try:
-                cap.set(buffer_prop, 1)
-            except Exception:
-                pass
-        if not cap.open(stream_url, backend) or not cap.isOpened():
-            try:
-                cap.release()
-            except Exception:
-                pass
-            return None
-        return cap
-    finally:
-        if previous is None:
-            os.environ.pop(env_key, None)
-        else:
-            os.environ[env_key] = previous
 
 
 def run_camera_loop(camera_id: str, stop: threading.Event) -> None:

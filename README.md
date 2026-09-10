@@ -139,6 +139,37 @@ After migrations, seed cameras, road segments, and nearest-segment mappings with
 
 Segment endpoints are `GET /api/segments/geojson`, `GET /api/emissions/map`, and `GET /api/emissions/{road_segment_id}`. Camera responses include `data_source`; filter live or historical cameras with `GET /api/cameras?data_source=LIVE` or `HISTORICAL`. The `/ws/emissions` socket forwards camera messages and `segment_update` messages.
 
+#### Historical snapshot sampler (real data, 54 HISTORICAL cameras)
+
+The `snapshot-worker` service claims due non-LIVE cameras (claim-lease on
+`cameras.next_sample_at`), grabs one frame per camera, runs one shared batched
+YOLO call per chunk, and writes `SNAPSHOT_OCCUPANCY` observations plus
+`source_mode = "SNAPSHOT_REAL"` segment emissions. It is scheduled by Celery
+beat every 5 minutes and consumes the `snapshot` queue.
+
+```bash
+# 1. Seed priorities + stagger the first sample time (one-off, re-runnable)
+docker compose exec snapshot-worker python -m scripts.seed_snapshot_schedule
+
+# 2. Validate capture timing without DB writes, then start
+docker compose run --rm snapshot-worker python -c \
+  "from app.workers.snapshot_worker import sample_historical_cameras; print(sample_historical_cameras(dry_run=True))"
+docker compose up -d snapshot-worker beat
+```
+
+Boost the cadence for the first ~24h by setting `SNAPSHOT_HIGH/MEDIUM/LOW_INTERVAL_SECONDS=180/300/600`
+in `backend/.env`, then remove them to fall back to the relaxed `900/1800/3600`.
+
+Three provenance tiers, kept distinct everywhere: `LIVE` flow-tracked (2
+cameras, `interval_count`), `HISTORICAL`/`SNAPSHOT_REAL` occupancy-estimated
+(54 cameras, `snapshot_occupancy`), and legacy `SYNTHETIC` (dev seed only,
+excluded from analytics and exports). Historical data is never reported as live.
+
+`scripts/generate_historical_segment_data.py` is **deprecated** for production:
+it refuses to run unless the table is empty or `--only-missing` is passed. If
+you start from an empty database you can skip it entirely and let the snapshot
+sampler produce the only HISTORICAL rows.
+
 #### 2. Seed the Data
 ```bash
 # Open new terminal and go to root dir

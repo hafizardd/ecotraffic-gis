@@ -1,7 +1,41 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import numpy as np
 
 from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
+from cv.detector import VehicleDetector
+
+
+class _FakeModel:
+    names = {0: "car", 1: "motorcycle", 2: "bus", 3: "truck"}
+
+
+def _fake_detector() -> VehicleDetector:
+    return VehicleDetector(model_factory=lambda path: _FakeModel())
+
+
+def _box(cls_id: int, xyxy, conf: float = 0.9):
+    return SimpleNamespace(cls=np.array([cls_id]), conf=np.array([conf]), xyxy=np.array([xyxy]))
+
+
+def test_parse_result_for_camera_uses_whole_frame_without_roi():
+    detector = _fake_detector()
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    result = SimpleNamespace(boxes=[_box(0, [80, 0, 100, 10])])
+
+    assert detector.parse_result_for_camera(frame, result, None)["car"] == 1
+
+
+def test_parse_result_for_camera_filters_outside_roi():
+    detector = _fake_detector()
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    outside = SimpleNamespace(boxes=[_box(0, [80, 0, 100, 10])])
+    inside = SimpleNamespace(boxes=[_box(0, [40, 80, 60, 100])])
+
+    assert detector.parse_result_for_camera(frame, outside, "atcs_jlagran")["car"] == 0
+    assert detector.parse_result_for_camera(frame, inside, "atcs_jlagran")["car"] == 1
 
 
 def test_snapshot_occupancy_is_estimated_as_hourly_volume():

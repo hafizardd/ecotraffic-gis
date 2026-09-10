@@ -17,7 +17,7 @@ const VEHICLES: { key: keyof VehicleRates; label: string }[] = [
     { key: "car", label: "Mobil" }, { key: "motorcycle", label: "Motor" },
     { key: "bus", label: "Bus" }, { key: "truck", label: "Truk" },
 ];
-const SOURCE_LABELS: Record<string, string> = { LIVE: "Langsung", HISTORICAL: "Historis", SYNTHETIC: "Sintetis", REPLAY: "Replay" };
+const SOURCE_LABELS: Record<string, string> = { LIVE: "Langsung", HISTORICAL: "Historis", SYNTHETIC: "Sintetis", REPLAY: "Replay", SNAPSHOT_REAL: "Snapshot" };
 
 function StatusBadge({ record }: { record: EmissionHistoryRecord }) {
     return <div className="history-status">

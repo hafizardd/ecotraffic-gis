@@ -76,7 +76,7 @@ export interface EmissionUpdate {
     total_n2o_g_per_min: number;
     total_n2o_kg_per_hr: number;
     cycle_duration_s: number;
-    source_mode?: "LIVE" | "HISTORICAL" | "REPLAY" | "SYNTHETIC";
+    source_mode?: "LIVE" | "HISTORICAL" | "REPLAY" | "SYNTHETIC" | "SNAPSHOT_REAL";
     processed_at?: string;
     calculation_version?: string;
     source?: "tracking" | "snapshot";
@@ -208,7 +208,7 @@ export interface PollutantComposition { pollutant: string; key: PollutantKey; kg
 export interface RealtimeSegmentEmission {
     id: string; segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
     period_start: string; period_end: string; observed_at: string; processed_at: string;
-    calculation_version: number; source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY";
+    calculation_version: number; source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY" | "SNAPSHOT_REAL";
     vehicle_count_semantics: "interval_count" | "snapshot_occupancy" | "vehicles_per_hour" | "unknown";
     calculation_mode: "flow_based_segment" | "live_occupancy_estimate";
     quality_status: "observed" | "estimated";
@@ -232,7 +232,7 @@ export interface EmissionHistoryRecord {
     id: string;
     period_start: string; period_end: string; observed_at: string; processed_at: string;
     segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
-    source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY";
+    source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY" | "SNAPSHOT_REAL";
     quality_status: "observed" | "estimated";
     freshness_status: "fresh" | "stale";
     vehicle_count_semantics: string;

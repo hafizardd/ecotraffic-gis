@@ -56,6 +56,7 @@ def envelope(filters: AnalyticsFilter):
     return {"from": filters.start, "to": filters.end, "segment_id": filters.segment_id,
         "corridor_id": filters.corridor_id, "units": UNITS,
         "aggregation": "mean_per_segment_then_sum_independent_segments",
+        # SNAPSHOT_REAL is intentionally NOT excluded: it is real sampled data.
         "excluded_source_modes": ["SYNTHETIC", "REPLAY"]}
 
 

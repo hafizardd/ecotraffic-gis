@@ -103,13 +103,13 @@ class VehicleDetector:
             )
         return self._parse_result(frame, results[0], annotate=True)
 
-    def detect_batch(
-        self,
-        frames: Sequence[np.ndarray],
-        *,
-        annotate: bool = True,
-    ) -> list[tuple[dict[str, int], np.ndarray]]:
-        """Run one ordered YOLO call for multiple BGR frames."""
+    def infer_batch(self, frames: Sequence[np.ndarray]) -> list[Any]:
+        """Run one ordered YOLO call over multiple frames; model only, no ROI.
+
+        ROI parsing is per camera, so it stays in ``parse_result_for_camera``.
+        This lets one shared detector serve many cameras in a single batched
+        inference call.
+        """
         batch = list(frames)
         if not batch:
             raise ValueError("Inference batch must contain at least one frame")
@@ -121,7 +121,33 @@ class VehicleDetector:
             raise RuntimeError(
                 f"YOLO returned {len(results)} results for {len(batch)} frames"
             )
+        return results
 
+    def parse_result_for_camera(
+        self,
+        frame: np.ndarray,
+        result: Any,
+        camera_id: str | None,
+    ) -> dict[str, int]:
+        """Count detected vehicles for one camera's ROI (whole frame if none)."""
+        roi_poly = None
+        if resolve(camera_id):
+            h, w = frame.shape[:2]
+            roi_poly = np.array(
+                to_polygon_for_camera(w, h, camera_id), dtype=np.int32
+            )
+        counts, _ = self._apply_result(frame, result, roi_poly=roi_poly, annotate=False)
+        return counts
+
+    def detect_batch(
+        self,
+        frames: Sequence[np.ndarray],
+        *,
+        annotate: bool = True,
+    ) -> list[tuple[dict[str, int], np.ndarray]]:
+        """Run one ordered YOLO call for multiple BGR frames."""
+        batch = list(frames)
+        results = self.infer_batch(batch)
         return [
             self._parse_result(frame, result, annotate=annotate)
             for frame, result in zip(batch, results)
@@ -192,12 +218,19 @@ class VehicleDetector:
         *,
         annotate: bool,
     ) -> tuple[dict[str, int], np.ndarray]:
+        roi_poly = self._roi_polygon(frame)
+        return self._apply_result(frame, result, roi_poly=roi_poly, annotate=annotate)
+
+    def _apply_result(
+        self,
+        frame: np.ndarray,
+        result: Any,
+        *,
+        roi_poly,
+        annotate: bool,
+    ) -> tuple[dict[str, int], np.ndarray]:
         counts = {category: 0 for category in VEHICLE_CATEGORIES}
         annotated_frame = frame.copy() if annotate else frame
-        roi_poly = self._roi_polygon(frame) if annotate else None
-        if roi_poly is None and self._roi_key:
-            # ROI counting still applies when annotate=False; resolve without copy.
-            roi_poly = self._roi_polygon(frame)
 
         if annotate and roi_poly is not None:
             self._draw_roi(annotated_frame, roi_poly)

@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     K4_BUFFER_DISTANCE_M: int = Field(default=500, gt=0)
     K5_BUFFER_DISTANCE_M: int = Field(default=500, gt=0)
 
+    # Historical snapshot sampler: one frame per camera per cycle, batched.
+    # Priority intervals default to the relaxed cadence; boost via env during
+    # the first ~24h backfill (SNAPSHOT_HIGH/MEDIUM/LOW_INTERVAL_SECONDS).
+    SNAPSHOT_HIGH_INTERVAL_SECONDS: int = Field(default=900, gt=0)
+    SNAPSHOT_MEDIUM_INTERVAL_SECONDS: int = Field(default=1800, gt=0)
+    SNAPSHOT_LOW_INTERVAL_SECONDS: int = Field(default=3600, gt=0)
+    SNAPSHOT_CLAIM_BATCH_SIZE: int = Field(default=12, gt=0)
+    SNAPSHOT_CHUNK_SIZE: int = Field(default=10, gt=0)
+    SNAPSHOT_FAILURES_BEFORE_OFFLINE: int = Field(default=5, gt=0)
+    SNAPSHOT_DRY_RUN: bool = False
+
     # Deployments may define settings for adjacent services; they should not
     # prevent this application from starting when those keys are unrelated.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
