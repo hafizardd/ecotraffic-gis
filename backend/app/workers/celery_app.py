@@ -22,6 +22,6 @@ celery_app.conf.task_routes = {
 celery_app.conf.beat_schedule = {
     "recalculate-segment-emissions": {
         "task": "app.workers.segment_calculation_worker.recalculate_segment_emissions",
-        "schedule": settings.SEGMENT_CALCULATION_PERIOD_MINUTES * 60,
+        "schedule": settings.SEGMENT_OBSERVATION_WINDOW_SECONDS,
     },
 }

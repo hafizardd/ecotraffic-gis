@@ -142,8 +142,9 @@ async def get_segment_emission_history(
         total = sum(float(v) for v in totals.values())
         vol = emission.volume_per_hour or {}
         volume = sum(float(v) for v in vol.values())
-        key = emission.period_end.replace(minute=0, second=0, microsecond=0).isoformat()
-        entry = buckets.setdefault(key, {"bucket_start": key, "segment_id": segment.road_segment_id,
+        bucket_start = emission.period_end.replace(minute=0, second=0, microsecond=0).isoformat()
+        key = (bucket_start, segment.road_segment_id)
+        entry = buckets.setdefault(key, {"bucket_start": bucket_start, "segment_id": segment.road_segment_id,
             "total_sum": 0.0, "volume_sum": 0.0, "n": 0, "decision_score": None, "priority": None})
         entry["total_sum"] += total
         entry["volume_sum"] += volume

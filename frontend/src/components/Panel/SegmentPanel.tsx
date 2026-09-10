@@ -71,7 +71,7 @@ function SegmentDetailPanel({
         };
     }, [detail, update]);
 
-    const fallback = useMemo(() => {
+    const fallback = (() => {
         if (!liveDetail) return null;
         if (liveDetail.pollutant_totals_g_h != null || liveDetail.volume_per_hour != null) return null;
         const cameras: string[] = Array.isArray((liveDetail.provenance as { source_cameras?: unknown })?.source_cameras)
@@ -83,7 +83,7 @@ function SegmentDetailPanel({
             if (live && emission) return { camId, emission, at: live.captured_at ?? live.timestamp };
         }
         return null;
-    }, [liveDetail, emissionMap]);
+    })();
 
     return (
         <aside className="monitoring-panel segment-panel">

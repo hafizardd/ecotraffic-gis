@@ -115,7 +115,8 @@ async def send_initial_state(websocket: WebSocket) -> None:
                     for segment_id in segment_ids:
                         state = await segment_client.get(segment_store.key_for(segment_id))
                         if state:
-                            await websocket.send_text(json.dumps({"type": "segment_update", "segment_id": segment_id, "data": json.loads(state)}))
+                            payload = json.loads(state)
+                            await websocket.send_text(json.dumps({**payload, "type": "segment_update", "segment_id": segment_id, "data": payload}))
                 finally:
                     await segment_client.aclose()
             except Exception:
@@ -194,8 +195,8 @@ async def redis_subscriber():
                 decode_responses=True,
             )
             pubsub = client.pubsub()
-            await pubsub.psubscribe("emissions:*", "emissions:segment:*", "tracks:*")
-            logger.info("Subscribed to patterns: emissions:*, emissions:segment:*, tracks:*")
+            await pubsub.psubscribe("emissions:*", "tracks:*")
+            logger.info("Subscribed to patterns: emissions:*, tracks:*")
 
             async for message in pubsub.listen():
                 if message["type"] == "pmessage":

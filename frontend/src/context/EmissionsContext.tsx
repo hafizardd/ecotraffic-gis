@@ -2,10 +2,10 @@
 
 import { createContext, useContext, ReactNode } from "react";
 import useEmissions from "@/hooks/useEmissions";
-import { EmissionUpdate, SegmentUpdate } from "@/types";
+import { EmissionUpdate, RealtimeSegmentEmission, SegmentUpdate } from "@/types";
 
-interface EmissionsContextValue { emissionMap: Map<string, EmissionUpdate>; segmentMap: Map<string, SegmentUpdate["data"]>; connectionStatus: "connecting" | "connected" | "disconnected"; lastMessageAt: string | null; error: string | null; }
-const EmissionsContext = createContext<EmissionsContextValue>({ emissionMap: new Map(), segmentMap: new Map(), connectionStatus: "connecting", lastMessageAt: null, error: null });
+interface EmissionsContextValue { emissionMap: Map<string, EmissionUpdate>; segmentMap: Map<string, SegmentUpdate["data"]>; segmentEmissionMap: Map<string, RealtimeSegmentEmission>; connectionStatus: "connecting" | "connected" | "disconnected"; lastMessageAt: string | null; error: string | null; }
+const EmissionsContext = createContext<EmissionsContextValue>({ emissionMap: new Map(), segmentMap: new Map(), segmentEmissionMap: new Map(), connectionStatus: "connecting", lastMessageAt: null, error: null });
 
 export function EmissionsProvider({ children }: { children: ReactNode }) {
     const value = useEmissions();

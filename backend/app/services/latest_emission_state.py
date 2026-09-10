@@ -60,6 +60,7 @@ class LatestEmissionStateStore:
             "period_end": aggregate["period_end"],
             "sample_count": aggregate["sample_count"],
             "aggregation_method": aggregate["aggregation_method"],
+            "calculation_mode": "live_occupancy_estimate",
             "vehicle_count_semantics": aggregate["vehicle_count_semantics"],
             **{vehicle_type: vehicle_count[vehicle_type] for vehicle_type in VEHICLE_TYPES},
             **{field: emission_values[field] for field in EMISSION_RATE_FIELDS},

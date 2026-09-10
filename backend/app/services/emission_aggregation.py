@@ -87,6 +87,7 @@ class AggregatedEmission:
             "last_captured_at": self.last_captured_at.isoformat(),
             "sample_count": self.sample_count,
             "aggregation_method": "arithmetic_mean_of_snapshot_counts",
+            "calculation_mode": "live_occupancy_estimate",
             "vehicle_count_semantics": "mean_observed_snapshot_count",
             "vehicle_count": {
                 vehicle_type: round(count, 3)

@@ -1,26 +1,9 @@
-"""Pure orchestration for one segment calculation period.
+"""Canonical segment analytics: interval exits -> vehicles/hour -> VKT -> Tier-2.
 
-Canonical hourly aggregation logic (live + history share one definition):
-
-per-camera window (60s, epoch-aligned):
-  mean_counts[veh] = sum(snapshot_counts) / sample_count
-  camera_emission  = calculate_emission(mean_counts)  # fuel-based g/min + kg/hr
-  -> 1 EmissionAggregate row / camera / minute
-
-per-segment period (60s, [now-60, now)):
-  per-stream mean occupancy = sum(snapshot_occupancy) / n
-  raw_counts   = sum over streams
-  volume/hr    = raw * 3600/60          # always labeled "estimated"
-  vkt          = volume * length_km
-  segment_emission = Tier2(vkt)         # proposal factors, g/jam per pollutant
-  -> 1 SegmentEmission row / segment / minute
-
-hourly history view (read-only, no new table in v1):
-  hour_bucket = date_trunc('hour', period_end)
-  hourly_emission_g = avg(totals) per bucket
-  hourly_volume     = avg(volume_per_hour) per bucket
-  score/priority    = max(decision_score) row per bucket
-  (avg, never sum: rows are rate samples; sum would double city totals)
+Rates use measured exposure per independent stream. Temporal analytics average
+rate samples per segment and only sum the same pollutant across segments.
+Legacy occupancy extrapolation stays explicitly estimated and versioned;
+camera live estimates retain their separate fuel-based calculation path.
 """
 
 from datetime import datetime, timezone
@@ -28,7 +11,7 @@ from datetime import datetime, timezone
 from app.services.ahp_calculator import aggregate_emission_criterion, calculate_weights, classify_priority, decision_score, normalize_criteria, validate_ahp_consistency
 from app.services.segment_observation import VehicleCountSemantics
 from app.services.segment_aggregation import aggregate_segment_observations
-from app.services.traffic_calculator import volume_per_hour, vkt_by_category
+from app.services.traffic_calculator import vkt_by_category
 from app.services.tier2_emission_calculator import calculate_tier2_emissions
 
 
@@ -42,10 +25,7 @@ def calculate_segment_emission(
     aggregation = aggregate_segment_observations(observations, period_start=period_start, period_end=period_end)
     duration = aggregation.observation_duration_seconds
     occupancy = aggregation.vehicle_count_semantics == VehicleCountSemantics.SNAPSHOT_OCCUPANCY.value
-    volume = volume_per_hour(
-        aggregation.raw_counts, duration,
-        already_hourly=aggregation.vehicle_count_semantics == VehicleCountSemantics.VEHICLES_PER_HOUR.value,
-    )
+    volume = aggregation.volume_per_hour
     vkt = vkt_by_category(volume, road_length_km)
     emissions = calculate_tier2_emissions(vkt, control_efficiency=control_efficiency)
     raw = {
@@ -66,6 +46,18 @@ def calculate_segment_emission(
         "period_end": period_end, "calculated_at": datetime.now(timezone.utc),
         "raw_counts": aggregation.raw_counts, "observation_duration_seconds": duration,
         "vehicle_count_semantics": aggregation.vehicle_count_semantics,
+        "calculation_version": 2,
+        "calculation_mode": "live_occupancy_estimate" if occupancy else "flow_based_segment",
+        "data_source": "LIVE",
+        "observed_at": aggregation.observed_at.isoformat(),
+        "calculation_metadata": {
+            "stream_durations_seconds": aggregation.stream_durations_seconds,
+            "emission_factor_set": "proposal_tier2_g_per_vehicle_km_v1",
+            "control_efficiency_percent": control_efficiency,
+            "road_length_km": road_length_km,
+            "volume_basis": "occupancy_extrapolation" if occupancy else aggregation.vehicle_count_semantics,
+            "flow_exit_policy": "roi_exit_or_missing_track_threshold" if not occupancy else None,
+        },
         "volume_per_hour": volume,
         "volume_status": "estimated" if occupancy else "calculated",
         "vkt_km_h": vkt, "emissions": emissions, "raw_criteria": raw,

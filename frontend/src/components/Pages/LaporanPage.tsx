@@ -1,2 +1,7 @@
 "use client";
-export default function LaporanPage() { return <div className="page-container"><div className="page-header-section"><span>PELAPORAN</span><h1>Laporan</h1><p>Siapkan parameter laporan untuk ekspor yang akan datang.</p></div><div className="page-card filters"><label>Periode<select defaultValue="month"><option value="week">Mingguan</option><option value="month">Bulanan</option></select></label><label>Area/segmen<select defaultValue="all"><option value="all">Semua area</option></select></label><label>Format<select defaultValue="csv"><option value="csv">CSV</option><option value="pdf">PDF</option></select></label><button className="disabled-action" disabled>Ekspor belum tersedia</button></div><div className="unavailable-state">Endpoint ekspor CSV dan PDF belum terhubung. Tidak ada laporan yang dibuat.</div></div>; }
+import AnalyticsFilters from "../Analytics/AnalyticsFilters";
+import EmissionHistory from "../Analytics/EmissionHistory";
+
+export default function LaporanPage() {
+    return <div className="page-container analytics-page"><div className="page-header-section"><span>PELAPORAN</span><h1>Laporan & Ekspor</h1><p>Unduh CSV atau JSON dari hasil historis sesuai filter. Tinjau data dan jejak sumber sebelum ekspor.</p></div><AnalyticsFilters /><EmissionHistory /></div>;
+}

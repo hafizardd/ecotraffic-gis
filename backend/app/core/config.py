@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     YOLO_DEVICE: str = "auto"
     YOLO_IMAGE_SIZE: int = Field(default=512, gt=0)
     CONFIDENCE_THRESHOLD: float = Field(default=0.25, ge=0.0, le=1.0)
-    YOLO_TRACKER: str = "botsort.yaml"
+    YOLO_TRACKER: str = "bytetrack.yaml"
     YOLO_IOU: float = Field(default=0.7, ge=0.0, le=1.0)
     TRACK_FPS: float = Field(default=5.0, gt=0)
     TRACK_CAMS: str = "atcs_jlagran,atcs_balaikota_timur"
@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     EMISSION_AGGREGATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
     LATEST_EMISSION_STATE_TTL_SECONDS: int = Field(default=3600, gt=0)
 
+    # Deprecated compatibility setting. Beat follows the observation window.
     SEGMENT_CALCULATION_PERIOD_MINUTES: int = Field(default=1, gt=0)
     SEGMENT_OBSERVATION_WINDOW_SECONDS: int = Field(default=60, gt=0)
     SEGMENT_MAPPING_CACHE_TTL_SECONDS: int = Field(default=300, gt=0)

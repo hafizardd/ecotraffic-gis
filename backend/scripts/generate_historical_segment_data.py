@@ -62,6 +62,7 @@ def generate(seed: int | None = None, only_missing: bool = False) -> int:
                 observation = SegmentTrafficObservation(camera.camera_id, segment.road_segment_id, mapping.lane_or_stream_id, period_start, 60, counts, vehicle_count_semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY)
                 result = calculate_segment_emission([observation], period_start=period_start, period_end=period_end, road_length_km=segment.length_km, spatial_criteria=spatial["raw_values"], spatial_details=spatial)
                 result["data_source"] = "HISTORICAL"
+                result["source_mode"] = "SYNTHETIC"
                 persist_segment_emission_sync(db, segment.id, result)
                 created += 1
     return created

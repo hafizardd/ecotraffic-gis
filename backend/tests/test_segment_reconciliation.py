@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import pytest
 
 from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_observation import SegmentTrafficObservation
@@ -17,4 +18,4 @@ def test_category_pollutants_reconcile_to_pollutant_totals():
     breakdown = result["emissions"]["by_category_g_h"]
     totals = result["emissions"]["totals_g_h"]
     for pollutant, total in totals.items():
-        assert sum(values[pollutant] for values in breakdown.values()) == total
+        assert sum(values[pollutant] for values in breakdown.values()) == pytest.approx(total)

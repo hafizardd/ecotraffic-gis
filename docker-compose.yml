@@ -48,6 +48,14 @@ services:
       - redis
       - postgres
 
+  segment-worker:
+    build: ./backend
+    command: celery -A app.workers.celery_app worker -Q inference --loglevel=info --concurrency=1
+    env_file: ./backend/.env
+    depends_on:
+      - postgres
+      - redis
+
   frontend:
     build: ./frontend
     ports:

@@ -1,0 +1,169 @@
+"""Segment emission analytics and exports with one shared filter contract."""
+
+from datetime import datetime, timedelta, timezone
+import csv
+import json
+import logging
+from tempfile import SpooledTemporaryFile
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+from starlette.background import BackgroundTask
+
+from app.core.database import get_db
+from app.models.road_segment import RoadSegment
+from app.services.emission_analytics import (
+    AnalyticsFilter, EXPORT_FIELDS, POLLUTANTS, UNITS, composition_query,
+    corridor_columns, export_row, fact_query, history_query, serialize_fact,
+    top_query, trend_query,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/analytics/emissions", tags=["emission-analytics"])
+
+
+async def analytics_db():
+    try:
+        async for db in get_db():
+            yield db
+    except SQLAlchemyError as exc:
+        logger.exception("emission_analytics_database_unavailable")
+        raise HTTPException(503, "Emission analytics database unavailable") from exc
+
+
+async def get_filters(
+    from_: datetime | None = Query(None, alias="from"), to: datetime | None = Query(None),
+    segment_id: str | None = Query(None, max_length=100), corridor_id: str | None = Query(None, max_length=255),
+    db=Depends(analytics_db),
+):
+    end = to or datetime.now(timezone.utc)
+    try:
+        filters = AnalyticsFilter(from_ or end - timedelta(hours=24), end, segment_id, corridor_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if segment_id and not (await db.execute(select(RoadSegment.id).where(RoadSegment.road_segment_id == segment_id).limit(1))).first():
+        raise HTTPException(404, "Segment not found")
+    if corridor_id and not (await db.execute(select(RoadSegment.id).where(corridor_columns()[0] == corridor_id).limit(1))).first():
+        raise HTTPException(404, "Corridor not found")
+    return filters
+
+
+def envelope(filters: AnalyticsFilter):
+    return {"from": filters.start, "to": filters.end, "segment_id": filters.segment_id,
+        "corridor_id": filters.corridor_id, "units": UNITS,
+        "aggregation": "mean_per_segment_then_sum_independent_segments",
+        "excluded_source_modes": ["SYNTHETIC", "REPLAY"]}
+
+
+@router.get("/options")
+async def options(db=Depends(analytics_db)):
+    corridor_id, corridor_name = corridor_columns()
+    rows = (await db.execute(select(RoadSegment.road_segment_id.label("segment_id"),
+        RoadSegment.name.label("segment_name"), corridor_id.label("corridor_id"),
+        corridor_name.label("corridor_name")).order_by(RoadSegment.name))).mappings().all()
+    return {"segments": [dict(row) for row in rows]}
+
+
+@router.get("/latest")
+async def latest(filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    now = datetime.now(timezone.utc)
+    facts = fact_query(filters, latest=True).cte("latest_facts")
+    rows = (await db.execute(select(facts))).mappings().all()
+    segments = [serialize_fact(row, now) for row in rows]
+    # Bounded by active segments, never historical sample count. Compute the
+    # spatial rollup here so React only displays backend rates.
+    totals = {p.lower(): (sum(s["emissions_kg_h"][p.lower()] for s in segments)
+        if segments and all(s["emissions_kg_h"][p.lower()] is not None for s in segments) else None) for p in POLLUTANTS}
+    oldest = min((s["observed_at"] for s in segments), default=None)
+    return {"timestamp": now, "segments": segments, "units": UNITS,
+        "summary": {"emissions_kg_h": totals, "segment_count": len(segments),
+            "estimated_segment_count": sum(s["quality_status"] == "estimated" for s in segments),
+            "freshness_seconds": max((s["freshness_seconds"] for s in segments), default=None),
+            "stale_after_seconds": min((s["stale_after_seconds"] for s in segments), default=180),
+            "observed_at": oldest,
+            "processed_at": max((s["processed_at"] for s in segments), default=None),
+            "source_mode": "LIVE" if segments and all(s["source_mode"] == "LIVE" for s in segments) else "HISTORICAL",
+        }}
+
+
+@router.get("/trend")
+async def trend(bucket: str | None = Query(None), filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    try:
+        name, seconds = filters.bucket(bucket)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    rows = (await db.execute(trend_query(filters, seconds))).mappings().all()
+    return {**envelope(filters), "bucket": name, "data": [dict(row) for row in rows]}
+
+
+@router.get("/top-corridors")
+async def top_corridors(limit: int = Query(5, ge=1, le=50),
+    pollutant: Literal["tsp", "co", "nox", "so2", "hc", "co2", "ch4", "n2o"] = "co2",
+    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    rows = (await db.execute(top_query(filters, limit, pollutant))).mappings().all()
+    return {**envelope(filters), "pollutant": pollutant, "data": [
+        {"rank": rank, **dict(row), "pollutant": pollutant} for rank, row in enumerate(rows, 1)]}
+
+
+@router.get("/composition")
+async def composition(filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    row = (await db.execute(composition_query(filters))).mappings().one()
+    return {**envelope(filters), "sample_count": row["sample_count"] or 0,
+        "estimated_sample_count": row["estimated_sample_count"] or 0,
+        "data": [{"pollutant": p, "key": p.lower(), "kg_h": row[p]} for p in POLLUTANTS]}
+
+
+@router.get("/history")
+async def history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=200),
+    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    query = history_query(filters)
+    total = (await db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()
+    rows = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).mappings().all()
+    return {**envelope(filters), "page": page, "page_size": page_size, "total": total,
+        "data": [serialize_fact(row) for row in rows]}
+
+
+@router.get("/export")
+async def export(format: Literal["csv", "json"] = "csv",
+    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    # Spool while the request's DB dependency is open. FastAPI versions that
+    # close yielded dependencies before streaming must not close our cursor.
+    output = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+", encoding="utf-8", newline="")
+    try:
+        query = history_query(filters)
+        total = (await db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()
+        if total > 100_000:
+            raise HTTPException(413, "Export exceeds 100000 records; narrow the date range or segment filter")
+        stream = await db.stream(query.execution_options(yield_per=500))
+        try:
+            if format == "csv":
+                output.write("\ufeff")
+                writer = csv.DictWriter(output, fieldnames=EXPORT_FIELDS)
+                writer.writeheader()
+            else:
+                output.write('{"metadata":' + json.dumps(envelope(filters), default=str) + ',"data":[')
+            first = True
+            async for row in stream.mappings():
+                record = serialize_fact(row)
+                if format == "csv":
+                    writer.writerow(export_row(record))
+                else:
+                    if not first:
+                        output.write(",")
+                    output.write(json.dumps(record, ensure_ascii=False))
+                first = False
+            if format == "json":
+                output.write("]}")
+        finally:
+            await stream.close()
+        output.seek(0)
+    except BaseException:
+        output.close()
+        raise
+    return StreamingResponse(iter(lambda: output.read(64 * 1024), ""),
+        media_type="text/csv" if format == "csv" else "application/json",
+        headers={"Content-Disposition": f'attachment; filename="emission-history.{format}"'},
+        background=BackgroundTask(output.close))

@@ -43,13 +43,13 @@ def _patch(monkeypatch, session):
     monkeypatch.setattr(tracking_worker, "get_sync_db", lambda: fake_db(session))
 
 
-def test_persist_writes_snapshot_observation(monkeypatch):
+def test_persist_writes_flow_observation_with_measured_duration(monkeypatch):
     segment_id = uuid.uuid4()
     session = FakeSession(segment_id)
     _patch(monkeypatch, session)
 
-    status = tracking_worker._persist_segment_snapshot(
-        "atcs_jlagran", str(uuid.uuid4()), OCCUPANCY, CAPTURED_AT
+    status = tracking_worker._persist_segment_flow(
+        "atcs_jlagran", str(uuid.uuid4()), OCCUPANCY, CAPTURED_AT, 60.5
     )
 
     assert status == "observation_stored"
@@ -58,18 +58,18 @@ def test_persist_writes_snapshot_observation(monkeypatch):
     assert row.camera_identifier == "atcs_jlagran"
     assert row.lane_or_stream_id == "main"
     assert row.road_segment_id == segment_id
-    assert row.vehicle_count_semantics == "snapshot_occupancy"
-    assert row.observation_duration_seconds == tracking_worker.settings.EMISSION_AGGREGATION_WINDOW_SECONDS
+    assert row.vehicle_count_semantics == "interval_count"
+    assert row.observation_duration_seconds == 60.5
     assert row.raw_detected_count == {"car": 2.0, "motorcycle": 5.0, "bus": 0.0, "truck": 1.0}
 
 
-def test_persist_zero_occupancy_still_writes(monkeypatch):
+def test_persist_zero_flow_still_writes(monkeypatch):
     session = FakeSession(uuid.uuid4())
     _patch(monkeypatch, session)
 
-    status = tracking_worker._persist_segment_snapshot(
+    status = tracking_worker._persist_segment_flow(
         "atcs_jlagran", str(uuid.uuid4()),
-        {"car": 0, "motorcycle": 0, "bus": 0, "truck": 0}, CAPTURED_AT,
+        {"car": 0, "motorcycle": 0, "bus": 0, "truck": 0}, CAPTURED_AT, 60,
     )
 
     assert status == "observation_stored"
@@ -81,8 +81,8 @@ def test_persist_without_mapping_skips_db(monkeypatch):
     called = []
     monkeypatch.setattr(tracking_worker, "get_sync_db", lambda: called.append(True) or fake_db(FakeSession(uuid.uuid4())))
 
-    status = tracking_worker._persist_segment_snapshot(
-        "unknown_cam", str(uuid.uuid4()), OCCUPANCY, CAPTURED_AT
+    status = tracking_worker._persist_segment_flow(
+        "unknown_cam", str(uuid.uuid4()), OCCUPANCY, CAPTURED_AT, 60
     )
 
     assert status == "no_mapping"
@@ -93,8 +93,8 @@ def test_persist_db_failure_returns_failed(monkeypatch):
     session = FakeSession(uuid.uuid4(), fail=True)
     _patch(monkeypatch, session)
 
-    status = tracking_worker._persist_segment_snapshot(
-        "atcs_jlagran", str(uuid.uuid4()), OCCUPANCY, CAPTURED_AT
+    status = tracking_worker._persist_segment_flow(
+        "atcs_jlagran", str(uuid.uuid4()), OCCUPANCY, CAPTURED_AT, 60
     )
 
     assert status == "failed"

@@ -2,6 +2,7 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
 import { CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
+import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
@@ -68,3 +69,47 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
 
 export const fetchPopulationZones = () => fetchSpatial("/api/spatial/population-zones");
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);
+
+function analyticsUrl(path: string, query: Partial<AnalyticsQuery> = {}, extra: Record<string, string> = {}) {
+    const params = new URLSearchParams(extra);
+    for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
+    return `${API_BASE ?? ""}/api/analytics/emissions/${path}?${params}`;
+}
+
+async function analyticsFetch<T>(path: string, query: Partial<AnalyticsQuery>, signal?: AbortSignal, extra?: Record<string, string>): Promise<T> {
+    const response = await fetch(analyticsUrl(path, query, extra), { signal, cache: "no-store" }).catch((error: Error) => {
+        if (signal?.aborted) throw error;
+        throw new Error("Tidak dapat menghubungi backend analitik.");
+    });
+    if (!response.ok) {
+        const body: { detail?: unknown } = await response.json().catch(() => ({}));
+        throw new Error(typeof body.detail === "string" ? body.detail : `Gagal memuat analitik (${response.status})`);
+    }
+    return response.json() as Promise<T>;
+}
+
+export const fetchEmissionTrend = (query: AnalyticsQuery, signal?: AbortSignal) =>
+    analyticsFetch<AnalyticsResponse<EmissionTrendPoint> & { bucket: string }>("trend", query, signal);
+export const fetchTopEmissionCorridors = (query: AnalyticsQuery, pollutant: PollutantKey = "co2", signal?: AbortSignal) =>
+    analyticsFetch<AnalyticsResponse<TopEmissionCorridor>>("top-corridors", query, signal, { pollutant, limit: "5" });
+export const fetchPollutantComposition = (query: AnalyticsQuery, signal?: AbortSignal) =>
+    analyticsFetch<AnalyticsResponse<PollutantComposition> & { sample_count: number }>("composition", query, signal);
+export const fetchLatestSegmentEmissions = (query: Partial<AnalyticsQuery> = {}, signal?: AbortSignal) =>
+    analyticsFetch<LatestSegmentEmissionsResponse>("latest", query, signal);
+export const fetchEmissionHistory = (query: AnalyticsQuery, page = 1, signal?: AbortSignal) =>
+    analyticsFetch<EmissionHistoryResponse>("history", query, signal, { page: String(page), page_size: "25" });
+export const fetchAnalyticsOptions = (signal?: AbortSignal) =>
+    analyticsFetch<{ segments: AnalyticsSegmentOption[] }>("options", {}, signal);
+
+export async function exportEmissionHistory(query: AnalyticsQuery, format: "csv" | "json"): Promise<void> {
+    const response = await fetch(analyticsUrl("export", query, { format }), { cache: "no-store" });
+    if (!response.ok) {
+        const body: { detail?: unknown } = await response.json().catch(() => ({}));
+        throw new Error(typeof body.detail === "string" ? body.detail : `Ekspor gagal (${response.status})`);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url; link.download = `emission-history.${format}`;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
