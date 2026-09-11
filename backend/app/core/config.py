@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     BANGJO_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
     BANGJO_MAX_TOKENS: int = Field(default=1024, gt=0)
     BANGJO_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
+    BANGJO_DEBUG_RAW: bool = False
 
     # Deployments may define settings for adjacent services; they should not
     # prevent this application from starting when those keys are unrelated.

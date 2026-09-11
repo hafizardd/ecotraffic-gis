@@ -20,7 +20,15 @@ function formatAnswer(reply: Awaited<ReturnType<typeof fetchBangJoReply>>): stri
     }
     if (reply.detail) return reply.detail;
     if (reply.candidates?.length) {
-        return `Sebutkan nama koridor yang dimaksud, misalnya: ${reply.candidates.slice(0, 3).map((item) => item.name).join(", ")}.`;
+        const seen = new Set<string>();
+        const names = reply.candidates
+            .map((item) => item.name)
+            .filter((name) => {
+                if (seen.has(name)) return false;
+                seen.add(name);
+                return true;
+            });
+        return `Sebutkan nama koridor yang dimaksud, misalnya: ${names.slice(0, 3).join(", ")}.`;
     }
     return "Saya belum bisa menentukan koridor. Pilih segmen di peta lalu tanya lagi.";
 }

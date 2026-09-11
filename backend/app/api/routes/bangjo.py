@@ -34,6 +34,8 @@ SYSTEM_PROMPT = (
     '{"summary": str, "drivers": [str], "asi_category": str, "recommendation": str, "evidence": [str]}.'
 )
 
+CORRECTIVE_PROMPT = "Balas ulang HANYA dengan objek JSON valid sesuai instruksi, tanpa teks lain."
+
 CLASS_ASI = {
     "Sangat Tinggi": "Avoid + Shift + Improve", "Tinggi": "Shift + Improve",
     "Sedang": "Improve", "Rendah": "Improve", "Sangat Rendah": "Improve",
@@ -51,7 +53,7 @@ class ChatRequest(BaseModel):
     history: list[HistoryTurn] = Field(default_factory=list)
 
 
-def _fallback_answer(context: dict, message: str) -> dict:
+def _fallback_answer(context: dict, message: str, reason: str = "llm_error") -> dict:
     segment = context["segment"]
     activity = context["activity_potential"]
     stops = context["bus_stops"]
@@ -66,10 +68,14 @@ def _fallback_answer(context: dict, message: str) -> dict:
     if stops:
         evidence.append(f"halte dalam 500 m={len(stops)}")
     evidence.append(f"coverage_gap={context['coverage_gap']}")
+    chunk_count = segment.get("chunk_count") or 1
+    if chunk_count > 1:
+        evidence.append(f"segmen_digabung={chunk_count}")
+    label = f"{segment['name']} ({chunk_count} segmen)" if chunk_count > 1 else f"{segment['name']} ({segment['road_segment_id']})"
     dominant = ", ".join(item["category"] for item in activity.get("dominant_poi_categories", [])) or "tidak tersedia"
     return {
         "summary": (
-            f"Koridor {segment['name']} ({segment['road_segment_id']}) memiliki potensi aktivitas "
+            f"Koridor {label} memiliki potensi aktivitas "
             f"{activity_class or 'belum tersedia'}. Potensi aktivitas sekitar didominasi {dominant}."
         ),
         "drivers": [
@@ -83,28 +89,44 @@ def _fallback_answer(context: dict, message: str) -> dict:
         ),
         "evidence": evidence,
         "source": "fallback",
+        "fallback_reason": reason,
     }
 
 
-async def _resolve_segment(db: AsyncSession, message: str) -> tuple[str | None, list[dict]]:
+def _normalize_name(name: str) -> str:
+    text = re.sub(r"\b(?:jl|jln)\.?\s+", "jalan ", (name or "").casefold())
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _candidate_list(groups: list[list[dict]]) -> list[dict]:
+    return [
+        {"road_segment_id": members[0]["road_segment_id"], "name": members[0]["name"], "count": len(members)}
+        for members in groups
+    ]
+
+
+async def _resolve_segment(db: AsyncSession, message: str) -> tuple[list[str] | None, list[dict]]:
     rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
-    lower = message.casefold()
-    named = [{"road_segment_id": rid, "name": name} for rid, name in rows if name and name.casefold() in lower]
+    lower = _normalize_name(message)
+    groups: dict[str, list[dict]] = {}
+    for rid, name in rows:
+        key = _normalize_name(name)
+        if key:
+            groups.setdefault(key, []).append({"road_segment_id": rid, "name": name})
+    named = [members for key, members in groups.items() if key in lower or (lower and lower in key)]
     if len(named) == 1:
-        return named[0]["road_segment_id"], []
+        return [member["road_segment_id"] for member in named[0]], []
     if len(named) > 1:
-        return None, named
+        return None, _candidate_list(named)
     tokens = {token for token in re.findall(r"[a-z0-9]+", lower) if len(token) > 3}
     scored = sorted(
-        (
-            (len(tokens & set(re.findall(r"[a-z0-9]+", (name or "").casefold()))), rid, name)
-            for rid, name in rows
-        ),
+        ((len(tokens & set(re.findall(r"[a-z0-9]+", key))), members) for key, members in groups.items()),
+        key=lambda item: item[0],
         reverse=True,
     )
     if scored and scored[0][0] >= 2:
-        return scored[0][1], []
-    return None, [{"road_segment_id": rid, "name": name} for rid, name in rows[:20]]
+        return [member["road_segment_id"] for member in scored[0][1]], []
+    return None, _candidate_list([members for _, members in scored[:5]])
 
 
 _STRING_KEYS = ("summary", "asi_category", "recommendation")
@@ -197,55 +219,155 @@ def _parse_answer(text: str) -> dict:
 
 async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> dict:
     if not settings.OPENROUTER_API_KEY:
-        return _fallback_answer(context, message)
+        return _fallback_answer(context, message, "no_api_key")
     turns = [{"role": turn.role, "content": turn.content} for turn in history if turn.role in ("user", "assistant")]
     turns.append({"role": "user", "content": f"Konteks:\n{json.dumps(context, ensure_ascii=False)}\n\nPertanyaan: {message}"})
-    payload = {
-        "model": settings.BANGJO_MODEL, "max_tokens": settings.BANGJO_MAX_TOKENS,
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *turns],
-    }
+    base = {"model": settings.BANGJO_MODEL, "max_tokens": settings.BANGJO_MAX_TOKENS}
+    url = settings.BANGJO_BASE_URL
+    headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     started = time.monotonic()
-    raw_text = ""
+
+    async def call(client: httpx.AsyncClient, messages: list[dict], structured: bool) -> dict | None:
+        body = {**base, "messages": messages, **({"response_format": {"type": "json_object"}} if structured else {})}
+        response = await client.post(url, headers=headers, json=body)
+        if structured and response.status_code in (400, 404, 422):
+            return None
+        response.raise_for_status()
+        data = response.json()
+        choice = (data.get("choices") or [{}])[0]
+        return {
+            "raw": choice.get("message", {}).get("content") or "",
+            "finish_reason": choice.get("finish_reason"),
+            "usage": data.get("usage") or {},
+            "structured": structured,
+        }
+
+    def diagnostics(result: dict | None, reason: str | None = None) -> dict:
+        extra = {
+            "model": settings.BANGJO_MODEL,
+            "structured": result.get("structured") if result else None,
+            "finish_reason": result.get("finish_reason") if result else None,
+            "usage": result.get("usage") if result else None,
+            "raw_length": len(result["raw"]) if result else 0,
+            "raw_preview": result["raw"][:500] if result else "",
+        }
+        if reason:
+            extra["fallback_reason"] = reason
+        if settings.BANGJO_DEBUG_RAW and result:
+            extra["raw_text"] = result["raw"]
+        return extra
+
+    result: dict | None = None
     try:
         async with httpx.AsyncClient(timeout=settings.BANGJO_TIMEOUT_SECONDS) as client:
-            for structured in (True, False):
-                body = {**payload, **({"response_format": {"type": "json_object"}} if structured else {})}
-                response = await client.post(
-                    settings.BANGJO_BASE_URL,
-                    headers={"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"},
-                    json=body,
-                )
-                if structured and response.status_code in (400, 404, 422):
-                    continue
-                response.raise_for_status()
-                data = response.json()
-                break
-        raw_text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
-        parsed = _parse_answer(raw_text)
+            conversation = [{"role": "system", "content": SYSTEM_PROMPT}, *turns]
+            result = await call(client, conversation, structured=True)
+            if result is None:
+                result = await call(client, conversation, structured=False)
+            try:
+                parsed = _parse_answer(result["raw"])
+            except ValueError:
+                logger.warning("bangjo_llm_parse_failed", extra=diagnostics(result))
+                retry = [*conversation, {"role": "assistant", "content": result["raw"]},
+                         {"role": "user", "content": CORRECTIVE_PROMPT}]
+                result = await call(client, retry, structured=False)
+                parsed = _parse_answer(result["raw"])
         logger.info("bangjo_llm_call", extra={
+            "source": "llm",
             "latency_s": round(time.monotonic() - started, 3),
-            "input_tokens": (data.get("usage") or {}).get("prompt_tokens"),
-            "output_tokens": (data.get("usage") or {}).get("completion_tokens"),
+            "input_tokens": result["usage"].get("prompt_tokens"),
+            "output_tokens": result["usage"].get("completion_tokens"),
+            "finish_reason": result["finish_reason"],
+            "structured": result["structured"],
+            "model": settings.BANGJO_MODEL,
         })
         return {**parsed, "source": "llm"}
+    except httpx.TimeoutException:
+        logger.exception("bangjo_llm_failed", extra=diagnostics(result, "timeout"))
+        return _fallback_answer(context, message, "timeout")
+    except httpx.HTTPStatusError:
+        logger.exception("bangjo_llm_failed", extra=diagnostics(result, "http_error"))
+        return _fallback_answer(context, message, "http_error")
+    except ValueError:
+        logger.warning("bangjo_llm_failed", extra=diagnostics(result, "parse_error"))
+        return _fallback_answer(context, message, "parse_error")
     except Exception:
-        logger.exception("bangjo_llm_failed", extra={"raw_preview": raw_text[:500]})
-        return _fallback_answer(context, message)
+        logger.exception("bangjo_llm_failed", extra=diagnostics(result, "llm_error"))
+        return _fallback_answer(context, message, "llm_error")
+
+
+def _merge_contexts(contexts: list[dict]) -> dict:
+    """Aggregate same-name road chunks into one corridor context."""
+    segments = [context["segment"] for context in contexts]
+    potentials = [context["activity_potential"] for context in contexts]
+    primary = max(
+        segments,
+        key=lambda segment: segment.get("activity_score") if segment.get("activity_score") is not None else -1,
+    )
+    totals: dict[str, float] = {}
+    for segment in segments:
+        for pollutant, value in (segment.get("pollutant_totals") or {}).items():
+            if isinstance(value, (int, float)):
+                totals[pollutant] = totals.get(pollutant, 0) + value
+    poi: dict[str, int] = {}
+    for potential in potentials:
+        for item in potential.get("dominant_poi_categories") or []:
+            poi[item["category"]] = poi.get(item["category"], 0) + int(item["count"])
+    averages = [value for value in (p.get("avg_skor_total_ahp") for p in potentials) if value is not None]
+    stops: dict[str, dict] = {}
+    for context in contexts:
+        for stop in context["bus_stops"]:
+            current = stops.get(stop["source_id"])
+            distance = stop.get("distance_to_segment_m")
+            if current is None or (distance or float("inf")) < (current.get("distance_to_segment_m") or float("inf")):
+                stops[stop["source_id"]] = stop
+    observed = [segment["observed_at"] for segment in segments if segment.get("observed_at")]
+    return {
+        "generated_at": max(context["generated_at"] for context in contexts),
+        "segment": {
+            "road_segment_id": primary["road_segment_id"],
+            "road_segment_ids": [segment["road_segment_id"] for segment in segments],
+            "chunk_count": len(contexts),
+            "name": primary["name"],
+            "length_km": round(sum(segment.get("length_km") or 0 for segment in segments), 3),
+            "activity_class": primary.get("activity_class"),
+            "activity_score": primary.get("activity_score"),
+            "pollutant_totals": totals or None,
+            "data_source": primary.get("data_source"),
+            "observed_at": max(observed) if observed else None,
+        },
+        "activity_potential": {
+            "hex_count": sum(p.get("hex_count") or 0 for p in potentials),
+            "hex_ids": [hex_id for p in potentials for hex_id in (p.get("hex_ids") or [])],
+            "avg_skor_total_ahp": round(sum(averages) / len(averages), 4) if averages else None,
+            "max_skor_total_ahp": max(
+                (p["max_skor_total_ahp"] for p in potentials if p.get("max_skor_total_ahp") is not None), default=None
+            ),
+            "klasifikasi_potensi": sorted({c for p in potentials for c in (p.get("klasifikasi_potensi") or [])}) or None,
+            "dominant_poi_categories": [
+                {"category": category, "count": count}
+                for category, count in sorted(poi.items(), key=lambda item: item[1], reverse=True)
+            ],
+        },
+        "bus_stops": list(stops.values()),
+        "coverage_gap": any(context["coverage_gap"] for context in contexts),
+    }
 
 
 @router.post("/bangjo")
 async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
-    road_segment_id = payload.road_segment_id
-    if not road_segment_id:
-        road_segment_id, candidates = await _resolve_segment(db, payload.message)
-        if not road_segment_id:
+    segment_ids = [payload.road_segment_id] if payload.road_segment_id else None
+    if not segment_ids:
+        segment_ids, candidates = await _resolve_segment(db, payload.message)
+        if not segment_ids:
             return {"needs_selection": True, "candidates": candidates, "answer": None, "context_label": None}
-    context = await build_context(db, road_segment_id)
-    if context is None:
+    contexts = [context for context in [await build_context(db, sid) for sid in segment_ids] if context]
+    if not contexts:
         return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
-                "detail": f"Segmen '{road_segment_id}' tidak ditemukan."}
+                "detail": f"Segmen '{segment_ids[0]}' tidak ditemukan."}
+    context = _merge_contexts(contexts)
     answer = await _ask_llm(payload.message, context, payload.history)
-    return {
-        "needs_selection": False, "answer": answer,
-        "context_label": f"{context['segment']['name']} ({road_segment_id})",
-    }
+    chunk_count = context["segment"]["chunk_count"]
+    label = (f"{context['segment']['name']} ({chunk_count} segmen)" if chunk_count > 1
+             else f"{context['segment']['name']} ({segment_ids[0]})")
+    return {"needs_selection": False, "answer": answer, "context_label": label}

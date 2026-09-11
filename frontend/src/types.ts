@@ -409,6 +409,6 @@ export interface BangJoReply {
     needs_selection: boolean;
     answer: BangJoAnswer | null;
     context_label: string | null;
-    candidates?: { road_segment_id: string; name: string }[];
+    candidates?: { road_segment_id: string; name: string; count?: number }[];
     detail?: string;
 }

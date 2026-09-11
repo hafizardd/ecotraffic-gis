@@ -45,11 +45,9 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
         await db.execute(
             select(
                 SurveyStopObservation,
-                func.ST_Distance(cast(RoadSegment.geometry, _geog), cast(SurveyStopObservation.geometry, _geog)).label("distance_m"),
+                func.ST_Distance(cast(segment_geom, _geog), cast(SurveyStopObservation.geometry, _geog)).label("distance_m"),
             )
-            .select_from(SurveyStopObservation, RoadSegment)
-            .where(RoadSegment.road_segment_id == road_segment_id)
-            .where(func.ST_DWithin(cast(RoadSegment.geometry, _geog), cast(SurveyStopObservation.geometry, _geog), K4_BUFFER_M))
+            .where(func.ST_DWithin(cast(segment_geom, _geog), cast(SurveyStopObservation.geometry, _geog), K4_BUFFER_M))
         )
     ).all()
 
