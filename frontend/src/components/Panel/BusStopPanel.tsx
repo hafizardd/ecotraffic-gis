@@ -6,7 +6,7 @@ import { fetchBusStopDetail } from "@/services/api";
 import { BusStopDetail } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { classificationColor, classificationTier } from "@/constants/mapColors";
+import { interventionColor, readableTextOn } from "@/constants/mapColors";
 import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
 
 const COMPONENTS: { keys: (keyof BusStopDetail)[]; label: string }[] = [
@@ -61,9 +61,9 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
         };
     }, [sourceId]);
 
-    const tier = classificationTier(detail?.intervention_class);
-    const badgeColor = classificationColor(detail?.intervention_class);
-    const badgeText = tier >= 4 ? "#ffffff" : "#0f172a";
+    // Low intervention score = poor condition = priority (red); high = healthy (green).
+    const badgeColor = interventionColor(detail?.intervention_score);
+    const badgeText = readableTextOn(badgeColor);
     const photos = (detail?.media ?? []).filter((item) => item?.url);
     const damageList = Object.entries(detail?.damage_indicators ?? {})
         .filter(([, flagged]) => flagged)

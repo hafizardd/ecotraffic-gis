@@ -330,6 +330,7 @@ export interface ChartPoint {
 
 export interface ActivityGridProperties {
     hex_id: number | null;
+    h3_index?: string | null;
     luas_km2: number;
     poi_total: number;
     poi_breakdown: Record<string, number>;
@@ -362,6 +363,24 @@ export interface ActivityGridFeature {
 export interface ActivityGridFeatureCollection {
     type: "FeatureCollection";
     features: ActivityGridFeature[];
+    // Viewport-scoped quantile cut points for the choropleth; null when the
+    // visible scores have no spread (fall back to classification tiers).
+    breaks?: number[] | null;
+    lod?: "coarse" | "medium" | "sub" | "fine";
+    resolution?: number | null;
+}
+
+export interface ActivityGridHourPoint {
+    hour: string;
+    skor_total_ahp: number | null;
+    norm_volume: number | null;
+    klasifikasi_potensi: string | null;
+    data_status: "live" | "static" | "no_data";
+}
+
+export interface ActivityGridHourSeries {
+    hex_id: number;
+    series: ActivityGridHourPoint[];
 }
 
 export interface SurveyStopProperties extends Record<string, string | number | null> {

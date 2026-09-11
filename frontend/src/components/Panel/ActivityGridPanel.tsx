@@ -3,18 +3,83 @@
 import { useEffect, useState } from "react";
 import { Grid3x3, X } from "lucide-react";
 import { fetchActivityGridHex } from "@/services/api";
-import { ActivityGridFeature } from "@/types";
+import { ActivityGridFeature, ActivityGridHourPoint } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { MISSING_LABEL, fmtFloatId, fmtIntId } from "@/utils/format";
+import { useActivityGridHexHourly } from "@/hooks/useActivityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
 
-export default function ActivityGridPanel({ hexId, hour, onClose }: { hexId: number | null; hour?: string | null; onClose: () => void }) {
+export default function ActivityGridPanel({ hexId, hour, onSelectHour, onClose }: {
+    hexId: number | null;
+    hour?: string | null;
+    onSelectHour?: (hour: string) => void;
+    onClose: () => void;
+}) {
     if (hexId == null) return null;
-    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} onClose={onClose} />;
+    return <ActivityGridSeries key={hexId} hexId={hexId} hour={hour} onSelectHour={onSelectHour} onClose={onClose} />;
 }
 
-function ActivityGridDetail({ hexId, hour, onClose }: { hexId: number; hour: string | null; onClose: () => void }) {
+// Kept separate so the 24h series survives hourly scrubbing (the detail below
+// remounts per hour via its key, this wrapper does not).
+function ActivityGridSeries({ hexId, hour, onSelectHour, onClose }: {
+    hexId: number;
+    hour?: string | null;
+    onSelectHour?: (hour: string) => void;
+    onClose: () => void;
+}) {
+    const series = useActivityGridHexHourly(hexId);
+    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} series={series} onSelectHour={onSelectHour} onClose={onClose} />;
+}
+
+function hourLabel(hour: string): string {
+    return new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit" });
+}
+
+function HourPatternChart({ series, activeHour, onSelectHour }: {
+    series: ActivityGridHourPoint[];
+    activeHour: string | null;
+    onSelectHour?: (hour: string) => void;
+}) {
+    if (series.length < 2) return null;
+    const max = Math.max(...series.map((point) => point.skor_total_ahp ?? 0), 1);
+    return (
+        <section className="panel-section">
+            <SectionTitle title="Pola 24 jam" meta={`${series.length} jam tersedia`} />
+            <div className="activity-hour-chart">
+                {series.map((point) => {
+                    const active = point.hour === activeHour;
+                    const score = point.skor_total_ahp;
+                    const height = score == null ? 4 : Math.max(4, Math.round((score / max) * 100));
+                    const label = hourLabel(point.hour);
+                    return (
+                        <button
+                            type="button"
+                            key={point.hour}
+                            className={active ? "active" : ""}
+                            onClick={() => onSelectHour?.(point.hour)}
+                            title={`Pukul ${label} · ${score == null ? "tanpa data" : fmtFloatId(score, 1)}`}
+                            aria-label={`Pukul ${label}${score == null ? ", tanpa data" : `, skor ${fmtFloatId(score, 1)}`}`}
+                        >
+                            <i data-empty={score == null || undefined} style={{ height: `${height}%` }} />
+                        </button>
+                    );
+                })}
+            </div>
+            <div className="activity-hour-axis" aria-hidden="true">
+                {series.map((point, index) => <span key={point.hour}>{index % 6 === 0 ? hourLabel(point.hour) : ""}</span>)}
+            </div>
+        </section>
+    );
+}
+
+function ActivityGridDetail({ hexId, hour, series, onSelectHour, onClose }: {
+    hexId: number;
+    hour: string | null;
+    series: ActivityGridHourPoint[];
+    onSelectHour?: (hour: string) => void;
+    onClose: () => void;
+}) {
     const [feature, setFeature] = useState<ActivityGridFeature | null>(null);
     const [error, setError] = useState<Error | null>(null);
 
@@ -29,10 +94,10 @@ function ActivityGridDetail({ hexId, hour, onClose }: { hexId: number; hour: str
     }, [hexId, hour]);
 
     const props = feature?.properties;
-    const hourLabel = hour ? new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null;
+    const currentHourLabel = hour ? new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null;
     const sourceMeta = !hour
         ? "Sumber: model offline"
-        : props?.data_status === "no_data" ? `Pukul ${hourLabel} · tanpa data` : `Skor pukul ${hourLabel} · live`;
+        : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data` : `Skor pukul ${currentHourLabel} · live`;
 
     return (
         <aside className="monitoring-panel segment-panel">
@@ -50,6 +115,7 @@ function ActivityGridDetail({ hexId, hour, onClose }: { hexId: number; hour: str
                 {props && (
                     <>
                         <ActivityPotentialCard properties={props} />
+                        <HourPatternChart series={series} activeHour={hour} onSelectHour={onSelectHour} />
                         <section className="panel-section">
                             <SectionTitle title="Data mentah" meta={sourceMeta} />
                             <div className="criteria-grid">

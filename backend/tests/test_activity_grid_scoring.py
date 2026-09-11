@@ -19,7 +19,8 @@ def test_build_assessments_ranks_and_classifies():
         SimpleNamespace(source_id="c", facility_score=None, environment_score=None),
     ]
     assessments = {a["source_id"]: a for a in build_assessments(stops, {"a": 10.0, "b": 0.0, "c": 0.0})}
-    assert assessments["a"]["rank"] == 1 and assessments["a"]["class"] == "Tinggi"
+    # Intervention rank is ascending by score: lowest score = top priority.
+    assert assessments["c"]["rank"] == 1
     assert assessments["b"]["rank"] == 2
-    assert assessments["c"]["rank"] == 3
-    assert assessments["a"]["score"] > assessments["b"]["score"]
+    assert assessments["a"]["rank"] == 3 and assessments["a"]["class"] == "Tinggi"
+    assert assessments["a"]["score"] > assessments["b"]["score"] > assessments["c"]["score"]

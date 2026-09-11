@@ -42,3 +42,6 @@ pytest-asyncio==0.23.6
 # --- Data Processing ---
 pandas==2.2.2
 openpyxl==3.1.5
+
+# --- Geospatial Indexing ---
+h3==4.5.0                # dynamic resolution hex aggregation for the activity grid

@@ -39,8 +39,9 @@ def test_build_assessments_prefers_imported_ahp_values():
 
     assert assessments["a"]["score"] == 76.66
     assert assessments["a"]["class"] == "Tinggi"
-    assert assessments["a"]["rank"] == 1
-    assert assessments["b"]["rank"] == 2
+    # Lower score = higher intervention priority = lower rank number.
+    assert assessments["b"]["rank"] == 1
+    assert assessments["a"]["rank"] == 2
     assert assessments["b"]["score"] is not None
     assert assessments["b"]["method"] == "keyword"
 
@@ -56,6 +57,7 @@ def test_build_assessments_fallback_still_ranks_without_ahp():
     ]
     assessments = {a["source_id"]: a for a in build_assessments(stops, {"a": 10.0, "b": 0.0})}
 
-    assert assessments["a"]["rank"] == 1
+    assert assessments["b"]["rank"] == 1
+    assert assessments["a"]["rank"] == 2
     assert assessments["a"]["class"] is not None
     assert assessments["a"]["score"] > assessments["b"]["score"]

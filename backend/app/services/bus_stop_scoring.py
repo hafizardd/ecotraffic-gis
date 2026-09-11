@@ -42,8 +42,10 @@ def _min_max(values: dict) -> tuple[float, float]:
 def build_assessments(stops: list, accessibility: dict) -> list[dict]:
     """Pure scoring pass: accessibility dict maps stop.source_id -> weighted score.
 
-    AHP-scored stops keep their imported score/class/rank; the rest are
-    weighted-composite scored (0-100) and quintile-ranked after the AHP stops.
+    AHP-scored stops keep their imported score/class; the rest are
+    weighted-composite scored (0-100) and quintile-classified. ``rank`` is an
+    intervention-priority rank across every scored stop: the LOWEST score is
+    rank 1 (most urgent), the highest score is last.
     """
     low, high = _min_max(accessibility)
     normalized = {
@@ -60,7 +62,7 @@ def build_assessments(stops: list, accessibility: dict) -> list[dict]:
             }
             assessments.append({
                 "source_id": stop.source_id, "components": components, "score": ahp_total,
-                "class": getattr(stop, "ahp_classification", None), "rank": getattr(stop, "ahp_rank", None),
+                "class": getattr(stop, "ahp_classification", None), "rank": None,
                 "method": "ahp",
             })
             continue
@@ -84,11 +86,18 @@ def build_assessments(stops: list, accessibility: dict) -> list[dict]:
         key=lambda a: a["score"],
         reverse=True,
     )
-    offset = sum(1 for a in assessments if a["method"] == "ahp")
     total = len(fallback)
     for position, assessment in enumerate(fallback, start=1):
         _, assessment["class"] = quintile_classify(position, total)
-        assessment["rank"] = offset + position
+
+    # Intervention priority: lowest score = rank 1 (top priority). AHP stops are
+    # re-ranked here too so imported ``ahp_rank`` can't carry the opposite order.
+    priority = sorted(
+        (a for a in assessments if a["score"] is not None),
+        key=lambda a: (a["score"], a["source_id"]),
+    )
+    for position, assessment in enumerate(priority, start=1):
+        assessment["rank"] = position
     return assessments
 
 

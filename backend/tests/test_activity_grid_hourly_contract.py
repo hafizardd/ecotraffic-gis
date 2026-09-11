@@ -107,6 +107,62 @@ def test_static_grid_response_is_unchanged():
     assert "data_status" not in properties
 
 
+def test_aggregated_lod_rolls_native_cells_into_one_h3_cell():
+    # Two native cells well inside one another, plus a distant third that must
+    # land in a different H3 cell.
+    db = _DB([
+        _Result(rows=[
+            (_cell(1, 1), 110.3700, -7.7900),
+            (_cell(2, 2), 110.3710, -7.7910),
+            (_cell(3, 3), 110.5000, -7.9000),
+        ]),
+    ])
+    response = _client(db).get("/api/spatial/activity-grid?lod=medium")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["lod"] == "medium"
+    assert body["resolution"] == 7
+    assert len(body["features"]) == 2
+
+    merged = next(feature for feature in body["features"] if feature["properties"]["aggregated_count"] == 2)
+    ring = merged["geometry"]["coordinates"][0]
+    assert len(ring) == 7 and ring[0] == ring[-1]
+    properties = merged["properties"]
+    assert properties["hex_id"] is None
+    assert properties["h3_index"] is not None
+    assert properties["source"] == "aggregated"
+    assert properties["luas_km2"] == 2.0
+    assert properties["poi_total"] == 6
+    assert properties["penduduk"] == 200
+    assert properties["skor_total_ahp"] == 55.0
+
+
+def test_aggregated_lod_bbox_limits_viewport_and_breaks():
+    # Only the distant cell is in the viewport, so one feature and no spread.
+    db = _DB([_Result(rows=[(_cell(1, 1), 110.37, -7.79), (_cell(2, 2), 110.50, -7.90)])])
+    response = _client(db).get("/api/spatial/activity-grid?lod=coarse&bbox=110.45,-7.95,110.55,-7.85")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["features"]) == 1
+    # A single scored cell has no distribution to quantile against.
+    assert body["breaks"] is None
+
+
+def test_hex_hourly_series_returns_one_point_per_available_hour(monkeypatch):
+    _patch_volumes(monkeypatch, {1: 10.0, 2: 20.0})
+    hours = [datetime(2026, 9, 10, h, 0, tzinfo=timezone.utc) for h in (11, 12)]
+    db = _DB([
+        _Result(rows=[_cell(1, 1), _cell(2, 2)]),
+        _Result(rows=hours),
+    ])
+    response = _client(db).get("/api/spatial/activity-grid/1/hourly")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["hex_id"] == 1
+    assert [point["hour"] for point in body["series"]] == [moment.isoformat() for moment in hours]
+    assert [point["data_status"] for point in body["series"]] == ["live", "live"]
+
+
 def test_available_hours_returns_sorted_bounds():
     hours = [datetime(2026, 9, 10, h, 0, tzinfo=timezone.utc) for h in (11, 12, 13)]
     db = _DB([_Result(rows=hours)])
