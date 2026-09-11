@@ -226,3 +226,33 @@ def test_merge_contexts_aggregates_chunks():
     assert merged["activity_potential"]["dominant_poi_categories"] == [{"category": "kantor", "count": 6}]
     assert merged["coverage_gap"] is True
 
+
+def test_merge_contexts_rolls_up_stop_assessment_and_intervention_priority():
+    base = {
+        "generated_at": "2026-01-01T00:00:00+00:00",
+        "segment": {"road_segment_id": "SEG-0001", "name": "Jalan Kenari", "length_km": 0.5,
+                    "activity_class": "Tinggi", "activity_score": 3.0, "pollutant_totals": None,
+                    "data_source": None, "observed_at": None},
+        "activity_potential": {"hex_count": 0, "hex_ids": [], "avg_skor_total_ahp": None,
+                               "max_skor_total_ahp": None, "klasifikasi_potensi": None,
+                               "dominant_poi_categories": []},
+        "bus_stops": [], "coverage_gap": False,
+        "stop_assessment": {"count": 1, "scored_count": 1, "class_counts": {"Rendah": 1},
+                            "weak_stop_count": 1, "min_ahp_total_score": 40.0, "avg_ahp_total_score": 40.0},
+        "intervention_hint": "improve_existing_stop",
+    }
+    other = copy.deepcopy(base)
+    other["segment"].update(road_segment_id="SEG-0002")
+    other["coverage_gap"] = True
+    other["intervention_hint"] = "add_new_stop"
+    other["stop_assessment"].update(count=2, scored_count=0, class_counts={"Rendah": 2},
+                                    weak_stop_count=1, min_ahp_total_score=None, avg_ahp_total_score=None)
+
+    merged = bangjo._merge_contexts([base, other])
+
+    assert merged["intervention_hint"] == "add_new_stop"
+    assert merged["stop_assessment"]["count"] == 3
+    assert merged["stop_assessment"]["class_counts"] == {"Rendah": 3}
+    assert merged["stop_assessment"]["weak_stop_count"] == 2
+    assert merged["stop_assessment"]["min_ahp_total_score"] == 40.0
+

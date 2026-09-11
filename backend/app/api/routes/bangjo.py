@@ -29,6 +29,10 @@ SYSTEM_PROMPT = (
     "Jawab HANYA berdasarkan objek konteks JSON yang diberikan. "
     "JANGAN menyebut angka yang tidak ada di konteks. Jika data tidak tersedia, katakan tidak tersedia. "
     "Gunakan kerangka ASI: Avoid (hindari), Shift (alihkan), Improve (perbaiki). "
+    "Untuk pertanyaan intervensi koridor, pilih tepat satu berdasarkan context: "
+    "coverage_gap=true -> tambah halte baru; weak_stop_count>0 -> perbaiki halte yang ada; "
+    "activity_class 'Sangat Tinggi'/'Tinggi' dengan halte memadai -> tambah frekuensi layanan (armada). "
+    "Sebut alasan dari field context, jangan mengarang. "
     "Keluarkan HANYA objek JSON, tanpa pagar markdown dan tanpa penjelasan tambahan. "
     "Balas dengan JSON valid berbentuk: "
     '{"summary": str, "drivers": [str], "asi_category": str, "recommendation": str, "evidence": [str]}.'
@@ -39,6 +43,13 @@ CORRECTIVE_PROMPT = "Balas ulang HANYA dengan objek JSON valid sesuai instruksi,
 CLASS_ASI = {
     "Sangat Tinggi": "Avoid + Shift + Improve", "Tinggi": "Shift + Improve",
     "Sedang": "Improve", "Rendah": "Improve", "Sangat Rendah": "Improve",
+}
+
+HINT_PRIORITY = ("add_new_stop", "improve_existing_stop", "increase_frequency")
+INTERVENTION_TEXT = {
+    "add_new_stop": "tambah halte baru di segmen ini",
+    "improve_existing_stop": "tingkatkan fasilitas/lingkungan halte yang ada",
+    "increase_frequency": "tambah frekuensi layanan (jumlah armada)",
 }
 
 
@@ -68,11 +79,23 @@ def _fallback_answer(context: dict, message: str, reason: str = "llm_error") -> 
     if stops:
         evidence.append(f"halte dalam 500 m={len(stops)}")
     evidence.append(f"coverage_gap={context['coverage_gap']}")
+    stop_assessment = context.get("stop_assessment") or {}
+    if stop_assessment.get("weak_stop_count"):
+        evidence.append(f"halte_kelas_rendah={stop_assessment['weak_stop_count']}")
+    if stop_assessment.get("avg_ahp_total_score") is not None:
+        evidence.append(f"avg_ahp_total_score_halte={stop_assessment['avg_ahp_total_score']}")
     chunk_count = segment.get("chunk_count") or 1
     if chunk_count > 1:
         evidence.append(f"segmen_digabung={chunk_count}")
     label = f"{segment['name']} ({chunk_count} segmen)" if chunk_count > 1 else f"{segment['name']} ({segment['road_segment_id']})"
     dominant = ", ".join(item["category"] for item in activity.get("dominant_poi_categories", [])) or "tidak tersedia"
+    hint_phrase = INTERVENTION_TEXT.get(context.get("intervention_hint"))
+    if hint_phrase:
+        recommendation = f"Rekomendasi intervensi koridor ini: {hint_phrase}."
+    elif activity_class:
+        recommendation = "Fokuskan intervensi pada koridor ini; lengkapi data segmen bila potensi belum tersedia."
+    else:
+        recommendation = "Data potensi koridor belum tersedia, jadi rekomendasi spesifik belum dapat dibuat."
     return {
         "summary": (
             f"Koridor {label} memiliki potensi aktivitas "
@@ -83,10 +106,7 @@ def _fallback_answer(context: dict, message: str, reason: str = "llm_error") -> 
             f"Klasifikasi potensi: {', '.join(activity.get('klasifikasi_potensi') or []) or 'tidak tersedia'}",
         ],
         "asi_category": CLASS_ASI.get(activity_class, "Improve"),
-        "recommendation": (
-            "Fokuskan intervensi pada koridor ini; lengkapi data segmen bila potensi belum tersedia."
-            if activity_class else "Data potensi koridor belum tersedia, jadi rekomendasi spesifik belum dapat dibuat."
-        ),
+        "recommendation": recommendation,
         "evidence": evidence,
         "source": "fallback",
         "fallback_reason": reason,
@@ -322,6 +342,14 @@ def _merge_contexts(contexts: list[dict]) -> dict:
             if current is None or (distance or float("inf")) < (current.get("distance_to_segment_m") or float("inf")):
                 stops[stop["source_id"]] = stop
     observed = [segment["observed_at"] for segment in segments if segment.get("observed_at")]
+    stop_assessments = [context.get("stop_assessment") or {} for context in contexts]
+    class_counts: dict[str, int] = {}
+    for assessment in stop_assessments:
+        for label, count in (assessment.get("class_counts") or {}).items():
+            class_counts[label] = class_counts.get(label, 0) + int(count)
+    mins = [a["min_ahp_total_score"] for a in stop_assessments if a.get("min_ahp_total_score") is not None]
+    avgs = [a["avg_ahp_total_score"] for a in stop_assessments if a.get("avg_ahp_total_score") is not None]
+    hints = [context.get("intervention_hint") for context in contexts if context.get("intervention_hint")]
     return {
         "generated_at": max(context["generated_at"] for context in contexts),
         "segment": {
@@ -350,7 +378,16 @@ def _merge_contexts(contexts: list[dict]) -> dict:
             ],
         },
         "bus_stops": list(stops.values()),
+        "stop_assessment": {
+            "count": sum(a.get("count") or 0 for a in stop_assessments),
+            "scored_count": sum(a.get("scored_count") or 0 for a in stop_assessments),
+            "class_counts": class_counts,
+            "weak_stop_count": sum(a.get("weak_stop_count") or 0 for a in stop_assessments),
+            "min_ahp_total_score": min(mins) if mins else None,
+            "avg_ahp_total_score": round(sum(avgs) / len(avgs), 4) if avgs else None,
+        },
         "coverage_gap": any(context["coverage_gap"] for context in contexts),
+        "intervention_hint": next((hint for hint in HINT_PRIORITY if hint in hints), None),
     }
 
 

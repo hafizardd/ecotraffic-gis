@@ -6,6 +6,7 @@ convention.
 """
 
 from datetime import datetime, timezone
+from collections import Counter
 
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func, select
@@ -19,6 +20,7 @@ from app.services.spatial_integration import K4_BUFFER_M
 
 _geog = Geography(srid=4326)
 HIGH_POTENTIAL = ("Sangat Tinggi", "Tinggi")
+WEAK_CLASSES = ("Rendah", "Sangat Rendah")
 DOMINANT_POI_LIMIT = 5
 
 
@@ -88,11 +90,35 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
         "klasifikasi_potensi": sorted({hex_cell.klasifikasi_potensi for hex_cell in hexes}) or None,
         "dominant_poi_categories": [{"category": category, "count": count} for category, count in dominant_sorted],
     }
+
+    stop_classes = [stop.intervention_class for stop, _ in stop_rows if stop.intervention_class]
+    stop_scores = [getattr(stop, "ahp_total_score", None) for stop, _ in stop_rows]
+    stop_scores = [score for score in stop_scores if score is not None]
+    weak_stop_count = sum(1 for label in stop_classes if label in WEAK_CLASSES)
+    activity_class = primary_hex.klasifikasi_potensi if primary_hex else None
+    coverage_gap = bool(gap_count)
+    if coverage_gap:
+        intervention_hint = "add_new_stop"
+    elif weak_stop_count:
+        intervention_hint = "improve_existing_stop"
+    elif activity_class in HIGH_POTENTIAL:
+        intervention_hint = "increase_frequency"
+    else:
+        intervention_hint = None
+    stop_assessment = {
+        "count": len(stop_rows),
+        "scored_count": len(stop_scores),
+        "class_counts": dict(Counter(stop_classes)),
+        "weak_stop_count": weak_stop_count,
+        "min_ahp_total_score": round(min(stop_scores), 4) if stop_scores else None,
+        "avg_ahp_total_score": round(sum(stop_scores) / len(stop_scores), 4) if stop_scores else None,
+    }
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "segment": {
             "road_segment_id": segment.road_segment_id, "name": segment.name, "length_km": segment.length_km,
-            "activity_class": primary_hex.klasifikasi_potensi if primary_hex else None,
+            "activity_class": activity_class,
             "activity_score": primary_hex.skor_total_ahp if primary_hex else None,
             "pollutant_totals": emission.pollutant_totals_g_h if emission else None,
             "data_source": emission.vehicle_count_semantics if emission else None,
@@ -108,5 +134,7 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
             }
             for stop, distance in stop_rows
         ],
-        "coverage_gap": bool(gap_count),
+        "stop_assessment": stop_assessment,
+        "coverage_gap": coverage_gap,
+        "intervention_hint": intervention_hint,
     }

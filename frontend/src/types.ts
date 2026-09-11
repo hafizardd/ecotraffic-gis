@@ -392,6 +392,16 @@ export interface BusStopDetail {
     intervention_score: number | null;
     intervention_rank: number | null;
     intervention_class: string | null;
+    accessibility_score_100: number | null;
+    condition_score_100: number | null;
+    environment_score_100: number | null;
+    ahp_total_score: number | null;
+    ahp_rank: number | null;
+    ahp_classification: string | null;
+    ahp_weight_version: string | null;
+    facility_checklist: Record<string, boolean> | null;
+    damage_indicators: Record<string, boolean> | null;
+    poi_breakdown_survey: Record<string, number> | null;
     accessibility_breakdown: { category: string; count: number }[];
     accessibility_buffer_m: number;
 }

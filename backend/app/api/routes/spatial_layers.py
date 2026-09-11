@@ -86,6 +86,11 @@ async def get_survey_stop(source_id: str, db: AsyncSession = Depends(get_db)):
         "survey_score": stop.survey_score, "score_method": stop.score_method,
         "accessibility_score": stop.accessibility_score, "intervention_score": stop.intervention_score,
         "intervention_rank": stop.intervention_rank, "intervention_class": stop.intervention_class,
+        "accessibility_score_100": stop.accessibility_score_100, "condition_score_100": stop.condition_score_100,
+        "environment_score_100": stop.environment_score_100, "ahp_total_score": stop.ahp_total_score,
+        "ahp_rank": stop.ahp_rank, "ahp_classification": stop.ahp_classification,
+        "ahp_weight_version": stop.ahp_weight_version, "facility_checklist": stop.facility_checklist,
+        "damage_indicators": stop.damage_indicators, "poi_breakdown_survey": stop.poi_breakdown_survey,
         "accessibility_breakdown": [{"category": category, "count": count} for category, count in poi_rows],
         "accessibility_buffer_m": K4_BUFFER_M,
     }

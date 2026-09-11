@@ -1,10 +1,16 @@
 """Per-bus-stop accessibility + 5-tier intervention classification.
 
-Accessibility is POI count within K4_BUFFER_M of the stop (new for stops;
-previously only computed around road segments). It is combined equally with
-the survey facility and environment scores — deliberately NOT the segment K3
-formula, which mixes different inputs. Set ``BUS_STOP_COMPONENT_WEIGHTS`` to a
-new AHP model when the domain team supplies one.
+Two scoring paths:
+
+* **AHP (authoritative).** Stops imported from the offline survey workbook carry
+  ``ahp_total_score``/``ahp_classification`` computed with the validated Saaty
+  weights (Aksesibilitas 0.4111, Kondisi 0.3278, Lingkungan 0.2611, CR = 0.048).
+  Those values are used directly — the survey team's accessibility score is
+  trusted over the live POI join, which stays for the panel's informational
+  "POI sekitar" breakdown.
+* **Keyword fallback.** Any stop without AHP data (e.g. a future lighter-weight
+  survey round) is scored from the live POI accessibility plus the keyword
+  facility/environment scores, then quintile-ranked.
 """
 
 from sqlalchemy import select
@@ -12,8 +18,20 @@ from sqlalchemy import select
 from app.models.spatial_sources import SurveyStopObservation
 from app.services.classification import quintile_classify
 from app.services.spatial_integration import compute_stop_accessibility
+from app.services.survey_ahp import AHP_WEIGHTS
 
-BUS_STOP_COMPONENT_WEIGHTS = {"accessibility": 1 / 3, "facility": 1 / 3, "environment": 1 / 3}
+# Validated AHP weights (workbook "AHP" sheet, CR = 0.048, consistent). The
+# fallback path reuses the same priority so mixed corridors stay comparable.
+BUS_STOP_COMPONENT_WEIGHTS = {
+    "accessibility": AHP_WEIGHTS["accessibility"],
+    "facility": AHP_WEIGHTS["condition"],
+    "environment": AHP_WEIGHTS["environment"],
+}
+AHP_COMPONENT_COLUMNS = {
+    "accessibility": "accessibility_score_100",
+    "condition": "condition_score_100",
+    "environment": "environment_score_100",
+}
 
 
 def _min_max(values: dict) -> tuple[float, float]:
@@ -22,7 +40,11 @@ def _min_max(values: dict) -> tuple[float, float]:
 
 
 def build_assessments(stops: list, accessibility: dict) -> list[dict]:
-    """Pure scoring pass: accessibility dict maps stop.source_id -> weighted score."""
+    """Pure scoring pass: accessibility dict maps stop.source_id -> weighted score.
+
+    AHP-scored stops keep their imported score/class/rank; the rest are
+    weighted-composite scored (0-100) and quintile-ranked after the AHP stops.
+    """
     low, high = _min_max(accessibility)
     normalized = {
         source_id: (0.0 if high == low else (value - low) / (high - low))
@@ -30,6 +52,18 @@ def build_assessments(stops: list, accessibility: dict) -> list[dict]:
     }
     assessments = []
     for stop in stops:
+        ahp_total = getattr(stop, "ahp_total_score", None)
+        if ahp_total is not None:
+            components = {
+                name: (getattr(stop, column, None) / 100 if getattr(stop, column, None) is not None else None)
+                for name, column in AHP_COMPONENT_COLUMNS.items()
+            }
+            assessments.append({
+                "source_id": stop.source_id, "components": components, "score": ahp_total,
+                "class": getattr(stop, "ahp_classification", None), "rank": getattr(stop, "ahp_rank", None),
+                "method": "ahp",
+            })
+            continue
         components = {name: None for name in BUS_STOP_COMPONENT_WEIGHTS}
         if stop.source_id in normalized:
             components["accessibility"] = normalized[stop.source_id]
@@ -37,14 +71,24 @@ def build_assessments(stops: list, accessibility: dict) -> list[dict]:
             components["facility"] = stop.facility_score / 5.0
         if stop.environment_score is not None:
             components["environment"] = stop.environment_score / 5.0
-        available = [value for value in components.values() if value is not None]
-        composite = sum(available) / len(available) if available else None
-        assessments.append({"source_id": stop.source_id, "components": components, "score": composite})
-    ranked = sorted((a for a in assessments if a["score"] is not None), key=lambda a: a["score"], reverse=True)
-    total = len(ranked)
-    for position, assessment in enumerate(ranked, start=1):
+        available = [(BUS_STOP_COMPONENT_WEIGHTS[name], value) for name, value in components.items() if value is not None]
+        weight_sum = sum(weight for weight, _ in available)
+        composite = (sum(weight * value for weight, value in available) / weight_sum * 100) if weight_sum else None
+        assessments.append({
+            "source_id": stop.source_id, "components": components, "score": composite,
+            "class": None, "rank": None, "method": "keyword",
+        })
+
+    fallback = sorted(
+        (a for a in assessments if a["method"] == "keyword" and a["score"] is not None),
+        key=lambda a: a["score"],
+        reverse=True,
+    )
+    offset = sum(1 for a in assessments if a["method"] == "ahp")
+    total = len(fallback)
+    for position, assessment in enumerate(fallback, start=1):
         _, assessment["class"] = quintile_classify(position, total)
-        assessment["rank"] = position
+        assessment["rank"] = offset + position
     return assessments
 
 
@@ -55,7 +99,10 @@ def score_bus_stops(db) -> dict:
     scored = 0
     for stop in stops:
         assessment = assessments[stop.source_id]
-        stop.accessibility_score = accessibility.get(stop.source_id)
+        stop.accessibility_score = (
+            stop.accessibility_score_100 if stop.accessibility_score_100 is not None
+            else accessibility.get(stop.source_id)
+        )
         stop.intervention_score = assessment["score"]
         stop.intervention_rank = assessment.get("rank")
         stop.intervention_class = assessment.get("class")
