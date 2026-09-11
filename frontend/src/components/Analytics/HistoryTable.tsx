@@ -1,20 +1,23 @@
 "use client";
-import { useCallback, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchEmissionHistory } from "@/services/api";
 import useAnalyticsResource from "@/hooks/useAnalyticsResource";
 import { fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
-import { pageWindow } from "@/utils/emissionAnalytics";
 import EmissionBulkDelete from "./EmissionBulkDelete";
 import EmissionExport from "./EmissionExport";
+import HistoryFilterDrawer, { type HistoryFilters } from "./HistoryFilterDrawer";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { SkeletonRows } from "@/components/ui/Skeleton";
-import type { EmissionHistoryRecord, VehicleRates } from "@/types";
+import Select from "@/components/ui/Select";
+import type { AnalyticsQuery, EmissionHistoryRecord, VehicleRates } from "@/types";
 
 type SortKey = "period_start" | "segment_name";
-const PAGE_SIZE = 25;
+type Tab = "observed" | "estimated";
+const TABS: { key: Tab; label: string }[] = [{ key: "observed", label: "Terukur" }, { key: "estimated", label: "Estimasi" }];
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const VEHICLES: { key: keyof VehicleRates; label: string }[] = [
     { key: "car", label: "Mobil" }, { key: "motorcycle", label: "Motor" },
     { key: "bus", label: "Bus" }, { key: "truck", label: "Truk" },
@@ -60,47 +63,120 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
 }
 
 export default function HistoryTable() {
-    const { query, refresh } = useEmissionAnalytics();
-    const queryKey = JSON.stringify(query);
-    const [view, setView] = useState({ key: "", page: 1, sort: "period_start" as SortKey, order: "desc" as "asc" | "desc" });
+    const { query, filter, setFilter, refresh } = useEmissionAnalytics();
+    const [tab, setTab] = useState<Tab>("observed");
+    const [searchInput, setSearchInput] = useState("");
+    const [search, setSearch] = useState("");
+    const [sourceMode, setSourceMode] = useState<string | null>(null);
+    const [pageSize, setPageSize] = useState(25);
+    const [sort, setSort] = useState<SortKey>("period_start");
+    const [order, setOrder] = useState<"asc" | "desc">("desc");
+    const [pages, setPages] = useState<{ key: string; values: Record<Tab, number> }>({ key: "", values: { observed: 1, estimated: 1 } });
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [reload, setReload] = useState(0);
     const [expanded, setExpanded] = useState<string | null>(null);
-    const { sort, order } = view;
-    const requestedPage = view.key === queryKey ? view.page : 1;
-    const load = useCallback((signal: AbortSignal) => fetchEmissionHistory(query, requestedPage, sort, order, signal), [query, requestedPage, sort, order]);
-    const { data, loading, error } = useAnalyticsResource(`${queryKey}:${requestedPage}:${sort}:${order}:${reload}`, load);
-    const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
-    const page = Math.min(requestedPage, totalPages);
 
-    function changeSort(next: SortKey) {
-        setView((current) => {
-            const key = current.key === queryKey ? current.key : queryKey;
-            const direction = current.sort === next ? (current.order === "asc" ? "desc" : "asc") : next === "period_start" ? "desc" : "asc";
-            return { key, page: 1, sort: next, order: direction };
+    useEffect(() => {
+        const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
+        return () => clearTimeout(timer);
+    }, [searchInput]);
+
+    const sourceKey = JSON.stringify({ query, search, sourceMode, pageSize, sort, order });
+    const sourceQuery: AnalyticsQuery = useMemo(() => ({
+        ...query,
+        ...(search ? { search } : {}),
+        ...(sourceMode ? { source_mode: sourceMode } : {}),
+    }), [query, search, sourceMode]);
+    const effectiveQuery: AnalyticsQuery = useMemo(() => ({ ...sourceQuery, quality_status: tab }), [sourceQuery, tab]);
+
+    // Totals are learned from each response so a tab's page can be clamped to
+    // its own page count. Set from the fetch promise (not an effect) to keep the
+    // render pure; pages are keyed to sourceKey, so any shared input change
+    // derives page 1 while switching tabs keeps each tab's own page.
+    const [totals, setTotals] = useState<Record<Tab, number>>({ observed: 0, estimated: 0 });
+    const tabPages = pages.key === sourceKey ? pages.values : { observed: 1, estimated: 1 };
+    const knownPages = Math.max(1, Math.ceil((totals[tab] || 1) / pageSize));
+    const requestedPage = Math.min(tabPages[tab], knownPages);
+    const load = useCallback((signal: AbortSignal) =>
+        fetchEmissionHistory(effectiveQuery, { page: requestedPage, pageSize, sort, order, signal })
+            .then((response) => {
+                setTotals((current) => (current[tab] === response.total ? current : { ...current, [tab]: response.total }));
+                return response;
+            }),
+        [effectiveQuery, requestedPage, pageSize, sort, order, tab]);
+    const resourceKey = `${sourceKey}:${tab}:${requestedPage}:${reload}`;
+    const { data, loading, error, key } = useAnalyticsResource(resourceKey, load);
+    const view = key === resourceKey ? data : undefined;
+    const totalPages = Math.max(1, Math.ceil((view?.total ?? 0) / pageSize));
+    const page = view ? Math.min(requestedPage, totalPages) : requestedPage;
+
+    const goPage = useCallback((next: number) => {
+        setPages((current) => {
+            const values = current.key === sourceKey ? current.values : { observed: 1, estimated: 1 };
+            return { key: sourceKey, values: { ...values, [tab]: next } };
         });
         setExpanded(null);
+    }, [tab, sourceKey]);
+
+    function changeSort(next: SortKey) {
+        setOrder(sort === next ? (order === "asc" ? "desc" : "asc") : next === "period_start" ? "desc" : "asc");
+        setSort(next);
+        setExpanded(null);
     }
-    function goPage(next: number) { setView((current) => ({ ...current, key: queryKey, page: next })); setExpanded(null); }
+    function switchTab(next: Tab) { setTab(next); setExpanded(null); }
     function handleDeleted() {
-        setView((current) => ({ ...current, key: queryKey, page: 1 }));
+        setPages({ key: sourceKey, values: { observed: 1, estimated: 1 } });
         setReload((value) => value + 1);
         refresh();
         setExpanded(null);
     }
-    function sortHeader(label: string, key: SortKey) {
-        const active = sort === key;
-        return <button type="button" className={`history-sort${active ? " is-active" : ""}`} onClick={() => changeSort(key)}>
+    const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+    const applyFilters = useCallback((next: HistoryFilters) => {
+        setFilter({ corridorId: next.corridorId, segmentId: next.segmentId, from: next.from, to: next.to });
+        setSourceMode(next.sourceMode);
+        setDrawerOpen(false);
+    }, [setFilter]);
+
+    const appliedFilters: HistoryFilters = {
+        corridorId: filter.corridorId, segmentId: filter.segmentId, sourceMode,
+        from: filter.from, to: filter.to,
+    };
+    const activeFilterCount = [filter.corridorId, filter.segmentId, sourceMode, filter.from || filter.to].filter(Boolean).length;
+
+    function sortHeader(label: string, sortKey: SortKey) {
+        const active = sort === sortKey;
+        return <button type="button" className={`history-sort${active ? " is-active" : ""}`} onClick={() => changeSort(sortKey)}>
             {label}<span aria-hidden="true">{active ? (order === "asc" ? "▲" : "▼") : "↕"}</span>
         </button>;
     }
 
     return <section className="page-card history-card animate-in" aria-label="Riwayat emisi segmen" aria-busy={loading}>
-        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${data?.units.emissions ?? "kg/hour"}; hasil sintetis dan replay dikecualikan.`} aside={`${fmtIntId(data?.total ?? 0)} catatan`} />
-        <EmissionExport />
-        <EmissionBulkDelete page={page} totalPages={totalPages} sort={sort} order={order} onDeleted={handleDeleted} />
-        {!data && loading ? <SkeletonRows rows={6} height={54} />
-            : !data && error ? <p role="alert" className="analytics-error">{error}</p>
-            : !data?.data.length ? <div className="unavailable-state">Tidak ada pengamatan segmen pada rentang dan lokasi ini.</div>
+        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; hasil sintetis dan replay dikecualikan.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
+
+        <div className="history-toolbar">
+            <div className="history-tabs" role="tablist" aria-label="Status mutu data">
+                {TABS.map(({ key: tabKey, label }) => <button key={tabKey} type="button" role="tab" aria-selected={tab === tabKey}
+                    className={`history-tab${tab === tabKey ? " is-active" : ""}`} onClick={() => switchTab(tabKey)}>{label}</button>)}
+            </div>
+            <label className="history-search">
+                <Search aria-hidden="true" />
+                <input type="search" value={searchInput} aria-label="Cari riwayat"
+                    placeholder="Cari nama jalan, segmen, atau informasi lain"
+                    onChange={(event) => setSearchInput(event.target.value)} />
+                {searchInput && <button type="button" aria-label="Bersihkan pencarian" onClick={() => setSearchInput("")}><X aria-hidden="true" /></button>}
+            </label>
+            <button type="button" className="analytics-button history-filter-button" aria-haspopup="dialog" onClick={() => setDrawerOpen(true)}>
+                <SlidersHorizontal aria-hidden="true" /> Filter
+                {activeFilterCount > 0 && <span className="history-filter-count" aria-label={`${activeFilterCount} filter aktif`}>{activeFilterCount}</span>}
+            </button>
+        </div>
+
+        <EmissionExport query={effectiveQuery} />
+        <EmissionBulkDelete query={effectiveQuery} page={page} pageSize={pageSize} totalPages={totalPages} sort={sort} order={order} onDeleted={handleDeleted} />
+
+        {!view && loading ? <SkeletonRows rows={6} height={54} />
+            : !view && error ? <p role="alert" className="analytics-error">{error}</p>
+            : !view?.data.length ? <div className="unavailable-state">Tidak ada pengamatan segmen pada rentang dan lokasi ini.</div>
             : <div className="table-wrap history-scroll">
                 <table className="priority-table history-table">
                     <thead><tr>
@@ -112,9 +188,9 @@ export default function HistoryTable() {
                         <th>Status</th>
                         <th aria-label="Detail" />
                     </tr></thead>
-                    <tbody>{data.data.map((record, index) => {
+                    <tbody>{view.data.map((record, index) => {
                         const open = expanded === record.id;
-                        const no = (page - 1) * PAGE_SIZE + index + 1;
+                        const no = (page - 1) * pageSize + index + 1;
                         return [
                             <tr key={record.id} className={open ? "is-open" : ""}>
                                 <td className="history-index">{no}</td>
@@ -131,23 +207,25 @@ export default function HistoryTable() {
                     })}</tbody>
                 </table>
             </div>}
-        <nav className="analytics-pagination" aria-label="Navigasi halaman riwayat">
-            <button type="button" className="pagination-text" disabled={loading || page <= 1} onClick={() => goPage(1)}>« Pertama</button>
-            <button type="button" className="pagination-text" disabled={loading || page <= 1} onClick={() => goPage(page - 1)}>‹ Sebelumnya</button>
-            {pageWindow(page, totalPages).map((entry, index) => entry === "gap"
-                ? <span key={`gap-${index}`} className="pagination-ellipsis" aria-hidden="true">…</span>
-                : <button key={entry} type="button" className={`pagination-page${entry === page ? " is-active" : ""}`}
-                    aria-current={entry === page ? "page" : undefined} disabled={loading} onClick={() => goPage(entry)}>{entry}</button>)}
-            <button type="button" className="pagination-text" disabled={loading || !data || page >= totalPages} onClick={() => goPage(page + 1)}>Berikutnya ›</button>
-            <button type="button" className="pagination-text" disabled={loading || !data || page >= totalPages} onClick={() => goPage(totalPages)}>Terakhir »</button>
-            <label className="pagination-jump">Ke halaman
-                <input key={page} type="number" min={1} max={totalPages} defaultValue={page} disabled={loading}
-                    onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        const next = Number((event.target as HTMLInputElement).value);
-                        if (Number.isFinite(next)) goPage(Math.min(Math.max(1, next), totalPages));
-                    }} />
-            </label>
+
+        <nav className="analytics-pagination history-pagination" aria-label="Navigasi halaman riwayat">
+            <div className="history-pagination-left">
+                <span>Menampilkan {fmtIntId(view?.data.length ?? 0)} dari {fmtIntId(view?.total ?? 0)} catatan</span>
+                <label className="history-pagesize">Baris per halaman
+                    <Select ariaLabel="Jumlah baris per halaman" value={String(pageSize)}
+                        options={PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: String(size) }))}
+                        onChange={(value) => setPageSize(Number(value))} />
+                </label>
+            </div>
+            <div className="history-pagination-right">
+                <span>{page} dari {totalPages} halaman</span>
+                <button type="button" className="pagination-page" aria-label="Halaman sebelumnya"
+                    disabled={loading || page <= 1} onClick={() => goPage(page - 1)}><ChevronLeft aria-hidden="true" /></button>
+                <button type="button" className="pagination-page" aria-label="Halaman berikutnya"
+                    disabled={loading || !view || page >= totalPages} onClick={() => goPage(page + 1)}><ChevronRight aria-hidden="true" /></button>
+            </div>
         </nav>
+
+        <HistoryFilterDrawer open={drawerOpen} filters={appliedFilters} onClose={closeDrawer} onApply={applyFilters} />
     </section>;
 }

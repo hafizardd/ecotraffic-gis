@@ -12,6 +12,8 @@ from app.models.segment_emission import SegmentEmission
 from app.services.emission_analytics import source_mode_expression
 from app.services.hex_activity_scoring import (
     NO_DATA,
+    POTENTIAL_LABELS,
+    aggregate_potential,
     hourly_hex_volumes,
     recompute_hour_scores,
 )
@@ -20,6 +22,8 @@ from app.services.spatial_integration import resolve_primary_hex
 router = APIRouter(prefix="/api/spatial", tags=["spatial"])
 
 _DAY = timedelta(hours=24)
+# Snapping grid for the coarse LOD super-cells; matches the frontend breakpoint.
+_COARSE_CELL_DEGREES = 0.02
 
 
 def _hex_properties(hex_cell: ActivityGridHex) -> dict:
@@ -73,9 +77,48 @@ async def _live_grid(db, hour: datetime, bounds):
     return {"type": "FeatureCollection", "features": features}
 
 
+async def _coarse_grid(db, hour: datetime | None):
+    """Zoomed-out LOD: fixed cells unioned into larger super-cells.
+
+    Reuses the per-hour per-cell scores unchanged; the super-cell tier is the
+    area-weighted mean of its members, so it is a render approximation, not an
+    independently scored cell (``hex_id`` is null to block drill-down).
+    """
+    cells = (await db.execute(select(ActivityGridHex))).scalars().all()
+    cells_by_id = {cell.hex_id: cell for cell in cells}
+    scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, hour)) if hour else None
+
+    rows = (await db.execute(text(
+        "SELECT ST_AsGeoJSON(ST_Union(geometry))::json AS geometry, array_agg(hex_id) AS hex_ids, "
+        "SUM(luas_km2) AS luas_km2, SUM(poi_total) AS poi_total, SUM(penduduk) AS penduduk "
+        "FROM (SELECT hex_id, geometry, luas_km2, poi_total, penduduk, "
+        "ST_AsText(ST_SnapToGrid(ST_Centroid(geometry), :cell)) AS grp FROM activity_grid_hexes) grouped "
+        "GROUP BY grp"
+    ), {"cell": _COARSE_CELL_DEGREES})).all()
+
+    features = []
+    for geometry, hex_ids, luas, poi, penduduk in rows:
+        def label_of(hex_id: int):
+            if scores is not None:
+                return scores.get(hex_id, NO_DATA).get("klasifikasi_potensi")
+            return cells_by_id[hex_id].klasifikasi_potensi
+        potential = aggregate_potential([(label_of(hex_id), cells_by_id[hex_id].luas_km2) for hex_id in hex_ids])
+        features.append(_feature(geometry, {
+            "hex_id": None, "luas_km2": float(luas or 0), "poi_total": int(poi or 0), "poi_breakdown": {},
+            "penduduk": int(penduduk or 0), "volume_mean": 0.0, "norm_volume": None, "norm_poi": 0.0,
+            "norm_penduduk": 0.0, "skor_total_ahp": None, "ranking": None,
+            "klasifikasi_potensi": POTENTIAL_LABELS.get(potential), "ahp_weight_version": "coarse-union",
+            "source": "aggregated", "data_status": "live" if hour else "static",
+            "aggregated_count": len(hex_ids),
+        }))
+    return {"type": "FeatureCollection", "features": features}
+
+
 @router.get("/activity-grid")
-async def get_activity_grid(bbox: str | None = None, hour: str | None = None,
+async def get_activity_grid(bbox: str | None = None, hour: str | None = None, lod: str | None = None,
                             db: AsyncSession = Depends(get_db)):
+    if lod == "coarse":
+        return await _coarse_grid(db, _parse_hour(hour) if hour else None)
     bounds = _parse_bbox(bbox)
     if hour:
         return await _live_grid(db, _parse_hour(hour), bounds)

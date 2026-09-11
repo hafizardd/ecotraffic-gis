@@ -187,7 +187,10 @@ export interface EmissionAnalyticsFilter {
     from: string | null;
     to: string | null;
 }
-export interface AnalyticsQuery { from: string; to: string; segment_id?: string; corridor_id?: string; }
+export interface AnalyticsQuery {
+    from: string; to: string; segment_id?: string; corridor_id?: string;
+    search?: string; quality_status?: "observed" | "estimated"; source_mode?: string;
+}
 export type EmissionTrendPoint = Record<`${PollutantKey}_kg_h`, number | null> & {
     timestamp: string; segment_count: number; sample_count: number; estimated_sample_count: number;
 };

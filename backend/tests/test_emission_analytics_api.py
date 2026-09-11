@@ -187,3 +187,53 @@ async def test_empty_ranges_and_invalid_inputs(api):
     assert (await client.get("/api/analytics/emissions/history", params=empty)).json()["total"] == 0
     assert (await client.get("/api/analytics/emissions/trend", params=empty)).json()["data"] == []
     assert (await client.get("/api/analytics/emissions/composition", params=empty)).json()["sample_count"] == 0
+
+
+async def _insert_snapshot_row(engine, minute=5):
+    """One occupancy-derived sample so the estimated bucket is non-empty."""
+    async with engine.begin() as conn:
+        segment = (await conn.execute(text("SELECT id FROM road_segments WHERE road_segment_id = 'B'"))).first()[0]
+        start = BASE + timedelta(minutes=minute)
+        await conn.execute(insert(SegmentEmission).values(
+            id=uuid.uuid4(), road_segment_id=segment, period_start=start, period_end=start + timedelta(minutes=1),
+            calculated_at=start + timedelta(minutes=1, seconds=2), calculation_version=1,
+            observation_duration_seconds=60, aggregation_policy="sum_independent_streams",
+            source_cameras=["camera"], source_streams=["main"], source_observation_count=1,
+            vehicle_count_semantics="snapshot_occupancy", raw_counts={c: 1 for c in VEHICLE_CATEGORIES},
+            volume_per_hour={c: 60 for c in VEHICLE_CATEGORIES}, vkt_km_h={c: 30 for c in VEHICLE_CATEGORIES},
+            pollutant_totals_g_h={p: 1000 for p in POLLUTANTS}, category_pollutant_breakdown_g_h={},
+            raw_criteria={}, ahp_metadata={"source_mode": "LIVE", "calculation_mode": "live_occupancy_estimate"},
+        ))
+
+
+async def test_history_search_matches_name_and_corridor_case_insensitive(api):
+    client, params, _ = api
+    by_name = (await client.get("/api/analytics/emissions/history", params={**params, "search": "segment b"})).json()
+    assert by_name["total"] == 1
+    assert all("Segment B" in row["segment_name"] for row in by_name["data"])
+    by_corridor = (await client.get("/api/analytics/emissions/history", params={**params, "search": "CORRIDOR c"})).json()
+    assert by_corridor["total"] == 3  # both segments share corridor C
+
+
+async def test_history_quality_status_buckets_reconcile(api):
+    client, params, engine = api
+    await _insert_snapshot_row(engine)
+    unfiltered = (await client.get("/api/analytics/emissions/history", params=params)).json()
+    observed = (await client.get("/api/analytics/emissions/history", params={**params, "quality_status": "observed"})).json()
+    estimated = (await client.get("/api/analytics/emissions/history", params={**params, "quality_status": "estimated"})).json()
+    assert observed["total"] + estimated["total"] == unfiltered["total"]
+    assert estimated["total"] == 1
+    assert all(row["quality_status"] == "estimated" for row in estimated["data"])
+    assert all(row["quality_status"] == "observed" for row in observed["data"])
+
+
+async def test_history_source_mode_filter_and_page_size_bounds(api):
+    client, params, _ = api
+    live = (await client.get("/api/analytics/emissions/history", params={**params, "source_mode": "LIVE"})).json()
+    assert live["total"] == 3
+    # SYNTHETIC/REPLAY are excluded upstream by design, so a source_mode filter on them is empty.
+    synthetic = (await client.get("/api/analytics/emissions/history", params={**params, "source_mode": "SYNTHETIC"})).json()
+    assert synthetic["total"] == 0
+    assert (await client.get("/api/analytics/emissions/history", params={**params, "page_size": 1})).status_code == 200
+    assert (await client.get("/api/analytics/emissions/history", params={**params, "page_size": 200})).status_code == 200
+    assert (await client.get("/api/analytics/emissions/history", params={**params, "page_size": 201})).status_code == 422

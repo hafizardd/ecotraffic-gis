@@ -67,12 +67,14 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
 
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);
 
-export async function fetchActivityGrid(bbox?: string, hour?: string | null): Promise<ActivityGridFeatureCollection> {
+export async function fetchActivityGrid(bbox?: string, hour?: string | null, lod: "coarse" | "native" = "native", signal?: AbortSignal): Promise<ActivityGridFeatureCollection> {
     const params = new URLSearchParams();
-    if (bbox) params.set("bbox", bbox);
+    // Coarse LOD is a full-extent union; a bbox would split its super-cell groups.
+    if (bbox && lod === "native") params.set("bbox", bbox);
     if (hour) params.set("hour", hour);
+    if (lod === "coarse") params.set("lod", "coarse");
     const query = params.toString();
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`);
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`, { signal });
     if (!response.ok) throw new Error(`Failed to fetch activity grid: ${response.statusText}`);
     return response.json();
 }
@@ -149,8 +151,14 @@ export const fetchPollutantComposition = (query: AnalyticsQuery, signal?: AbortS
     analyticsFetch<AnalyticsResponse<PollutantComposition> & { sample_count: number }>("composition", query, signal);
 export const fetchLatestSegmentEmissions = (query: Partial<AnalyticsQuery> = {}, signal?: AbortSignal) =>
     analyticsFetch<LatestSegmentEmissionsResponse>("latest", query, signal);
-export const fetchEmissionHistory = (query: AnalyticsQuery, page = 1, sort = "period_start", order: "asc" | "desc" = "desc", signal?: AbortSignal) =>
-    analyticsFetch<EmissionHistoryResponse>("history", query, signal, { page: String(page), page_size: "25", sort, order });
+export interface EmissionHistoryOptions {
+    page?: number; pageSize?: number; sort?: string; order?: "asc" | "desc"; signal?: AbortSignal;
+}
+export const fetchEmissionHistory = (query: AnalyticsQuery, options: EmissionHistoryOptions = {}) => {
+    const { page = 1, pageSize = 25, sort = "period_start", order = "desc", signal } = options;
+    return analyticsFetch<EmissionHistoryResponse>("history", query, signal,
+        { page: String(page), page_size: String(pageSize), sort, order });
+};
 
 export interface DeleteEmissionHistoryOptions {
     page?: number; page_size?: number; sort?: string; order?: "asc" | "desc";

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from functools import reduce
 from operator import add
 
-from sqlalchemy import Float, cast, func, select
+from sqlalchemy import Float, cast, func, or_, select
 
 from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
@@ -33,6 +33,9 @@ class AnalyticsFilter:
     end: datetime
     segment_id: str | None = None
     corridor_id: str | None = None
+    search: str | None = None
+    quality_status: str | None = None
+    source_mode: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "start", utc(self.start))
@@ -84,6 +87,15 @@ def fact_query(filters: AnalyticsFilter, *, latest: bool = False):
         stmt = stmt.where(RoadSegment.road_segment_id == filters.segment_id)
     if filters.corridor_id:
         stmt = stmt.where(corridor_id == filters.corridor_id)
+    if filters.search:
+        pattern = f"%{filters.search}%"
+        stmt = stmt.where(or_(RoadSegment.name.ilike(pattern), corridor_name.ilike(pattern)))
+    if filters.quality_status in ("observed", "estimated"):
+        # Mirrors serialize_fact: a null semantics value is "observed", not excluded.
+        estimated = func.coalesce(SegmentEmission.vehicle_count_semantics, "") == "snapshot_occupancy"
+        stmt = stmt.where(estimated if filters.quality_status == "estimated" else ~estimated)
+    if filters.source_mode:
+        stmt = stmt.where(source_mode_expression() == filters.source_mode)
     if latest:
         from app.models.camera_road_segment import CameraRoadSegment
         from app.models.camera import Camera

@@ -5,7 +5,9 @@ import pytest
 
 from app.services.hex_activity_scoring import (
     HEX_AHP_WEIGHTS,
+    aggregate_potential,
     hourly_hex_volumes,
+    label_potential,
     minmax_normalize,
     recompute_hour_scores,
 )
@@ -107,3 +109,18 @@ async def test_hourly_hex_volumes_skips_segments_without_usable_sample():
 async def test_hourly_hex_volumes_skips_segments_outside_grid():
     db = _DB([[_means_row("SEG-1", car=4.0)], []])
     assert await hourly_hex_volumes(db, HOUR) == {}
+
+
+def test_label_potential_matches_frontend_scale():
+    assert label_potential("Sangat Tinggi") == 5
+    assert label_potential("Tinggi") == 4
+    assert label_potential("Sedang") == 3
+    assert label_potential("Rendah") == 2
+    assert label_potential("Sangat Rendah") == 1
+    assert label_potential(None) == 0
+
+
+def test_aggregate_potential_is_area_weighted_and_skips_unscored():
+    assert aggregate_potential([("Sangat Tinggi", 3.0), ("Sangat Rendah", 1.0)]) == 4
+    assert aggregate_potential([("Sangat Tinggi", 1.0), (None, 5.0)]) == 5
+    assert aggregate_potential([(None, 1.0)]) == 0

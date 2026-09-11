@@ -2,9 +2,13 @@
 import { useState } from "react";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { exportEmissionHistory } from "@/services/api";
+import type { AnalyticsQuery } from "@/types";
 
-export default function EmissionExport() {
-    const { query } = useEmissionAnalytics();
+// `query` overrides the shared context query so Riwayat's search/tab/source
+// filters are reflected in the export, not just the visible table page.
+export default function EmissionExport({ query: queryOverride }: { query?: AnalyticsQuery }) {
+    const { query: contextQuery } = useEmissionAnalytics();
+    const query = queryOverride ?? contextQuery;
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     async function download(format: "csv" | "json") {

@@ -29,6 +29,42 @@ HEX_AHP_WEIGHTS = {"volume": 0.5390, "poi": 0.2973, "penduduk": 0.1638}
 NO_DATA = {"norm_volume": None, "skor_total_ahp": None, "ranking": None,
            "klasifikasi_potensi": None, "data_status": "no_data"}
 
+# Coarse LOD is a presentation approximation: fixed cells are unioned into
+# larger super-cells and colored by the area-weighted mean of their member
+# tiers. It is not an independently scored cell, so hex_id stays null.
+POTENTIAL_LABELS = {1: "Sangat Rendah", 2: "Rendah", 3: "Sedang", 4: "Tinggi", 5: "Sangat Tinggi"}
+
+
+def label_potential(label: str | None) -> int:
+    """Mirror of the frontend ``classificationTier`` label->1..5 mapping (5 highest)."""
+    value = (label or "").lower()
+    if not value:
+        return 0
+    if "sangat tinggi" in value or "merah" in value:
+        return 5
+    if "sangat rendah" in value or "hijau muda" in value:
+        return 1
+    if "tinggi" in value or "oranye" in value or "orange" in value:
+        return 4
+    if "sedang" in value or "kuning" in value:
+        return 3
+    if "rendah" in value or "hijau" in value:
+        return 2
+    return 0
+
+
+def aggregate_potential(members: list[tuple[str | None, float]]) -> int:
+    """Area-weighted mean tier from ``(label, area)`` pairs; unscored cells are
+    excluded from the mean (but callers still count them)."""
+    weight = 0.0
+    weighted = 0.0
+    for label, area in members:
+        potential = label_potential(label)
+        if potential >= 1:
+            weight += area
+            weighted += area * potential
+    return round(weighted / weight) if weight > 0 else 0
+
 
 def minmax_normalize(value: float, vmin: float, vmax: float) -> float:
     """The Excel model's ``1 + ((X-MIN)/(MAX-MIN))*99`` scale (1..100).

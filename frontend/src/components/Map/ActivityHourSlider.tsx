@@ -14,6 +14,10 @@ export default function ActivityHourSlider({ hours, value, onChange }: {
 }) {
     if (hours.length === 0) return null;
     const index = sliderIndex(hours, value);
+    // onInput fires on every drag tick. onChange is kept on the controlled input
+    // because React requires it, and it fires on the same native event; both
+    // resolve to the same hour so the state update stays idempotent.
+    const commit = (input: HTMLInputElement) => onChange(hours[Number(input.value)]);
     return (
         <div className="map-hour-slider" aria-label="Potensi aktivitas per jam">
             <label htmlFor="activity-hour-slider"><Clock aria-hidden="true" /> Potensi per jam</label>
@@ -24,7 +28,8 @@ export default function ActivityHourSlider({ hours, value, onChange }: {
                 max={hours.length - 1}
                 step={1}
                 value={index}
-                onChange={(event) => onChange(hours[Number(event.target.value)])}
+                onInput={(event) => commit(event.currentTarget)}
+                onChange={(event) => commit(event.currentTarget)}
             />
             <output htmlFor="activity-hour-slider">{fmtDateTimeId(hours[index])}</output>
         </div>

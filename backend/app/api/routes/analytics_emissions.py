@@ -43,11 +43,15 @@ async def analytics_db():
 async def get_filters(
     from_: datetime | None = Query(None, alias="from"), to: datetime | None = Query(None),
     segment_id: str | None = Query(None, max_length=100), corridor_id: str | None = Query(None, max_length=255),
+    search: str | None = Query(None, max_length=100),
+    quality_status: Literal["observed", "estimated"] | None = Query(None),
+    source_mode: str | None = Query(None, max_length=40),
     db=Depends(analytics_db),
 ):
     end = to or datetime.now(timezone.utc)
     try:
-        filters = AnalyticsFilter(from_ or end - timedelta(hours=24), end, segment_id, corridor_id)
+        filters = AnalyticsFilter(from_ or end - timedelta(hours=24), end, segment_id, corridor_id,
+            search, quality_status, source_mode)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if segment_id and not (await db.execute(select(RoadSegment.id).where(RoadSegment.road_segment_id == segment_id).limit(1))).first():
@@ -59,7 +63,8 @@ async def get_filters(
 
 def envelope(filters: AnalyticsFilter):
     return {"from": filters.start, "to": filters.end, "segment_id": filters.segment_id,
-        "corridor_id": filters.corridor_id, "units": UNITS,
+        "corridor_id": filters.corridor_id, "search": filters.search,
+        "quality_status": filters.quality_status, "source_mode": filters.source_mode, "units": UNITS,
         "aggregation": "mean_per_segment_then_sum_independent_segments",
         # SNAPSHOT_REAL is intentionally NOT excluded: it is real sampled data.
         "excluded_source_modes": ["SYNTHETIC", "REPLAY"]}

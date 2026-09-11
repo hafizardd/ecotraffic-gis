@@ -17,7 +17,7 @@ import useSegments from "@/hooks/useSegments";
 import useSpatialLayers from "@/hooks/useSpatialLayers";
 import useActivityGrid, { useActivityGridHours } from "@/hooks/useActivityGrid";
 import ActivityHourSlider from "./ActivityHourSlider";
-import { aggregateCoarseGrid, gridLod } from "@/utils/activityGrid";
+import { gridLod } from "@/utils/activityGrid";
 import { setSelectedSegmentId as publishSelectedSegment } from "@/utils/selectionStore";
 import {
     SEGMENT_COLORS,
@@ -62,7 +62,7 @@ export default function MapView() {
     const activeHour = visible.activityGrid && activityHours.length > 0
         ? (activityHour && activityHours.includes(activityHour) ? activityHour : activityHours[activityHours.length - 1])
         : null;
-    const { activityGrid } = useActivityGrid(bbox, activeHour, visible.activityGrid);
+    const { activityGrid } = useActivityGrid(bbox, activeHour, visible.activityGrid, lod);
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
@@ -99,16 +99,13 @@ export default function MapView() {
         }),
     }), [cameras, emissionMap]);
 
-    const activityGridGeoJSON = useMemo(() => {
-        const decorated = activityGrid.features.map((feature) => ({
+    const activityGridGeoJSON = useMemo(() => ({
+        type: "FeatureCollection" as const,
+        features: activityGrid.features.map((feature) => ({
             ...feature,
             properties: { ...feature.properties, potential: classificationTier(feature.properties.klasifikasi_potensi) },
-        }));
-        return {
-            type: "FeatureCollection" as const,
-            features: lod === "coarse" ? aggregateCoarseGrid(decorated) : decorated,
-        };
-    }, [activityGrid, lod]);
+        })),
+    }), [activityGrid]);
 
     const surveyStopGeoJSON = useMemo(() => ({
         type: "FeatureCollection" as const,
@@ -230,10 +227,6 @@ export default function MapView() {
              {visible.activityGrid && lod === "coarse" && (
                  <div className="map-coarse-note">Tampilan agregat — perbesar untuk detail per sel</div>
              )}
-             {visible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
-                 <Layer id="activity-grid-fill" type="fill" paint={{ "fill-color": ["step", ["get", "potential"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "fill-opacity": 0.55 }} />
-                 <Layer id="activity-grid-outline" type="line" paint={{ "line-color": "#ffffff", "line-width": 0.5, "line-opacity": lod === "coarse" ? 0 : 0.5 }} />
-             </Source>}
              {visible.surveyStops && <Source id="survey-stops" type="geojson" data={surveyStopGeoJSON as never}><Layer id="survey-circles" type="circle" paint={{ "circle-color": ["step", ["get", "intervention"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "circle-radius": ["case", ["==", ["get", "source_id"], selectedStopId ?? ""], 9, ["step", ["get", "intervention"], 6, 4, 8, 5, 10]], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
@@ -243,7 +236,13 @@ export default function MapView() {
                 <Layer id="camera-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 }} />
                 <Layer id="camera-selected-ring" type="circle" filter={["all", ["!", ["has", "point_count"]], ["==", ["get", "camera_id"], selectedCamera?.properties.camera_id ?? ""]]} paint={{ "circle-color": "#ffffff", "circle-radius": ["step", ["get", "tier"], 16, 1, 17, 2, 19, 3, 21], "circle-opacity": 0.35 }} />
                 <Layer id="camera-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["step", ["get", "tier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "tier"], 11, 1, 12, 2, 14, 3, 16], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-opacity": ["step", ["get", "freshness"], 1, 1, 0.8, 2, 0.35, 3, 0.6] }} />
- </Source>}
+  </Source>}
+              {/* Declared last so the grid paints on top of segments/camera/POI. Click priority stays
+                  independent of paint order: onClick checks segment/camera hits first regardless. */}
+              {visible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
+                 <Layer id="activity-grid-fill" type="fill" paint={{ "fill-color": ["step", ["get", "potential"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "fill-opacity": 0.55 }} />
+                 <Layer id="activity-grid-outline" type="line" paint={{ "line-color": "#ffffff", "line-width": 1.25, "line-opacity": 0.75 }} />
+             </Source>}
               {hoveredCamera && hoveredPoint && visible.cameras && (
                 <Popup longitude={hoveredPoint[0]} latitude={hoveredPoint[1]} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
                     <div className="marker-popup">
