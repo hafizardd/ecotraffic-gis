@@ -50,7 +50,7 @@ OpenRouter is the only semantic-extraction gateway. Defaults:
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=nvidia/nemotron-3.5-lightning:free
+OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 OPENROUTER_SITE_URL=
 OPENROUTER_APP_NAME=EcoTraffic GIS
 ```
@@ -60,6 +60,12 @@ on an explicit provider/model unsupported-format response. It never changes mode
 provider. Only HTTP 408, 429, 500, 502, 503 and transport timeouts are retried, with
 bounded exponential backoff. HTTP 401, 402, and 403 fail immediately. Cache keys include
 description, model, schema version, prompt version, and extraction version.
+
+Every populated semantic field must be supported by an evidence entry whose key is the field's
+exact dotted schema path. Before validation, unsupported LLM-only fields are reset to their schema
+defaults and confidence entries without evidence are removed. This normalization never fabricates
+evidence, does not modify issues (which carry their own required evidence), and runs before merging
+with evidence-backed deterministic extraction.
 
 ## Database integration
 

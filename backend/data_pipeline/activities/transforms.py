@@ -507,6 +507,43 @@ def derive_recommendation_tags(value: SemanticExtraction) -> list[str]:
     return tags
 
 
+def normalize_semantic_evidence(value: SemanticExtraction) -> SemanticExtraction:
+    """Reset unsupported LLM fields without weakening evidence validation.
+
+    This function is intended for untrusted semantic enrichment before it is
+    merged with deterministic extraction.  It never creates evidence and does
+    not inspect or modify issues, which carry their own required evidence.
+    """
+
+    def meaningful(field_value: object) -> bool:
+        return field_value not in (None, "unknown", [], {})
+
+    evidence = {
+        key: excerpt
+        for key, excerpt in value.evidence.items()
+        if excerpt.strip()
+    }
+    data = value.model_dump(mode="python")
+    defaults = SemanticExtraction().model_dump(mode="python")
+
+    for section in ("usage", "facilities", "accessibility", "condition", "environment"):
+        for field, field_value in data[section].items():
+            evidence_key = f"{section}.{field}"
+            if meaningful(field_value) and evidence_key not in evidence:
+                data[section][field] = defaults[section][field]
+
+    for field in ("strengths", "weaknesses"):
+        has_evidence = any(key == field or key.startswith(f"{field}.") for key in evidence)
+        if data[field] and not has_evidence:
+            data[field] = defaults[field]
+
+    data["evidence"] = evidence
+    data["confidence"] = {
+        key: score for key, score in value.confidence.items() if key in evidence
+    }
+    return SemanticExtraction.model_validate(data)
+
+
 def merge_semantic(base: SemanticExtraction, enrichment: SemanticExtraction) -> SemanticExtraction:
     def meaningful(value: object) -> bool:
         return value is not None and value != "unknown" and value != [] and value != {}

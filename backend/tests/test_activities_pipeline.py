@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 
+from data_pipeline.activities.llm import LLMMetrics
 from data_pipeline.activities.pipeline import ActivitiesPipeline, PipelineOptions
 
 
@@ -51,6 +52,40 @@ def test_dry_run_never_writes_or_calls_openrouter(tmp_path):
     assert result.records
     assert result.written_files == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_pipeline_normalizes_missing_evidence_without_marking_successful_llm_call_failed(tmp_path):
+    class NormalizableClient:
+        def __init__(self):
+            self.metrics = LLMMetrics(model="test/model")
+            self.last_request_id = "request-normalized"
+
+        def extract_structured(self, **kwargs):
+            self.metrics.number_of_calls += 1
+            self.metrics.successful_calls += 1
+            return {
+                "environment": {
+                    "nearby_place_categories": ["school"],
+                    "landmark_categories": ["government"],
+                },
+                "facilities": {"has_wifi": True},
+                "confidence": {"facilities.has_wifi": 0.9},
+            }
+
+    pipeline = ActivitiesPipeline(
+        PipelineOptions(input_path=DATASET, output_dir=tmp_path, limit=1),
+        llm_client=NormalizableClient(),  # type: ignore[arg-type]
+    )
+
+    result = pipeline.run_all()
+
+    assert pipeline.metrics.number_of_calls == 1
+    assert pipeline.metrics.successful_calls == 1
+    assert pipeline.metrics.failed_calls == 0
+    assert pipeline.metrics.validation_failures == 0
+    assert result.records[0].provenance.extraction_status == "llm_validated"
+    assert result.records[0].environment.landmark_categories == []
+    assert not [error for error in result.errors if error["error_type"] in {"ValueError", "ValidationError"}]
 
 
 def test_manual_qa_contains_ten_real_records(tmp_path):

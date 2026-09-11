@@ -33,6 +33,7 @@ from .transforms import (
     extract_observation_time,
     mark_duplicates,
     merge_semantic,
+    normalize_semantic_evidence,
     normalize_title,
     normalize_whitespace,
     parse_coordinates,
@@ -380,7 +381,7 @@ class ActivitiesPipeline:
                             temperature=0.0,
                             timeout=self.options.timeout,
                         )
-                        enrichment = SemanticExtraction.model_validate(payload)
+                        enrichment = normalize_semantic_evidence(SemanticExtraction.model_validate(payload))
                         warnings = semantic_validation_warnings(enrichment)
                         if warnings:
                             raise ValueError("; ".join(warnings))

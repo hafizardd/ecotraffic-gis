@@ -9,10 +9,10 @@ SOURCE_TYPE = "survey_activity"
 SOURCE_FILE_NAME = "raw/activities_raw.csv"
 EXTRACTION_PROVIDER = "openrouter"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3.5-lightning:free"
+DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 EXTRACTION_VERSION = "activities-v1"
 SCHEMA_VERSION = "activities-schema-v1"
-PROMPT_VERSION = "activities-prompt-v1"
+PROMPT_VERSION = "activities-prompt-v2"
 
 TRANSIENT_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503})
 NON_RETRYABLE_HTTP_STATUSES = frozenset({401, 402, 403})

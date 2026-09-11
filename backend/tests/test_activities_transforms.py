@@ -3,12 +3,13 @@ from datetime import datetime, time, timezone
 import pytest
 from pydantic import ValidationError
 
-from data_pipeline.activities.schemas import SemanticExtraction, SurveyKnowledgeRecord
+from data_pipeline.activities.schemas import Issue, SemanticExtraction, SurveyKnowledgeRecord
 from data_pipeline.activities.transforms import (
     deterministic_semantic,
     extract_observation_time,
     mark_duplicates,
     merge_semantic,
+    normalize_semantic_evidence,
     parse_coordinates,
     parse_created_at,
     parse_media,
@@ -131,6 +132,105 @@ def test_schema_rejects_invalid_confidence():
 def test_evidence_validation_reports_supported_value_without_evidence():
     extraction = SemanticExtraction.model_validate({"usage": {"passenger_level": "high"}})
     assert "missing evidence for usage.passenger_level" in semantic_validation_warnings(extraction)
+
+
+def test_normalize_semantic_evidence_drops_environment_categories_without_evidence():
+    extraction = SemanticExtraction.model_validate({
+        "environment": {
+            "nearby_place_categories": ["school"],
+            "landmark_categories": ["government"],
+        },
+    })
+
+    normalized = normalize_semantic_evidence(extraction)
+
+    assert normalized.environment.nearby_place_categories == []
+    assert normalized.environment.landmark_categories == []
+
+
+def test_normalize_semantic_evidence_keeps_environment_categories_with_evidence():
+    extraction = SemanticExtraction.model_validate({
+        "environment": {
+            "nearby_place_categories": ["school"],
+            "landmark_categories": ["government"],
+        },
+        "evidence": {
+            "environment.nearby_place_categories": "dekat sekolah",
+            "environment.landmark_categories": "dekat kantor pemerintah",
+        },
+    })
+
+    normalized = normalize_semantic_evidence(extraction)
+
+    assert normalized.environment.nearby_place_categories == ["school"]
+    assert normalized.environment.landmark_categories == ["government"]
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "default"),
+    [
+        ("usage", "passenger_level", "high", "unknown"),
+        ("facilities", "has_wifi", True, None),
+        ("accessibility", "wheelchair_access", True, None),
+        ("condition", "maintenance", "good", "unknown"),
+        ("environment", "activity_context", ["school commute"], []),
+    ],
+)
+def test_normalize_semantic_evidence_resets_unsupported_section_fields(section, field, value, default):
+    extraction = SemanticExtraction.model_validate({section: {field: value}})
+
+    normalized = normalize_semantic_evidence(extraction)
+
+    assert getattr(getattr(normalized, section), field) == default
+
+
+def test_normalize_semantic_evidence_drops_unsupported_summaries_and_orphan_confidence():
+    extraction = SemanticExtraction.model_validate({
+        "strengths": ["lokasi strategis"],
+        "weaknesses": ["akses sulit"],
+        "evidence": {"usage.passenger_level": "terlihat ramai", "blank": "   "},
+        "confidence": {"usage.passenger_level": 0.9, "facilities.has_wifi": 0.8, "blank": 0.5},
+    })
+
+    normalized = normalize_semantic_evidence(extraction)
+
+    assert normalized.strengths == []
+    assert normalized.weaknesses == []
+    assert normalized.evidence == {"usage.passenger_level": "terlihat ramai"}
+    assert normalized.confidence == {"usage.passenger_level": 0.9}
+
+
+def test_normalize_semantic_evidence_preserves_issues_and_produces_no_warnings():
+    issue = Issue(
+        category="accessibility",
+        issue="akses terhalang",
+        severity="moderate",
+        evidence="akses pejalan kaki terhalang",
+        confidence=0.9,
+    )
+    extraction = SemanticExtraction.model_validate({
+        "facilities": {"has_wifi": True},
+        "environment": {"nearby_place_categories": ["school"]},
+        "issues": [issue.model_dump(mode="python")],
+    })
+
+    normalized = normalize_semantic_evidence(extraction)
+
+    assert normalized.issues == [issue]
+    assert semantic_validation_warnings(normalized) == []
+
+
+def test_normalized_enrichment_does_not_remove_deterministic_evidence_backed_fields():
+    deterministic = deterministic_semantic("Pada sore hari halte terlihat ramai.")
+    enrichment = normalize_semantic_evidence(SemanticExtraction.model_validate({
+        "usage": {"passenger_level": "very_high"},
+    }))
+
+    merged = merge_semantic(deterministic, enrichment)
+
+    assert merged.usage.passenger_level == "high"
+    assert "usage.passenger_level" in merged.evidence
+    assert semantic_validation_warnings(merged) == []
 
 
 def test_llm_recommendation_tags_are_recomputed_from_validated_facts():
