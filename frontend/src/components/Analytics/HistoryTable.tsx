@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchEmissionHistory } from "@/services/api";
@@ -9,15 +9,14 @@ import { fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
 import EmissionBulkDelete from "./EmissionBulkDelete";
 import EmissionExport from "./EmissionExport";
 import HistoryFilterDrawer, { type HistoryFilters } from "./HistoryFilterDrawer";
+import HistoryPagination from "./HistoryPagination";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { SkeletonRows } from "@/components/ui/Skeleton";
-import Select from "@/components/ui/Select";
 import type { AnalyticsQuery, EmissionHistoryRecord, VehicleRates } from "@/types";
 
 type SortKey = "period_start" | "segment_name";
 type Tab = "observed" | "estimated";
 const TABS: { key: Tab; label: string }[] = [{ key: "observed", label: "Terukur" }, { key: "estimated", label: "Estimasi" }];
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const VEHICLES: { key: keyof VehicleRates; label: string }[] = [
     { key: "car", label: "Mobil" }, { key: "motorcycle", label: "Motor" },
     { key: "bus", label: "Bus" }, { key: "truck", label: "Truk" },
@@ -208,23 +207,10 @@ export default function HistoryTable() {
                 </table>
             </div>}
 
-        <nav className="analytics-pagination history-pagination" aria-label="Navigasi halaman riwayat">
-            <div className="history-pagination-left">
-                <span>Menampilkan {fmtIntId(view?.data.length ?? 0)} dari {fmtIntId(view?.total ?? 0)} catatan</span>
-                <label className="history-pagesize">Baris per halaman
-                    <Select ariaLabel="Jumlah baris per halaman" value={String(pageSize)}
-                        options={PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: String(size) }))}
-                        onChange={(value) => setPageSize(Number(value))} />
-                </label>
-            </div>
-            <div className="history-pagination-right">
-                <span>{page} dari {totalPages} halaman</span>
-                <button type="button" className="pagination-page" aria-label="Halaman sebelumnya"
-                    disabled={loading || page <= 1} onClick={() => goPage(page - 1)}><ChevronLeft aria-hidden="true" /></button>
-                <button type="button" className="pagination-page" aria-label="Halaman berikutnya"
-                    disabled={loading || !view || page >= totalPages} onClick={() => goPage(page + 1)}><ChevronRight aria-hidden="true" /></button>
-            </div>
-        </nav>
+        <HistoryPagination displayedCount={view?.data.length ?? 0} total={view?.total ?? 0} pageSize={pageSize}
+            onPageSizeChange={(size) => { setPageSize(size); setExpanded(null); }}
+            page={page} totalPages={totalPages} onPageChange={goPage}
+            loading={loading} hasData={!!view} />
 
         <HistoryFilterDrawer open={drawerOpen} filters={appliedFilters} onClose={closeDrawer} onApply={applyFilters} />
     </section>;
