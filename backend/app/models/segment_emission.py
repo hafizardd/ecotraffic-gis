@@ -9,6 +9,15 @@ from app.core.database import Base
 
 
 class SegmentEmission(Base):
+    """One calculated segment window.
+
+    ``raw_criteria`` / ``normalized_criteria`` / ``decision_score`` /
+    ``priority`` / ``spatial_criteria_status`` are DEPRECATED (the segment-level
+    AHP decision score was retired in favour of the hex activity grid). New rows
+    write sentinels only; the columns are kept until historical rows can be
+    dropped. ``ahp_metadata`` is retained as the operational metadata bag.
+    """
+
     __tablename__ = "segment_emissions"
     __table_args__ = (
         UniqueConstraint("road_segment_id", "period_start", "calculation_version", name="uq_segment_emission_period_version"),

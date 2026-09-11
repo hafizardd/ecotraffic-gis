@@ -27,22 +27,20 @@ def _values(segment_database_id: uuid.UUID, result: dict) -> dict:
         "vkt_km_h": result["vkt_km_h"],
         "pollutant_totals_g_h": result["emissions"]["totals_g_h"],
         "category_pollutant_breakdown_g_h": result["emissions"].get("by_category_g_h", result["emissions"].get("by_category", {})),
-        "raw_criteria": result["raw_criteria"],
-        "normalized_criteria": result.get("normalized_criteria"),
-        "decision_score": result.get("decision_score"),
-        "priority": result.get("priority"),
-        "spatial_criteria_status": result.get("spatial_criteria_status", "pending"),
+        # Decision-score columns are deprecated: new rows carry sentinels only.
+        # ahp_metadata stays as the operational metadata bag (source_mode,
+        # calculation_metadata, ...) consumed by analytics and the worker.
+        "raw_criteria": {},
+        "normalized_criteria": None,
+        "decision_score": None,
+        "priority": None,
+        "spatial_criteria_status": "deprecated",
         "ahp_metadata": {
-            "weights": result.get("ahp_weights"),
-            "consistency": result.get("ahp_consistency"),
             "data_source": result.get("data_source"),
             "source_mode": result.get("source_mode", result.get("data_source")),
             "calculation_mode": result.get("calculation_mode"),
             "observed_at": result.get("observed_at"),
             "calculation_metadata": result.get("calculation_metadata", {}),
-            "normalized_values": result.get("normalized_values"),
-            "component_status": result.get("component_status"),
-            "spatial_details": result.get("spatial_details"),
         },
     }
 

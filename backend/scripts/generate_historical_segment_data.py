@@ -24,7 +24,7 @@ from app.models.segment_emission import SegmentEmission
 from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_emission_store import persist_segment_emission_sync
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
-from app.services.spatial_integration import compute_all_spatial_criteria
+from app.services.spatial_integration import compute_population_context
 
 DEFAULT_BASE_VOLUME = 120
 
@@ -59,9 +59,9 @@ def generate(seed: int | None = None, only_missing: bool = False) -> int:
                 ).first()
                 if existing:
                     continue
-            spatial = compute_all_spatial_criteria(db, segment)
-            segment.spatial_metadata = {**(segment.spatial_metadata or {}), "raw_values": spatial["raw_values"], "population_context": spatial["population_context"], "spatial_criteria_details": spatial["spatial_criteria_details"], "component_status": spatial["component_status"], "provenance": spatial["provenance"]}
-            primary = (spatial["population_context"] or {}).get("primary")
+            population_context = compute_population_context(db, segment)
+            segment.spatial_metadata = {**(segment.spatial_metadata or {}), "population_context": population_context}
+            primary = (population_context or {}).get("primary")
             segment.population = primary.get("population") if primary else None
             latest_volume = db.execute(
                 select(SegmentEmission.volume_per_hour)
@@ -78,7 +78,7 @@ def generate(seed: int | None = None, only_missing: bool = False) -> int:
                 total = max(0, round(base * (0.8 + rng.random() * 0.4) / 60))
                 counts = {"motorcycle": round(total * .60), "car": round(total * .25), "bus": round(total * .08), "truck": round(total * .07)}
                 observation = SegmentTrafficObservation(camera.camera_id, segment.road_segment_id, mapping.lane_or_stream_id, period_start, 60, counts, vehicle_count_semantics=VehicleCountSemantics.SNAPSHOT_OCCUPANCY)
-                result = calculate_segment_emission([observation], period_start=period_start, period_end=period_end, road_length_km=segment.length_km, spatial_criteria=spatial["raw_values"], spatial_details=spatial)
+                result = calculate_segment_emission([observation], period_start=period_start, period_end=period_end, road_length_km=segment.length_km)
                 result["data_source"] = "HISTORICAL"
                 result["source_mode"] = "SYNTHETIC"
                 persist_segment_emission_sync(db, segment.id, result)

@@ -39,24 +39,20 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
         spatial_metadata = segment.spatial_metadata or {}
         population_context = spatial_metadata.get("population_context")
         primary = (population_context or {}).get("primary") or {}
-        spatial_details = spatial_metadata.get("spatial_criteria_details") or {}
         properties = {"segment_id": segment.road_segment_id, "name": segment.name, "length_km": segment.length_km,
-                      "decision_score": None, "priority": None, "pollutant_totals": None,
+                      "pollutant_totals": None,
                       "volume_per_hour": None, "total_emission_g_h": None,
                       "freshness_status": "unknown", "data_age_seconds": None,
                       "vehicle_count_semantics": "unknown", "source_cameras": [],
                       "population": segment.population, "population_district": primary.get("district_name"),
                       "population_context": population_context,
-                      "k5_raw_population_density": (spatial_details.get("K5") or {}).get("population_overlap_estimate"),
-                      "spatial_criteria_status": "pending", "k3_k4_k5_status": spatial_metadata.get("component_status"),
                       "period_start": None, "period_end": None, "observed_at": None, "calculated_at": None,
                       "source_streams": [], "aggregation_policy": None, "source_observation_count": None,
-                      "volume_status": "unavailable", "calculation_version": None, "ahp_metadata": None}
+                      "volume_status": "unavailable", "calculation_version": None}
         if emission:
             pollutant_totals = emission.pollutant_totals_g_h
             freshness = classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings))
-            properties.update({"decision_score": emission.decision_score, "priority": emission.priority,
-                               "pollutant_totals": pollutant_totals, "volume_per_hour": emission.volume_per_hour,
+            properties.update({"pollutant_totals": pollutant_totals, "volume_per_hour": emission.volume_per_hour,
                                "total_emission_g_h": sum(pollutant_totals.values()) if pollutant_totals else None,
                                "freshness_status": freshness.status.value, "data_age_seconds": freshness.age_seconds,
                                "vehicle_count_semantics": emission.vehicle_count_semantics,
@@ -67,9 +63,7 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
                                "volume_status": "estimated" if emission.vehicle_count_semantics == "snapshot_occupancy" else "calculated",
                                "period_start": _iso(emission.period_start), "period_end": _iso(emission.period_end),
                                "observed_at": _iso(emission.period_end), "calculated_at": _iso(emission.calculated_at),
-                               "calculation_version": emission.calculation_version,
-                               "spatial_criteria_status": emission.spatial_criteria_status,
-                               "ahp_metadata": emission.ahp_metadata})
+                               "calculation_version": emission.calculation_version})
         features.append({"type": "Feature", "geometry": geometry, "properties": properties})
     return JSONResponse({"type": "FeatureCollection", "features": features})
 
@@ -88,16 +82,15 @@ async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
     for segment, emission in latest.values():
         if emission is None:
             items.append(SegmentEmissionMapItem(
-                road_segment_id=segment.road_segment_id, decision_score=None,
-                priority=None, total_emission=None, calculated_at=None,
+                road_segment_id=segment.road_segment_id,
+                total_emission=None, calculated_at=None,
                 observed_at=None, data_age_seconds=None, freshness_status="unknown",
                 vehicle_count_semantics="unknown", source_cameras=[],
             ))
             continue
         freshness = classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings))
         items.append(SegmentEmissionMapItem(
-            road_segment_id=segment.road_segment_id, decision_score=emission.decision_score,
-            priority=emission.priority,
+            road_segment_id=segment.road_segment_id,
             total_emission=(sum(emission.pollutant_totals_g_h.values()) if emission.pollutant_totals_g_h else None),
             calculated_at=emission.calculated_at, observed_at=emission.period_end,
             data_age_seconds=freshness.age_seconds,
@@ -119,8 +112,7 @@ async def get_segment_emission_history(
     """Hourly history view (read-only, no new table in v1).
 
     hour_bucket = date_trunc('hour', period_end); hourly values use avg()
-    (rate samples), never sum(); score/priority come from the max
-    decision_score row per bucket.
+    (rate samples), never sum().
     """
     if bucket != "hour":
         raise HTTPException(status_code=400, detail="Only bucket=hour is supported in v1.")
@@ -145,17 +137,13 @@ async def get_segment_emission_history(
         bucket_start = emission.period_end.replace(minute=0, second=0, microsecond=0).isoformat()
         key = (bucket_start, segment.road_segment_id)
         entry = buckets.setdefault(key, {"bucket_start": bucket_start, "segment_id": segment.road_segment_id,
-            "total_sum": 0.0, "volume_sum": 0.0, "n": 0, "decision_score": None, "priority": None})
+            "total_sum": 0.0, "volume_sum": 0.0, "n": 0})
         entry["total_sum"] += total
         entry["volume_sum"] += volume
         entry["n"] += 1
-        if emission.decision_score is not None and (entry["decision_score"] is None or emission.decision_score > entry["decision_score"]):
-            entry["decision_score"] = emission.decision_score
-            entry["priority"] = emission.priority
     return [{"bucket_start": e["bucket_start"], "segment_id": e["segment_id"],
              "avg_total_emission_g_h": e["total_sum"] / e["n"],
              "avg_volume_per_hour": e["volume_sum"] / e["n"],
-             "decision_score": e["decision_score"], "priority": e["priority"],
              "sample_count": e["n"]} for e in buckets.values()]
 
 
@@ -179,31 +167,24 @@ async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(
             road_segment_id=segment.road_segment_id, name=segment.name, length_km=segment.length_km,
             period_start=None, period_end=None, calculated_at=None, raw_counts=None, volume_per_hour=None,
             vkt_km_h=None, pollutant_totals_g_h=None, category_pollutant_breakdown_g_h=None,
-            raw_criteria=spatial_metadata.get("raw_values") or {}, normalized_criteria=None,
-            decision_score=None, priority=None, spatial_criteria_status="pending",
-            provenance=spatial_metadata.get("provenance") or {}, ahp_metadata=None,
+            provenance={},
             volume_status="unavailable", vehicle_count_semantics="unknown", freshness_status="unknown",
             population=segment.population,
             population_district=(population_context or {}).get("primary", {}).get("district_name"),
             population_context=population_context,
-            spatial_criteria_details=spatial_metadata.get("spatial_criteria_details"),
         )
     return SegmentEmissionResponse(
         road_segment_id=segment.road_segment_id, name=segment.name, length_km=segment.length_km,
         period_start=emission.period_start, period_end=emission.period_end, calculated_at=emission.calculated_at,
         raw_counts=emission.raw_counts, volume_per_hour=emission.volume_per_hour, vkt_km_h=emission.vkt_km_h,
         pollutant_totals_g_h=emission.pollutant_totals_g_h, category_pollutant_breakdown_g_h=emission.category_pollutant_breakdown_g_h,
-        raw_criteria=emission.raw_criteria, normalized_criteria=emission.normalized_criteria,
-        decision_score=emission.decision_score, priority=emission.priority, spatial_criteria_status=emission.spatial_criteria_status,
         provenance={"source_cameras": emission.source_cameras, "source_streams": emission.source_streams, "aggregation_policy": emission.aggregation_policy},
-        ahp_metadata=emission.ahp_metadata,
         volume_status="unavailable" if emission.volume_per_hour is None else ("estimated" if emission.vehicle_count_semantics == "snapshot_occupancy" else "calculated"),
         vehicle_count_semantics=emission.vehicle_count_semantics,
         freshness_status=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).status.value,
         population=segment.population,
         population_district=(population_context or {}).get("primary", {}).get("district_name") if population_context else None,
         population_context=population_context,
-        spatial_criteria_details=spatial_metadata.get("spatial_criteria_details"),
     )
 
 

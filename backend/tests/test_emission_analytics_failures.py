@@ -32,8 +32,8 @@ def test_segment_publish_contains_eight_backend_rates_and_legacy_data(monkeypatc
     published = []
     monkeypatch.setattr(worker, "redis_client", SimpleNamespace(publish=lambda *args: published.append(args)))
     store = SimpleNamespace(save=lambda segment, state: state)
-    emission = SimpleNamespace(decision_score=None, priority=None, pollutant_totals_g_h={"CO2": 1000},
-        calculated_at=datetime.now(timezone.utc), spatial_criteria_status="pending", vehicle_count_semantics="interval_count")
+    emission = SimpleNamespace(pollutant_totals_g_h={"CO2": 1000},
+        calculated_at=datetime.now(timezone.utc), vehicle_count_semantics="interval_count")
     segment = SimpleNamespace(road_segment_id="A", spatial_metadata={})
     worker._publish(segment, emission, store)
     import json

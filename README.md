@@ -135,7 +135,7 @@ docker compose up --build   # make sure it's in root directory
 
 ### Segment Pipeline
 
-After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Then import the spatial source layers and backfill segments with `python scripts/import_pois.py`, `python scripts/import_population.py`, `python scripts/import_survey_activities.py`, and `python scripts/backfill_spatial_context.py`. Generate the 24-hour synthetic fallback dataset with `python scripts/generate_historical_segment_data.py`.
+After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Then import the spatial source layers and backfill segments with `python scripts/import_pois.py`, `python scripts/import_population.py`, `python scripts/import_survey_activities.py`, `python scripts/import_activity_grid.py --verify`, `python scripts/score_bus_stops.py`, and `python scripts/backfill_spatial_context.py`. Generate the 24-hour synthetic fallback dataset with `python scripts/generate_historical_segment_data.py`.
 
 Segment endpoints are `GET /api/segments/geojson`, `GET /api/emissions/map`, and `GET /api/emissions/{road_segment_id}`. Camera responses include `data_source`; filter live or historical cameras with `GET /api/cameras?data_source=LIVE` or `HISTORICAL`. The `/ws/emissions` socket forwards camera messages and `segment_update` messages.
 
@@ -180,6 +180,8 @@ docker compose exec backend python -m app.core.seed     # seed cameras + road se
 docker compose exec backend python -m scripts.import_pois                # points_of_interest  (data/poi.geojson)
 docker compose exec backend python -m scripts.import_population          # population_zones     (data/populations.geojson)
 docker compose exec backend python -m scripts.import_survey_activities   # survey_stop_observations (data/output/activities.csv)
+docker compose exec backend python -m scripts.import_activity_grid --verify  # activity_grid_hexes (data/activity_grid.geojson)
+docker compose exec backend python -m scripts.score_bus_stops            # bus stop accessibility + intervention class
 docker compose exec backend python -m scripts.backfill_spatial_context   # segment spatial_metadata + population
 
 # Generate 24h synthetic historical fallback (NOT idempotent — skip if data already exists)
@@ -209,6 +211,8 @@ docker compose exec backend python -m app.core.seed
 docker compose exec backend python scripts/import_pois.py
 docker compose exec backend python scripts/import_population.py
 docker compose exec backend python scripts/import_survey_activities.py
+docker compose exec backend python scripts/import_activity_grid.py --verify
+docker compose exec backend python scripts/score_bus_stops.py
 docker compose exec backend python scripts/backfill_spatial_context.py
 
 # Only if historical fallback is missing or stale — this appends and is NOT idempotent:

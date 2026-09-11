@@ -17,7 +17,7 @@ class FakeRedis:
 
 def test_segment_latest_state_round_trip_and_listing():
     store = SegmentLatestStateStore(FakeRedis(), ttl_seconds=60)
-    stored = store.save("SEG-0001", {"decision_score": 49.05})
+    stored = store.save("SEG-0001", {"total_emission_g_h": 49.05})
     assert stored["segment_id"] == "SEG-0001"
-    assert store.load("SEG-0001")["decision_score"] == 49.05
+    assert store.load("SEG-0001")["total_emission_g_h"] == 49.05
     assert store.load_all() == {"SEG-0001": stored}

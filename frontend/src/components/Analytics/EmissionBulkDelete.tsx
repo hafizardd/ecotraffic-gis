@@ -3,13 +3,15 @@ import { useState } from "react";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { deleteEmissionHistory } from "@/services/api";
 import { fmtIntId } from "@/utils/format";
+import type { AnalyticsQuery } from "@/types";
 
 type Scope = "beyond" | "page";
 
-export default function EmissionBulkDelete({ page, totalPages, sort, order, onDeleted }: {
-    page: number; totalPages: number; sort: string; order: "asc" | "desc"; onDeleted: () => void;
+export default function EmissionBulkDelete({ query: queryOverride, page, pageSize = 25, totalPages, sort, order, onDeleted }: {
+    query?: AnalyticsQuery; page: number; pageSize?: number; totalPages: number; sort: string; order: "asc" | "desc"; onDeleted: () => void;
 }) {
-    const { query } = useEmissionAnalytics();
+    const { query: contextQuery } = useEmissionAnalytics();
+    const query = queryOverride ?? contextQuery;
     const [scope, setScope] = useState<Scope>("beyond");
     const [targetText, setTargetText] = useState(String(page));
     const [lastPage, setLastPage] = useState(page);
@@ -38,7 +40,7 @@ export default function EmissionBulkDelete({ page, totalPages, sort, order, onDe
     async function preview() {
         const target = commitTarget();
         setBusy(true); setError(null); setResult(null);
-        try { setMatched((await deleteEmissionHistory(query, { page: target, sort, order, scope, dry_run: true })).matched ?? 0); }
+        try { setMatched((await deleteEmissionHistory(query, { page: target, page_size: pageSize, sort, order, scope, dry_run: true })).matched ?? 0); }
         catch (cause) { setError(cause instanceof Error ? cause.message : "Pratinjau gagal"); }
         finally { setBusy(false); }
     }
@@ -47,11 +49,11 @@ export default function EmissionBulkDelete({ page, totalPages, sort, order, onDe
         const target = commitTarget();
         setBusy(true); setError(null); setResult(null);
         try {
-            const count = matched ?? (await deleteEmissionHistory(query, { page: target, sort, order, scope, dry_run: true })).matched ?? 0;
+            const count = matched ?? (await deleteEmissionHistory(query, { page: target, page_size: pageSize, sort, order, scope, dry_run: true })).matched ?? 0;
             setMatched(count);
             if (!count) return;
             if (!window.confirm(`Hapus ${fmtIntId(count)} catatan riwayat? Tindakan ini tidak dapat dibatalkan.`)) return;
-            const response = await deleteEmissionHistory(query, { page: target, sort, order, scope, dry_run: false });
+            const response = await deleteEmissionHistory(query, { page: target, page_size: pageSize, sort, order, scope, dry_run: false });
             setResult(response.deleted ?? 0);
             setMatched(null);
             onDeleted();

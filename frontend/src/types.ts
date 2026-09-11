@@ -121,8 +121,6 @@ export interface SegmentProperties {
     segment_id: string;
     name: string;
     length_km: number;
-    decision_score: number | null;
-    priority: string | null;
     pollutant_totals: Record<string, number> | null;
     volume_per_hour: Record<string, number> | null;
     total_emission_g_h: number | null;
@@ -133,9 +131,6 @@ export interface SegmentProperties {
     population?: number | null;
     population_district?: string | null;
     population_context?: PopulationContext | null;
-    spatial_criteria_status?: string;
-    k3_k4_k5_status?: Record<string, string>;
-    k5_raw_population_density?: number | null;
     period_start?: string | null;
     period_end?: string | null;
     observed_at?: string | null;
@@ -159,9 +154,7 @@ export interface SegmentEmissionDetail {
     road_segment_id: string; name: string; length_km: number; period_start: string | null; period_end: string | null; calculated_at: string | null;
     raw_counts: Record<string, unknown> | null; volume_per_hour: Record<string, number> | null; vkt_km_h: Record<string, number> | null;
     pollutant_totals_g_h: Record<string, number> | null; category_pollutant_breakdown_g_h: Record<string, unknown> | null;
-    raw_criteria: Record<string, unknown> | null; normalized_criteria: Record<string, unknown> | null;
-    decision_score: number | null; priority: string | null; spatial_criteria_status: string;
-    provenance: Record<string, unknown>; ahp_metadata: Record<string, unknown> | null;
+    provenance: Record<string, unknown>;
     volume_status?: "calculated" | "estimated" | "unavailable";
     vehicle_count_semantics?: string;
     freshness_status?: string;
@@ -169,7 +162,6 @@ export interface SegmentEmissionDetail {
     population?: number | null;
     population_district?: string | null;
     population_context?: PopulationContext | null;
-    spatial_criteria_details?: Record<string, unknown> | null;
 }
 export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
 export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
@@ -179,7 +171,7 @@ export interface SegmentUpdateData {
     emissions_kg_h?: PollutantRates;
     processed_at?: string;
     calculation_version?: number;
-    decision_score?: number | null; priority?: string | null; total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string; spatial_criteria_status?: string;
+    total_emission_g_h?: number | null; volume_per_hour?: Record<string, number> | null; pollutant_totals?: Record<string, number> | null; calculated_at?: string;
     observed_at?: string | null; data_age_seconds?: number | null; freshness_status?: string;
     population?: number | null; population_district?: string | null; population_context?: PopulationContext | null;
 }
@@ -195,7 +187,10 @@ export interface EmissionAnalyticsFilter {
     from: string | null;
     to: string | null;
 }
-export interface AnalyticsQuery { from: string; to: string; segment_id?: string; corridor_id?: string; }
+export interface AnalyticsQuery {
+    from: string; to: string; segment_id?: string; corridor_id?: string;
+    search?: string; quality_status?: "observed" | "estimated"; source_mode?: string;
+}
 export type EmissionTrendPoint = Record<`${PollutantKey}_kg_h`, number | null> & {
     timestamp: string; segment_count: number; sample_count: number; estimated_sample_count: number;
 };
@@ -331,4 +326,118 @@ export interface ChartPoint {
     co2: number;
     ch4: number;
     n2o: number;
+}
+
+export interface ActivityGridProperties {
+    hex_id: number | null;
+    h3_index?: string | null;
+    luas_km2: number;
+    poi_total: number;
+    poi_breakdown: Record<string, number>;
+    penduduk: number;
+    volume_mean: number;
+    norm_volume: number | null;
+    norm_poi: number;
+    norm_penduduk: number;
+    skor_total_ahp: number | null;
+    ranking: number | null;
+    klasifikasi_potensi: string | null;
+    ahp_weight_version: string;
+    source: string;
+    data_status?: "live" | "static" | "no_data";
+    // Live ranking is over the observed hex set, so the denominator can differ
+    // from the static 378.
+    ranking_total?: number | null;
+    // Client-only render fields: `potential` is the 0-5 tier driving the fill
+    // expression; coarse LOD sets `aggregated_count` and clears `hex_id`.
+    potential?: number;
+    aggregated_count?: number;
+}
+
+export interface ActivityGridFeature {
+    type: "Feature";
+    geometry: { type: string; coordinates: unknown };
+    properties: ActivityGridProperties;
+}
+
+export interface ActivityGridFeatureCollection {
+    type: "FeatureCollection";
+    features: ActivityGridFeature[];
+    // Viewport-scoped quantile cut points for the choropleth; null when the
+    // visible scores have no spread (fall back to classification tiers).
+    breaks?: number[] | null;
+    lod?: "coarse" | "medium" | "sub" | "fine";
+    resolution?: number | null;
+}
+
+export interface ActivityGridHourPoint {
+    hour: string;
+    skor_total_ahp: number | null;
+    norm_volume: number | null;
+    klasifikasi_potensi: string | null;
+    data_status: "live" | "static" | "no_data";
+}
+
+export interface ActivityGridHourSeries {
+    hex_id: number;
+    series: ActivityGridHourPoint[];
+}
+
+export interface SurveyStopProperties extends Record<string, string | number | null> {
+    source_id: string;
+    title: string;
+    facility_score: number | null;
+    environment_score: number | null;
+    accessibility_score: number | null;
+    intervention_score: number | null;
+    intervention_rank: number | null;
+    intervention_class: string | null;
+}
+
+export interface BusStopDetail {
+    source_id: string;
+    title: string;
+    description: string | null;
+    observed_at: string | null;
+    media: { url?: string; type?: string }[];
+    observer_name: string | null;
+    facility_score: number | null;
+    pedestrian_access_score: number | null;
+    environment_score: number | null;
+    user_activity_score: number | null;
+    survey_score: number | null;
+    score_method: string | null;
+    accessibility_score: number | null;
+    intervention_score: number | null;
+    intervention_rank: number | null;
+    intervention_class: string | null;
+    accessibility_score_100: number | null;
+    condition_score_100: number | null;
+    environment_score_100: number | null;
+    ahp_total_score: number | null;
+    ahp_rank: number | null;
+    ahp_classification: string | null;
+    ahp_weight_version: string | null;
+    facility_checklist: Record<string, boolean> | null;
+    damage_indicators: Record<string, boolean> | null;
+    poi_breakdown_survey: Record<string, number> | null;
+    accessibility_breakdown: { category: string; count: number }[];
+    accessibility_buffer_m: number;
+}
+
+export interface BangJoAnswer {
+    summary: string;
+    drivers: string[];
+    asi_category: string;
+    recommendation: string;
+    evidence: string[];
+    source?: string;
+}
+
+export interface BangJoReply {
+    needs_selection: boolean;
+    answer: BangJoAnswer | null;
+    context_label: string | null;
+    candidates?: { road_segment_id: string; name: string; count?: number }[];
+    detail?: string;
 }

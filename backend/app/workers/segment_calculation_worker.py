@@ -20,7 +20,7 @@ from app.services.segment_emission_pipeline import calculate_segment_emission
 from app.services.segment_emission_store import persist_segment_emission_sync
 from app.services.segment_latest_state import SegmentLatestStateStore
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
-from app.services.spatial_integration import compute_all_spatial_criteria
+from app.services.spatial_integration import compute_population_context
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -56,11 +56,9 @@ def _reconciliation_start(earliest, last_start, next_observation, seconds):
 
 def _publish(segment, emission, store):
     payload = serialize_model(segment, emission)
-    payload.update(decision_score=emission.decision_score, priority=emission.priority,
-        total_emission_g_h=sum((emission.pollutant_totals_g_h or {}).values()),
+    payload.update(total_emission_g_h=sum((emission.pollutant_totals_g_h or {}).values()),
         total_emission_basis="sum_of_eight_pollutant_mass_rates_g_h",
         pollutant_totals=emission.pollutant_totals_g_h, calculated_at=emission.calculated_at.isoformat(),
-        spatial_criteria_status=emission.spatial_criteria_status,
         volume_status="estimated" if emission.vehicle_count_semantics == "snapshot_occupancy" else "calculated")
     population = (segment.spatial_metadata or {}).get("population_context") or {}
     primary = population.get("primary") or {}
@@ -115,7 +113,7 @@ def recalculate_segment_emissions():
                 existing = {e.period_start: e for e in db.execute(select(SegmentEmission).where(
                     SegmentEmission.road_segment_id == segment.id, SegmentEmission.period_start >= start,
                     SegmentEmission.period_start < end, SegmentEmission.calculation_version == 2)).scalars().all()}
-                spatial = None
+                population_context = None
                 for period_start, window in sorted(windows.items()):
                     observations, note = _pick_observations(window, segment.road_segment_id)
                     observations, dropped = select_one_camera_per_stream(observations)
@@ -130,14 +128,13 @@ def recalculate_segment_emissions():
                     previous = existing.get(period_start)
                     if previous and (previous.ahp_metadata or {}).get("calculation_metadata", {}).get("observation_signature") == signature:
                         continue
-                    if spatial is None:
-                        spatial = compute_all_spatial_criteria(db, segment)
-                        segment.spatial_metadata = {**(segment.spatial_metadata or {}), **spatial}
-                        primary = (spatial.get("population_context") or {}).get("primary") or {}
+                    if population_context is None:
+                        population_context = compute_population_context(db, segment)
+                        segment.spatial_metadata = {**(segment.spatial_metadata or {}), "population_context": population_context}
+                        primary = (population_context or {}).get("primary") or {}
                         segment.population = primary.get("population")
                     result = calculate_segment_emission(observations, period_start=period_start,
-                        period_end=period_start + timedelta(seconds=seconds), road_length_km=segment.length_km,
-                        spatial_criteria=spatial["raw_values"], spatial_details=spatial)
+                        period_end=period_start + timedelta(seconds=seconds), road_length_km=segment.length_km)
                     result["calculation_metadata"].update(observation_signature=signature, selection_note=note)
                     if dropped:
                         result["calculation_metadata"]["selection_note"] = "duplicate_stream_camera_deduped"

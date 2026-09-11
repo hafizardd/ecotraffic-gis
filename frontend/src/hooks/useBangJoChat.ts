@@ -1,41 +1,65 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { fetchBangJoReply } from "@/services/api";
+import { getSelectedSegmentId } from "@/utils/selectionStore";
 import { BangJoMessage } from "@/types";
-
-const REPLY_DELAY_MS = 900;
 
 function newId() {
     return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function stubReply(text: string): { content: string; contextLabel?: string } {
-    const lower = text.toLowerCase();
-    if (lower.includes("tren")) {
-        return { content: "Tren emisi 30 menit terakhir masih fluktuatif. Puncak CO2 terjadi pada siklus dengan volume kendaraan tertinggi.", contextLabel: "window = 30 menit terakhir" };
+function formatAnswer(reply: Awaited<ReturnType<typeof fetchBangJoReply>>): string {
+    if (reply.answer) {
+        const answer = reply.answer;
+        return [
+            answer.summary,
+            answer.drivers.length ? `Pendorong: ${answer.drivers.join("; ")}` : "",
+            answer.asi_category ? `Kategori ASI: ${answer.asi_category}` : "",
+            answer.recommendation,
+            answer.evidence.length ? `Bukti: ${answer.evidence.join("; ")}` : "",
+        ].filter(Boolean).join("\n\n");
     }
-    if (lower.includes("tinggi") || lower.includes("tertinggi")) {
-        return { content: "Lokasi dengan konsentrasi CO tertinggi saat ini adalah Malioboro DPRD, disusul Simpang Tugu.", contextLabel: "selectedLocation = Malioboro DPRD" };
+    if (reply.detail) return reply.detail;
+    if (reply.candidates?.length) {
+        const seen = new Set<string>();
+        const names = reply.candidates
+            .map((item) => item.name)
+            .filter((name) => {
+                if (seen.has(name)) return false;
+                seen.add(name);
+                return true;
+            });
+        return `Sebutkan nama koridor yang dimaksud, misalnya: ${names.slice(0, 3).join(", ")}.`;
     }
-    return { content: `Baik, saya catat: "${text}". Untuk jawaban berbasis data, saya akan membaca metrik dashboard yang tersedia.`, contextLabel: "selectedLocation = Malioboro DPRD" };
+    return "Saya belum bisa menentukan koridor. Pilih segmen di peta lalu tanya lagi.";
 }
 
 export default function useBangJoChat() {
     const [messages, setMessages] = useState<BangJoMessage[]>([]);
     const [isTyping, setIsTyping] = useState(false);
-    const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const messagesRef = useRef<BangJoMessage[]>([]);
+    messagesRef.current = messages;
 
-    useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
-
-    const sendMessage = (text: string) => {
+    const sendMessage = async (text: string) => {
         const content = text.trim();
-        if (!content) return;
+        if (!content || isTyping) return;
+        const history = messagesRef.current.slice(-6).map((message) => ({ role: message.role, content: message.content }));
         setMessages((prev) => [...prev, { id: newId(), role: "user", content, timestamp: new Date().toISOString() }]);
         setIsTyping(true);
-        const timer = setTimeout(() => {
-            const reply = stubReply(content);
-            setMessages((prev) => [...prev, { id: newId(), role: "assistant", ...reply, timestamp: new Date().toISOString() }]);
+        try {
+            const reply = await fetchBangJoReply(content, getSelectedSegmentId(), history);
+            setMessages((prev) => [...prev, {
+                id: newId(), role: "assistant", content: formatAnswer(reply),
+                contextLabel: reply.context_label ?? undefined, timestamp: new Date().toISOString(),
+            }]);
+        } catch (error) {
+            setMessages((prev) => [...prev, {
+                id: newId(), role: "assistant",
+                content: error instanceof Error ? `Maaf, terjadi kendala: ${error.message}` : "Maaf, layanan Bang Jo sedang tidak tersedia.",
+                timestamp: new Date().toISOString(),
+            }]);
+        } finally {
             setIsTyping(false);
-        }, REPLY_DELAY_MS);
-        timers.current.push(timer);
+        }
     };
 
     return { messages, isTyping, sendMessage };

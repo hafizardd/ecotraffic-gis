@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyticsQuery, analyticsLiveStatus, filterSelectOptions, isNewerSegment, numberDuplicateNames, pageWindow, validRealtimeSegment } from "../src/utils/emissionAnalytics.ts";
+import { analyticsQuery, analyticsLiveStatus, clampPage, filterSelectOptions, isNewerSegment, numberDuplicateNames, pageWindow, validRealtimeSegment } from "../src/utils/emissionAnalytics.ts";
 
 const now = "2026-09-10T12:00:00.000Z";
 const filter = { timeRange: "1h", segmentId: "A", corridorId: "C", from: null, to: null };
@@ -48,6 +48,18 @@ test("pagination window keeps first/last and collapses gaps", () => {
     assert.deepEqual(pageWindow(10, 20), [1, "gap", 8, 9, 10, 11, 12, "gap", 20]);
     assert.deepEqual(pageWindow(1, 20), [1, 2, 3, "gap", 20]);
     assert.deepEqual(pageWindow(20, 20), [1, "gap", 18, 19, 20]);
+});
+
+test("history page jump clamps invalid input into range", () => {
+    assert.equal(clampPage("5", 10), 5);
+    assert.equal(clampPage("", 10), 1);
+    assert.equal(clampPage("abc", 10), 1);
+    assert.equal(clampPage("0", 10), 1);
+    assert.equal(clampPage("-3", 10), 1);
+    assert.equal(clampPage("999", 10), 10);
+    assert.equal(clampPage("7.9", 10), 7);
+    assert.equal(clampPage("4", 1), 1);
+    assert.equal(clampPage("2", 0), 1);
 });
 
 test("duplicate road names are numbered in order; singletons are untouched", () => {

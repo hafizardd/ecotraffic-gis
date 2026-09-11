@@ -1,11 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, text
+from geoalchemy2 import Geography
+from sqlalchemy import cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.spatial_sources import PointOfInterest, PopulationZone, SurveyStopObservation
+from app.services.spatial_integration import K4_BUFFER_M
 
 router = APIRouter(prefix="/api/spatial", tags=["spatial"])
+
+_geog = Geography(srid=4326)
 
 
 def _parse_bbox(value: str | None):
@@ -51,7 +55,13 @@ async def get_survey_stops(bbox: str | None = None, limit: int = Query(200, ge=1
         query = query.where(text("ST_Intersects(survey_stop_observations.geometry, ST_MakeEnvelope(:min_lon, :min_lat, :max_lon, :max_lat, 4326))"))
     params = dict(zip(("min_lon", "min_lat", "max_lon", "max_lat"), bounds)) if bounds else {}
     result = await db.execute(query, params)
-    return {"type": "FeatureCollection", "features": [_feature(geometry, {"source_id": stop.source_id, "title": stop.title, "score": stop.survey_score or stop.manual_score_override, "observed_at": stop.observed_at.isoformat() if stop.observed_at else None, "media_count": len(stop.media or [])}) for stop, geometry in result]}
+    return {"type": "FeatureCollection", "features": [_feature(geometry, {
+        "source_id": stop.source_id, "title": stop.title, "score": stop.survey_score or stop.manual_score_override,
+        "observed_at": stop.observed_at.isoformat() if stop.observed_at else None, "media_count": len(stop.media or []),
+        "facility_score": stop.facility_score, "environment_score": stop.environment_score,
+        "accessibility_score": stop.accessibility_score, "intervention_score": stop.intervention_score,
+        "intervention_rank": stop.intervention_rank, "intervention_class": stop.intervention_class,
+    }) for stop, geometry in result]}
 
 
 @router.get("/survey-stops/{source_id}")
@@ -59,4 +69,28 @@ async def get_survey_stop(source_id: str, db: AsyncSession = Depends(get_db)):
     stop = (await db.execute(select(SurveyStopObservation).where(SurveyStopObservation.source_id == source_id))).scalar_one_or_none()
     if stop is None:
         raise HTTPException(status_code=404, detail="Survey stop not found")
-    return {"source_id": stop.source_id, "title": stop.title, "description": stop.description, "observed_at": stop.observed_at, "media": stop.media, "observer_name": stop.observer_name}
+    poi_rows = (
+        await db.execute(
+            select(PointOfInterest.category, func.count())
+            .select_from(PointOfInterest, SurveyStopObservation)
+            .where(SurveyStopObservation.source_id == source_id)
+            .where(func.ST_DWithin(cast(SurveyStopObservation.geometry, _geog), cast(PointOfInterest.geometry, _geog), K4_BUFFER_M))
+            .group_by(PointOfInterest.category)
+        )
+    ).all()
+    return {
+        "source_id": stop.source_id, "title": stop.title, "description": stop.description, "observed_at": stop.observed_at,
+        "media": stop.media, "observer_name": stop.observer_name,
+        "facility_score": stop.facility_score, "pedestrian_access_score": stop.pedestrian_access_score,
+        "environment_score": stop.environment_score, "user_activity_score": stop.user_activity_score,
+        "survey_score": stop.survey_score, "score_method": stop.score_method,
+        "accessibility_score": stop.accessibility_score, "intervention_score": stop.intervention_score,
+        "intervention_rank": stop.intervention_rank, "intervention_class": stop.intervention_class,
+        "accessibility_score_100": stop.accessibility_score_100, "condition_score_100": stop.condition_score_100,
+        "environment_score_100": stop.environment_score_100, "ahp_total_score": stop.ahp_total_score,
+        "ahp_rank": stop.ahp_rank, "ahp_classification": stop.ahp_classification,
+        "ahp_weight_version": stop.ahp_weight_version, "facility_checklist": stop.facility_checklist,
+        "damage_indicators": stop.damage_indicators, "poi_breakdown_survey": stop.poi_breakdown_survey,
+        "accessibility_breakdown": [{"category": category, "count": count} for category, count in poi_rows],
+        "accessibility_buffer_m": K4_BUFFER_M,
+    }

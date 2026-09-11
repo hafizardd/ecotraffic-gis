@@ -1,8 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
-from app.services.ahp_calculator import aggregate_emission_criterion
 from app.services.segment_aggregation import SegmentAggregationError, aggregate_segment_observations
 from app.services.segment_observation import SegmentTrafficObservation, VehicleCountSemantics
 
@@ -43,11 +40,3 @@ period_start=BASE,
     )
     assert result.raw_counts["motorcycle"] == 1
     assert result.vehicle_count_semantics == "snapshot_occupancy"
-
-
-def test_constant_pollutant_does_not_contribute_to_k1():
-    totals = {pollutant: 10.0 for pollutant in ("TSP", "NOx", "SO2", "HC", "CO", "CO2", "CH4", "N2O")}
-    ranges = {pollutant: (0.0, 20.0) for pollutant in totals}
-    assert aggregate_emission_criterion(totals, ranges) == pytest.approx(0.5)
-    ranges["CO"] = (10.0, 10.0)
-    assert aggregate_emission_criterion(totals, ranges) == pytest.approx(7 / 16)

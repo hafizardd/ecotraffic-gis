@@ -1,9 +1,10 @@
 "use client";
 
 const QUESTIONS = [
-    "Bagaimana kondisi emisi saat ini?",
-    "Lokasi mana dengan CO tertinggi?",
-    "Tampilkan tren emisi 30 menit terakhir",
+    "Apa prioritas intervensi untuk koridor ini?",
+    "Kenapa skor koridor ini tinggi?",
+    "Apakah cakupan halte sudah cukup?",
+    "Rekomendasi ASI apa yang cocok?",
 ];
 
 export default function BangJoQuickQuestions({ onSelect }: { onSelect: (text: string) => void }) {

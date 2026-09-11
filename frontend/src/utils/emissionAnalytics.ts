@@ -46,6 +46,12 @@ export function pageWindow(current: number, total: number): (number | "gap")[] {
     return window;
 }
 
+export function clampPage(raw: string | number, totalPages: number): number {
+    const parsed = typeof raw === "number" ? raw : parseInt(raw, 10);
+    const candidate = Number.isFinite(parsed) ? Math.floor(parsed) : 1;
+    return Math.min(Math.max(1, candidate), Math.max(1, totalPages));
+}
+
 export function numberDuplicateNames(names: string[]): string[] {
     const totals = new Map<string, number>();
     for (const name of names) totals.set(name, (totals.get(name) ?? 0) + 1);
