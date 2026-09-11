@@ -521,6 +521,59 @@ button {
   width: 15px;
   height: 15px;
 }
+.map-hour-slider {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.23);
+  border-radius: 8px;
+  color: #dce7f3;
+  background: rgba(7, 20, 34, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+  font-size: 10px;
+  font-weight: 600;
+}
+.map-hour-slider label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.map-hour-slider svg {
+  width: 14px;
+  height: 14px;
+}
+.map-hour-slider input[type="range"] {
+  accent-color: #38bdf8;
+  width: 160px;
+}
+.map-hour-slider output {
+  min-width: 120px;
+  color: #9fc3e0;
+  font-variant-numeric: tabular-nums;
+}
+.map-coarse-note {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 5px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.23);
+  border-radius: 999px;
+  color: #9fc3e0;
+  background: rgba(7, 20, 34, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+  font-size: 9px;
+  font-weight: 600;
+}
 .maplibregl-ctrl-group {
   background: #091827 !important;
   border: 1px solid rgba(148, 163, 184, 0.2);

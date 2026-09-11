@@ -15,12 +15,11 @@ from geoalchemy2.elements import WKTElement
 
 from app.core.database import get_sync_db
 from app.models.activity_grid import ActivityGridHex
+from app.services.hex_activity_scoring import HEX_AHP_WEIGHTS
 
 GEOJSON_PATH = Path(__file__).resolve().parents[1] / "data" / "activity_grid.geojson"
 AHP_WEIGHT_VERSION = "hex-ahp-v1"
 SOURCE = "Skoring_Grid_Potensi_Timbulan_Kemacetan.xlsx"
-# From the 'AHP Bobot' Saaty matrix (CR = 0.0096).
-HEX_AHP_WEIGHTS = {"volume": 0.5390, "poi": 0.2973, "penduduk": 0.1638}
 EPSILON = 0.01
 POI_CATEGORIES = {
     "Pariwisata": "poi_pariwisata", "Pendidikan": "poi_pendidikan", "Perdagangan": "poi_perdagangan",

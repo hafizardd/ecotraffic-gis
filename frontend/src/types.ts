@@ -326,20 +326,28 @@ export interface ChartPoint {
 }
 
 export interface ActivityGridProperties {
-    hex_id: number;
+    hex_id: number | null;
     luas_km2: number;
     poi_total: number;
     poi_breakdown: Record<string, number>;
     penduduk: number;
     volume_mean: number;
-    norm_volume: number;
+    norm_volume: number | null;
     norm_poi: number;
     norm_penduduk: number;
-    skor_total_ahp: number;
-    ranking: number;
-    klasifikasi_potensi: string;
+    skor_total_ahp: number | null;
+    ranking: number | null;
+    klasifikasi_potensi: string | null;
     ahp_weight_version: string;
     source: string;
+    data_status?: "live" | "static" | "no_data";
+    // Live ranking is over the observed hex set, so the denominator can differ
+    // from the static 378.
+    ranking_total?: number | null;
+    // Client-only render fields: `potential` is the 0-5 tier driving the fill
+    // expression; coarse LOD sets `aggregated_count` and clears `hex_id`.
+    potential?: number;
+    aggregated_count?: number;
 }
 
 export interface ActivityGridFeature {

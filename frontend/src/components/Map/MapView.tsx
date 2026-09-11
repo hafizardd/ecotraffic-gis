@@ -15,7 +15,9 @@ import { CameraFeature } from "@/types";
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import useSegments from "@/hooks/useSegments";
 import useSpatialLayers from "@/hooks/useSpatialLayers";
-import useActivityGrid from "@/hooks/useActivityGrid";
+import useActivityGrid, { useActivityGridHours } from "@/hooks/useActivityGrid";
+import ActivityHourSlider from "./ActivityHourSlider";
+import { aggregateCoarseGrid, gridLod } from "@/utils/activityGrid";
 import { setSelectedSegmentId as publishSelectedSegment } from "@/utils/selectionStore";
 import {
     SEGMENT_COLORS,
@@ -48,10 +50,19 @@ export default function MapView() {
     const [style, setStyle] = useState<"street-2d-building" | "dark">("street-2d-building");
     const [visible, setVisible] = useState<Record<MapLayerKey, boolean>>(() => ({ ...DEFAULT_VISIBLE_LAYERS, ...readStoredLayers() }));
     const [bbox, setBbox] = useState<string | null>(null);
+    const [lod, setLod] = useState<"coarse" | "native">("native");
+    const [activityHour, setActivityHour] = useState<string | null>(null);
+    const [hoveredHex, setHoveredHex] = useState<{ lon: number; lat: number; count: number | null } | null>(null);
     const [selectedHexId, setSelectedHexId] = useState<number | null>(null);
     const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
     const { surveyStops } = useSpatialLayers(bbox, { surveyStops: visible.surveyStops });
-    const { activityGrid } = useActivityGrid(bbox, visible.activityGrid);
+    const activityHours = useActivityGridHours(visible.activityGrid);
+    // Latest available hour drives the live view; null falls back to the static
+    // snapshot when the layer is off or the last 24h has no samples at all.
+    const activeHour = visible.activityGrid && activityHours.length > 0
+        ? (activityHour && activityHours.includes(activityHour) ? activityHour : activityHours[activityHours.length - 1])
+        : null;
+    const { activityGrid } = useActivityGrid(bbox, activeHour, visible.activityGrid);
     const isDark = style === "dark";
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
@@ -88,13 +99,16 @@ export default function MapView() {
         }),
     }), [cameras, emissionMap]);
 
-    const activityGridGeoJSON = useMemo(() => ({
-        type: "FeatureCollection" as const,
-        features: activityGrid.features.map((feature) => ({
+    const activityGridGeoJSON = useMemo(() => {
+        const decorated = activityGrid.features.map((feature) => ({
             ...feature,
             properties: { ...feature.properties, potential: classificationTier(feature.properties.klasifikasi_potensi) },
-        })),
-    }), [activityGrid]);
+        }));
+        return {
+            type: "FeatureCollection" as const,
+            features: lod === "coarse" ? aggregateCoarseGrid(decorated) : decorated,
+        };
+    }, [activityGrid, lod]);
 
     const surveyStopGeoJSON = useMemo(() => ({
         type: "FeatureCollection" as const,
@@ -158,10 +172,12 @@ export default function MapView() {
         <div className="map-area" ref={mapAreaRef}>
             <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
              initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "survey-circles", "activity-grid-fill"]}
-             onMove={(event) => { const b = event.target.getBounds(); setBbox(`${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`); }}
+             onMove={(event) => { const b = event.target.getBounds(); setBbox(`${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`); const next = gridLod(event.target.getZoom()); setLod((current) => (current === next ? current : next)); }}
              onMouseMove={(event) => {
                  const segment = event.features?.find((item) => item.layer?.id === "segments-line");
                  setHoveredSegmentId(segment?.properties?.segment_id ?? null);
+                 const hex = event.features?.find((item) => item.layer?.id === "activity-grid-fill");
+                 setHoveredHex(hex ? { lon: event.lngLat.lng, lat: event.lngLat.lat, count: (hex.properties?.aggregated_count as number | null) ?? null } : null);
                  const camera = event.features?.find((item) => item.layer?.id === "camera-points");
                 if (camera?.properties?.camera_id) {
                     const found = camerasById.get(String(camera.properties.camera_id));
@@ -173,7 +189,7 @@ export default function MapView() {
                     setHoveredPoint(null);
                 }
             }}
-             onMouseLeave={() => { setHoveredSegmentId(null); setHoveredCamera(null); setHoveredPoint(null); }}
+             onMouseLeave={() => { setHoveredSegmentId(null); setHoveredCamera(null); setHoveredPoint(null); setHoveredHex(null); }}
             onClick={(event) => {
                 const cameraCluster = event.features?.find((item) => item.layer?.id === "camera-cluster");
                 if (cameraCluster?.properties?.cluster_id != null) {
@@ -195,8 +211,14 @@ export default function MapView() {
                     setSelectedCamera(null); setSelectedHexId(null); setSelectedStopId(null); return;
                 }
                 const hexFeature = event.features?.find((item) => item.layer?.id === "activity-grid-fill");
-                if (hexFeature?.properties?.hex_id != null) {
-                    setSelectedHexId(Number(hexFeature.properties.hex_id)); setSelectedCamera(null); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedStopId(null); return;
+                if (hexFeature) {
+                    if (hexFeature.properties?.hex_id != null) {
+                        setSelectedHexId(Number(hexFeature.properties.hex_id)); setSelectedCamera(null); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedStopId(null); return;
+                    }
+                    // Aggregated (coarse) cell: re-zoom instead of opening a panel with a merged score.
+                    const map = mapRef.current?.getMap();
+                    map?.easeTo({ center: event.lngLat, zoom: (map.getZoom() ?? 14) + 2, duration: 500 });
+                    return;
                 }
                 const spatial = event.features?.find((item) => item.layer?.id === "survey-circles");
                 if (spatial?.properties?.source_id) {
@@ -204,9 +226,13 @@ export default function MapView() {
                 }
              }}>
              <NavigationControl position="bottom-right" showCompass={false} />
+             {visible.activityGrid && <ActivityHourSlider hours={activityHours} value={activeHour} onChange={setActivityHour} />}
+             {visible.activityGrid && lod === "coarse" && (
+                 <div className="map-coarse-note">Tampilan agregat — perbesar untuk detail per sel</div>
+             )}
              {visible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
                  <Layer id="activity-grid-fill" type="fill" paint={{ "fill-color": ["step", ["get", "potential"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "fill-opacity": 0.55 }} />
-                 <Layer id="activity-grid-outline" type="line" paint={{ "line-color": "#ffffff", "line-width": 0.5, "line-opacity": 0.5 }} />
+                 <Layer id="activity-grid-outline" type="line" paint={{ "line-color": "#ffffff", "line-width": 0.5, "line-opacity": lod === "coarse" ? 0 : 0.5 }} />
              </Source>}
              {visible.surveyStops && <Source id="survey-stops" type="geojson" data={surveyStopGeoJSON as never}><Layer id="survey-circles" type="circle" paint={{ "circle-color": ["step", ["get", "intervention"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh], "circle-radius": ["case", ["==", ["get", "source_id"], selectedStopId ?? ""], 9, ["step", ["get", "intervention"], 6, 4, 8, 5, 10]], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 }} /></Source>}
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
@@ -228,6 +254,14 @@ export default function MapView() {
                             return point ? <small>CO₂: {point.emission == null ? "N/A" : `${point.emission.toFixed(0)} g/min`} · {point.freshness}</small> : null;
                         })()}
                         <small>Klik untuk melihat detail</small>
+                    </div>
+                </Popup>
+              )}
+              {hoveredHex?.count != null && (
+                <Popup longitude={hoveredHex.lon} latitude={hoveredHex.lat} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
+                    <div className="marker-popup">
+                        <strong>Agregat {hoveredHex.count} sel grid</strong>
+                        <small>Tampilan perkiraan, bukan skor sel mandiri</small>
                     </div>
                 </Popup>
               )}
@@ -264,7 +298,7 @@ export default function MapView() {
                 ? <BusStopPanel sourceId={selectedStopId} onClose={() => setSelectedStopId(null)} />
                 : selectedSegmentId
                     ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); publishSelectedSegment(null); }} />
-                    : <ActivityGridPanel hexId={selectedHexId} onClose={() => setSelectedHexId(null)} />}
+                    : <ActivityGridPanel hexId={selectedHexId} hour={activeHour} onClose={() => setSelectedHexId(null)} />}
         </div>
     );
 }

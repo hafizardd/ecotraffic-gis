@@ -67,14 +67,30 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
 
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);
 
-export async function fetchActivityGrid(bbox?: string): Promise<ActivityGridFeatureCollection> {
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${bbox ? `?bbox=${encodeURIComponent(bbox)}` : ""}`);
+export async function fetchActivityGrid(bbox?: string, hour?: string | null): Promise<ActivityGridFeatureCollection> {
+    const params = new URLSearchParams();
+    if (bbox) params.set("bbox", bbox);
+    if (hour) params.set("hour", hour);
+    const query = params.toString();
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`);
     if (!response.ok) throw new Error(`Failed to fetch activity grid: ${response.statusText}`);
     return response.json();
 }
 
-export async function fetchActivityGridHex(hexId: number): Promise<ActivityGridFeature> {
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}`);
+export interface ActivityGridAvailableHours {
+    hours: string[];
+    earliest: string | null;
+    latest: string | null;
+}
+
+export async function fetchActivityGridAvailableHours(): Promise<ActivityGridAvailableHours> {
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/available-hours`);
+    if (!response.ok) throw new Error(`Failed to fetch activity grid hours: ${response.statusText}`);
+    return response.json();
+}
+
+export async function fetchActivityGridHex(hexId: number, hour?: string | null): Promise<ActivityGridFeature> {
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}${hour ? `?hour=${encodeURIComponent(hour)}` : ""}`);
     if (!response.ok) throw new Error(`Failed to fetch activity grid hex: ${response.statusText}`);
     return response.json();
 }

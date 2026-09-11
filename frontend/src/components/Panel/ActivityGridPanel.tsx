@@ -9,26 +9,30 @@ import SectionTitle from "@/components/ui/SectionTitle";
 import { MISSING_LABEL, fmtFloatId, fmtIntId } from "@/utils/format";
 import ActivityPotentialCard from "./ActivityPotentialCard";
 
-export default function ActivityGridPanel({ hexId, onClose }: { hexId: number | null; onClose: () => void }) {
+export default function ActivityGridPanel({ hexId, hour, onClose }: { hexId: number | null; hour?: string | null; onClose: () => void }) {
     if (hexId == null) return null;
-    return <ActivityGridDetail key={hexId} hexId={hexId} onClose={onClose} />;
+    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} onClose={onClose} />;
 }
 
-function ActivityGridDetail({ hexId, onClose }: { hexId: number; onClose: () => void }) {
+function ActivityGridDetail({ hexId, hour, onClose }: { hexId: number; hour: string | null; onClose: () => void }) {
     const [feature, setFeature] = useState<ActivityGridFeature | null>(null);
     const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
         let mounted = true;
-        fetchActivityGridHex(hexId)
+        fetchActivityGridHex(hexId, hour)
             .then((value) => mounted && setFeature(value))
             .catch((err) => mounted && setError(err instanceof Error ? err : new Error("Data grid tidak tersedia")));
         return () => {
             mounted = false;
         };
-    }, [hexId]);
+    }, [hexId, hour]);
 
     const props = feature?.properties;
+    const hourLabel = hour ? new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null;
+    const sourceMeta = !hour
+        ? "Sumber: model offline"
+        : props?.data_status === "no_data" ? `Pukul ${hourLabel} · tanpa data` : `Skor pukul ${hourLabel} · live`;
 
     return (
         <aside className="monitoring-panel segment-panel">
@@ -47,7 +51,7 @@ function ActivityGridDetail({ hexId, onClose }: { hexId: number; onClose: () => 
                     <>
                         <ActivityPotentialCard properties={props} />
                         <section className="panel-section">
-                            <SectionTitle title="Data mentah" meta="Sumber: model offline" />
+                            <SectionTitle title="Data mentah" meta={sourceMeta} />
                             <div className="criteria-grid">
                                 <div className="criteria-item"><span>POI total</span><strong>{fmtIntId(props.poi_total)}</strong></div>
                                 <div className="criteria-item"><span>Penduduk</span><strong>{fmtIntId(props.penduduk)}</strong></div>
