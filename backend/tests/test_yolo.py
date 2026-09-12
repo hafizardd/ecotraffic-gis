@@ -1,4 +1,3 @@
-from ultralytics import YOLO
 import cv2
 import os
 import subprocess
@@ -164,6 +163,7 @@ def save_output(annotated_frame, output_filename):
 
 
 def main():
+    from ultralytics import YOLO
     parser = argparse.ArgumentParser(description="YOLO Vehicle Detection Test")
     parser.add_argument(
         "--mode",

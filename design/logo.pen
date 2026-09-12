@@ -1,5 +1,5 @@
 {
-  "version": "2.11",
+  "version": "2.17",
   "children": [
     {
       "type": "frame",
@@ -154,11 +154,10 @@
               "fill": "#00000000",
               "width": 32,
               "height": 30,
-              "stroke": {
-                "thickness": 1.5,
-                "cap": "round",
-                "fill": "#2D6A4F"
-              }
+              "stroke": "#2D6A4F",
+              "strokeWidth": 1.5,
+              "strokeAlignment": "inner",
+              "strokeLinecap": "round"
             },
             {
               "type": "path",
@@ -176,11 +175,10 @@
               "fill": "#00000000",
               "width": 48,
               "height": 3,
-              "stroke": {
-                "thickness": 2.5,
-                "cap": "round",
-                "fill": "#E9C46A"
-              }
+              "stroke": "#E9C46A",
+              "strokeWidth": 2.5,
+              "strokeAlignment": "inner",
+              "strokeLinecap": "round"
             },
             {
               "type": "path",
@@ -198,11 +196,10 @@
               "fill": "#00000000",
               "width": 36,
               "height": 3,
-              "stroke": {
-                "thickness": 2.5,
-                "cap": "round",
-                "fill": "#E9C46A"
-              }
+              "stroke": "#E9C46A",
+              "strokeWidth": 2.5,
+              "strokeAlignment": "inner",
+              "strokeLinecap": "round"
             },
             {
               "type": "path",
@@ -261,11 +258,10 @@
               "fill": "#52B788",
               "width": 40,
               "height": 2,
-              "stroke": {
-                "thickness": 2,
-                "cap": "round",
-                "fill": "#52B788"
-              }
+              "stroke": "#52B788",
+              "strokeWidth": 2,
+              "strokeAlignment": "inner",
+              "strokeLinecap": "round"
             },
             {
               "type": "text",
@@ -275,11 +271,13 @@
               "content": "AI-Powered Carbon Emission Monitoring",
               "fontFamily": "Inter",
               "fontSize": 13,
+              "fontWeight": "normal",
               "letterSpacing": 1.2
             }
           ]
         }
       ]
     }
-  ]
+  ],
+  "fileToken": "f871c8e6-4992-4a1d-a9b8-948a7de81b60"
 }

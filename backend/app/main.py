@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
  
-from app.api.routes import cameras, emissions
+from app.api.routes import cameras, emissions, segment_emissions, spatial_layers, analytics_emissions, activity_grid, bangjo
 from app.api.routes.websocket import router as websocket_router, redis_subscriber
 from app.core.config import settings
  
@@ -16,7 +16,7 @@ app = FastAPI(
 )
 
 # ------------------------------------------------------------------
-# CORS — allow the React frontend (localhost:3000) to call the API
+# CORS - allow the React frontend (localhost:3000) to call the API
 # ------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -33,6 +33,11 @@ app.add_middleware(
 # ------------------------------------------------------------------
 app.include_router(cameras.router)
 app.include_router(emissions.router)
+app.include_router(analytics_emissions.router)
+app.include_router(segment_emissions.router)
+app.include_router(spatial_layers.router)
+app.include_router(activity_grid.router)
+app.include_router(bangjo.router)
 app.include_router(websocket_router)
 
 _background_tasks = set()
@@ -45,5 +50,5 @@ async def startup_event():
 
 @app.get("/health")
 async def health():
-    """Quick health check — used by Docker and monitoring."""
+    """Quick health check - used by Docker and monitoring."""
     return {"status": "ok", "debug": settings.DEBUG}

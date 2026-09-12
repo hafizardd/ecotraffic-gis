@@ -44,8 +44,8 @@ def run_spot_check(
     # Print counts + emission to terminal
     print(f"  car={counts['car']}  motorcycle={counts['motorcycle']}  "
           f"bus={counts['bus']}  truck={counts['truck']}")
-    print(f"  CO₂: {emission['total_g_per_min']} g/min  "
-          f"({emission['total_kg_per_hr']} kg/hr)")
+    print(f"  CO₂: {emission['total_co2_g_per_min']} g/min  "
+          f"({emission['total_co2_kg_per_hr']} kg/hr)")
 
     # Save annotated frame
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
@@ -82,7 +82,7 @@ def main(count: int, interval: int, output_dir: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="EcoTraffic — spot check annotated frames")
+    parser = argparse.ArgumentParser(description="EcoTraffic - spot check annotated frames")
     parser.add_argument("--count", type=int, default=3, help="Number of frames to grab")
     parser.add_argument("--interval", type=int, default=5, help="Seconds between frames")
     parser.add_argument("--output-dir", type=str, default=OUTPUT_DIR, help="Where to save images")

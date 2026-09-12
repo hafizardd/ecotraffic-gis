@@ -1,8 +1,8 @@
 """
 backend/app/core/seed.py
  
-Seed script — inserts known Jogja CCTV cameras into the cameras table.
-Safe to run multiple times — uses ON CONFLICT DO NOTHING (idempotent).
+Seed script - inserts known Jogja CCTV cameras into the cameras table.
+Safe to run multiple times - uses ON CONFLICT DO NOTHING (idempotent).
  
 Usage:
     cd backend
@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session_factory
 from app.core.config import settings
 from app.core.cctv import CAMERAS
+from app.core.segment_seed import seed_camera_segment_mappings, seed_road_segments
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ async def seed_cameras(session: AsyncSession) -> None:
 
         result = await session.execute(
             text("""
-                INSERT INTO cameras (id, name, camera_id, stream_url, referer, location, is_active)
+                INSERT INTO cameras (id, name, camera_id, stream_url, referer, location, is_active, data_source)
                 VALUES (
                     gen_random_uuid(),
                     :name,
@@ -41,7 +42,8 @@ async def seed_cameras(session: AsyncSession) -> None:
                     :stream_url,
                     :referer,
                     ST_GeomFromEWKT(:location),
-                    :is_active
+                    :is_active,
+                    :data_source
                 )
                 ON CONFLICT (camera_id) DO NOTHING
             """),
@@ -52,6 +54,14 @@ async def seed_cameras(session: AsyncSession) -> None:
                 "referer":    cam["referer"],
                 "location":   point_wkt,
                 "is_active":  cam["is_active"],
+                "data_source": (
+                    "LIVE"
+                    if cam["stream_url"].endswith((
+                        "ATCS_jlagran.stream/playlist.m3u8",
+                        "ATCS_Simpang_Balaikota_View_Utara.stream/playlist.m3u8",
+                    ))
+                    else "HISTORICAL"
+                ),
             }
         )
 
@@ -63,7 +73,7 @@ async def seed_cameras(session: AsyncSession) -> None:
             logger.info(f"  Skipped (already exists): {cam['camera_id']}")
  
     await session.commit()
-    logger.info(f"Seed complete — {inserted} inserted, {skipped} skipped.")
+    logger.info(f"Seed complete - {inserted} inserted, {skipped} skipped.")
  
  
 async def main() -> None:
@@ -71,6 +81,8 @@ async def main() -> None:
     factory = get_session_factory()
     async with factory() as session:
         await seed_cameras(session)
+        await seed_road_segments(session)
+        await seed_camera_segment_mappings(session)
  
  
 if __name__ == "__main__":

@@ -14,10 +14,6 @@ node_modules/
 dist/
 .cache/
 
-# Model weights (large files)
-*.pt
-*.onnx
-
 # OS
 .DS_Store
 Thumbs.db

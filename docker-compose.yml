@@ -23,22 +23,38 @@ services:
       - "8080:8000"
     volumes:
       - ./backend/yolo:/app/yolo
+      - ./backend/data:/app/data
     env_file: ./backend/.env
     depends_on:
       - postgres
       - redis
 
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
-    command: >
-      sh -c "celery -A app.workers.celery_app beat --loglevel=info &
-            celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=16"
+  beat:
+    build: ./backend
+    command: celery -A app.workers.celery_app beat --loglevel=info
     env_file: ./backend/.env
     depends_on:
       - redis
+
+  tracker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: python -m app.workers.tracking_worker
+    env_file: ./backend/.env
+    volumes:
+      - ./backend/yolo:/app/yolo
+    depends_on:
+      - redis
       - postgres
+
+  segment-worker:
+    build: ./backend
+    command: celery -A app.workers.celery_app worker -Q inference --loglevel=info --concurrency=1
+    env_file: ./backend/.env
+    depends_on:
+      - postgres
+      - redis
 
   frontend:
     build: ./frontend

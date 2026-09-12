@@ -15,14 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # ------------------------------------------------------------------
 from app.core.config import settings
 from app.core.database import Base
-import app.models  # noqa: F401 — must import to populate Base.metadata
+import app.models  # noqa: F401 - must import to populate Base.metadata
 
 # ------------------------------------------------------------------
 # Alembic config
 # ------------------------------------------------------------------
 config = context.config
 
-# Override sqlalchemy.url from .env — uses sync psycopg2 driver
+# Override sqlalchemy.url from .env - uses sync psycopg2 driver
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL_SYNC)
 
 if config.config_file_name is not None:
@@ -37,7 +37,10 @@ target_metadata = Base.metadata
 # ------------------------------------------------------------------
 
 # Exact set of table names our app owns
-OUR_TABLES = {"cameras", "emissions"}
+OUR_TABLES = {
+    "cameras", "emissions", "emission_aggregates", "road_segments",
+    "camera_road_segments", "segment_traffic_observations", "segment_emissions",
+}
 
 
 def include_name(name, type_, parent_names):
@@ -56,7 +59,7 @@ def include_name(name, type_, parent_names):
 
 
 # ------------------------------------------------------------------
-# Offline mode — generates SQL without a DB connection
+# Offline mode - generates SQL without a DB connection
 # ------------------------------------------------------------------
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -74,7 +77,7 @@ def run_migrations_offline() -> None:
 
 
 # ------------------------------------------------------------------
-# Online mode — connects to DB and applies changes
+# Online mode - connects to DB and applies changes
 # ------------------------------------------------------------------
 def run_migrations_online() -> None:
     connectable = engine_from_config(

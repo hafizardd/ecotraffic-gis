@@ -6,7 +6,9 @@
 # ============================================================
 
 # --- Computer Vision ---
-ultralytics==8.2.0
+ultralytics==8.3.0
+# Ultralytics ByteTrack dependency; auto-install is disabled in the worker image.
+lapx>=0.5.2
 opencv-python-headless==4.9.0.80
 numpy<2                             
 torch==2.5.1                       

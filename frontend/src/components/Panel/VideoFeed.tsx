@@ -1,82 +1,100 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import Hls from "hls.js"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { API_BASE } from "@/services/api"
+import Skeleton from "@/components/ui/Skeleton"
 
 interface VideoFeedProps {
-    streamUrl: string;
+    cameraId: string;
+    onStatusChange?: (status: StreamStatus) => void;
 }
 
-export default function VideoFeed({ streamUrl }: VideoFeedProps) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const [isMuted, setIsMuted] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+const INITIAL_BACKOFF = 1000;
+const MAX_BACKOFF = 30000;
+
+type StreamStatus = "loading" | "streaming" | "error";
+
+// Annotated MJPEG display: the tracker bakes boxes + track IDs into each
+// frame, so this component is just an <img>: no canvas, no HLS, no WebSocket.
+export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) {
+    const [status, setStatus] = useState<StreamStatus>("loading");
+    const [reloadKey, setReloadKey] = useState(0);
+    const [isVisible, setIsVisible] = useState(() =>
+        typeof document === "undefined" || !document.hidden
+    );
+    const backoffRef = useRef(INITIAL_BACKOFF);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const streamUrl = isVisible && API_BASE
+        ? `${API_BASE}/api/cameras/${cameraId}/tracked.mjpg${
+            reloadKey > 0 ? `?_t=${reloadKey}` : ""
+        }`
+        : null;
+
+    const scheduleRetry = useCallback(() => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+            setStatus("loading");
+            setReloadKey((k) => k + 1);
+        }, backoffRef.current);
+        backoffRef.current = Math.min(backoffRef.current * 2, MAX_BACKOFF);
+    }, []);
 
     useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        let hls: Hls | null = null;
-
-        if (Hls.isSupported()) {
-            hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-            })
-
-            hls.loadSource(streamUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.ERROR, (_, data) => {
-                if (data.fatal) {
-                    setError("Failed to load video stream");
-                    hls?.destroy();
-                }
-            });
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-            // Safari
-            video.src = streamUrl;
-        } else {
-            setError("HLS not supported in this browser");
-        }
-
-        video.muted = isMuted;
-        video.play().catch(() => {});
-        
-        return () => {
-            hls?.destroy();
+        onStatusChange?.("loading");
+        const updateVisibility = () => {
+            const visible = !document.hidden;
+            setIsVisible(visible);
+            if (visible) setReloadKey((key) => key + 1);
         };
-    }, [streamUrl, isMuted])
+        document.addEventListener("visibilitychange", updateVisibility);
+        return () => {
+            document.removeEventListener("visibilitychange", updateVisibility);
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, [cameraId, onStatusChange]);
 
-    const toggleMute = () => {
-        if (videoRef.current) {
-            videoRef.current.muted = !isMuted;
-            setIsMuted(!isMuted);
-        }
-    };
+    const handleLoad = useCallback(() => {
+        setStatus("streaming");
+        onStatusChange?.("streaming");
+        backoffRef.current = INITIAL_BACKOFF;
+    }, [onStatusChange]);
 
-    if (error) {
-        return (
-             <div className="flex items-center justify-center h-48 bg-zinc-900 text-zinc-400 text-sm">
-                {error}
-            </div>
-        )
-    }
+    const handleError = useCallback(() => {
+        onStatusChange?.("error");
+        setStatus((prev) => {
+            if (prev !== "error") scheduleRetry();
+            return "error";
+        });
+    }, [onStatusChange, scheduleRetry]);
 
     return (
-        <div className="relative bg-black">
-            <video
-                ref={videoRef}
-                className="w-full aspect-video"
-                muted={isMuted}
-                autoPlay
-                playsInline
-            />
-            <button
-                onClick={toggleMute}
-                className="absolute bottom-2 right-2 px-2 py-1 text-xs bg-black/60 text-white rounded hover:bg-black/80"
-            >
-                {isMuted ? "Unmute" : "Mute"}
-            </button>
+        <div className="relative aspect-video overflow-hidden rounded-md border border-(--contour-strong) bg-(--canvas)">
+            {status === "loading" && (
+                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-(--canvas) text-[10px] text-(--secondary)" role="status" aria-label="Menghubungkan stream CCTV">
+                    <Skeleton height="100%" width="100%" radius={0} />
+                </div>
+            )}
+            {status === "error" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-(--canvas) px-4 text-center [&>strong]:text-[12px] [&>strong]:text-[#fca5a5] [&>span]:text-[10px] [&>span]:text-(--muted)" role="status">
+                    <strong>Stream tidak tersedia</strong>
+                    <span>Mencoba menghubungkan kembali…</span>
+                </div>
+            )}
+            {streamUrl && (
+                // Key on cameraId so switching cameras resets the stream.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                    key={cameraId}
+                    src={streamUrl}
+                    className={`h-full w-full object-cover ${status === "streaming" ? "block" : "hidden"}`}
+                    alt={`Tracked CCTV ${cameraId}`}
+                    decoding="async"
+                    fetchPriority="low"
+                    onLoad={handleLoad}
+                    onError={handleError}
+                />
+            )}
         </div>
     )
 }

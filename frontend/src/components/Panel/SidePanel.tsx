@@ -1,76 +1,106 @@
 "use client";
 
-import { CameraFeature, EmissionUpdate } from "@/types";
+import { useState } from "react";
+import { MapPin, X } from "lucide-react";
+import { CameraFeature, HistoricalCameraEmission } from "@/types";
 import VideoFeed from "./VideoFeed";
 import EmissionStats from "./EmissionStats";
 import VehicleCount from "./VehicleCount";
+import HistoricalCameraStats from "./HistoricalCameraStats";
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import EmissionChart from "./EmissionChart";
+import SectionTitle from "@/components/ui/SectionTitle";
+import type { NeighborEstimate } from "@/utils/cameraEstimate";
+import { formatNumber } from "@/utils/format";
+import { ANALYTICS_NOTE_CLASS, ESTIMATE_BADGE_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_CONTENT_CLASS, PANEL_HEADER_CLASS, PANEL_ICON_CLASS, PANEL_SECTION_CLASS, PANEL_TITLE_CLASS, SEGMENT_STATE_CLASS } from "@/styles/tailwind";
 
 interface SidePanelProps {
     camera: CameraFeature | null;
+    historical?: HistoricalCameraEmission | null;
+    estimate?: NeighborEstimate | null;
     onClose: () => void;
 }
 
-export default function SidePanel({ camera, onClose }: SidePanelProps) {
-    const emissionMap = useEmissionsContext();
+export default function SidePanel({ camera, historical = null, estimate = null, onClose }: SidePanelProps) {
+    const { emissionMap } = useEmissionsContext();
+    const [trackingStatus, setTrackingStatus] = useState<"loading" | "streaming" | "error">("loading");
     const liveEmission = camera
         ? emissionMap.get(camera.properties.camera_id) ?? null
         : null;
 
     if (!camera) return null;
 
+    const isTrackingSource = camera.properties.data_source === "LIVE";
+
     return (
-        <div
-            className="fixed top-0 right-0 h-full w-100 bg-white dark:bg-zinc-900 shadow-2xl transform transition-transform duration-300 ease-in-out z-9999"
-        >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-700">
-                <h2 className="text-lg font-semibold">{camera.properties.name}</h2>
+        <aside className={PANEL_CLASS} aria-label={`Detail CCTV ${camera.properties.name}`}>
+            <div className={PANEL_HEADER_CLASS}>
+                <div className={PANEL_ICON_CLASS}><MapPin aria-hidden="true" /></div>
+                <div className={PANEL_TITLE_CLASS}><span>CCTV terpilih</span><h2>{camera.properties.name}</h2></div>
+                {isTrackingSource && <div className={`hidden items-center gap-1.5 pr-1 text-[9px] font-bold tracking-[0.08em] uppercase min-[980px]:flex ${trackingStatus === "error" ? "text-[#fca5a5]" : "text-(--brand-strong)"}`} role="status">
+                    <i className={`h-1.5 w-1.5 rounded-full ${trackingStatus === "error" ? "bg-(--danger)" : "bg-(--green)"}`} /> {trackingStatus === "error" ? "Terputus" : "Visual live"}
+                </div>}
                 <button
                     onClick={onClose}
-                    className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className={PANEL_CLOSE_CLASS}
+                    aria-label="Tutup panel monitoring"
                 >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
+                    <X aria-hidden="true" />
                 </button>
             </div>
 
-            {/* Content */}
-            <div className="overflow-y-auto h-[calc(100%-60px)]">
-                {/* Section 1: Live Video */}
-                <div className="border-b border-zinc-200 dark:border-zinc-700">
-                    <VideoFeed streamUrl={camera.properties.stream_url} />
-                </div>
-                {/* Section 2: Emission Stats */}
-                <div className="border-b border-zinc-200 dark:border-zinc-700">
-                    <h3 className="px-4 pt-4 pb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                        Current Emissions
-                    </h3>
-                    <EmissionStats
-                        cameraId={camera.properties.camera_id}
-                    />
-                </div>
-                {/* Section 3: Vehicle Count */}
-                <div>
-                    <h3 className="px-4 pt-4 pb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                        Vehicle Count
-                    </h3>
-                    <VehicleCount emission={liveEmission} />
-                </div>
-
-                {/* Section 4: Emission Chart */}
-                <div className="border-b border-zinc-200 dark:border-zinc-700">
-                    <h3 className="px-4 pt-4 pb-4 text-sm font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-                        Emission Trend
-                    </h3>
-                    <EmissionChart 
-                        cameraId={camera.properties.camera_id}
-                        liveEmission={liveEmission}
-                    />
-                </div>
+            <div className={PANEL_CONTENT_CLASS}>
+                {isTrackingSource && <section className={PANEL_SECTION_CLASS}>
+                    <SectionTitle title="Pelacakan visual" meta="Deteksi dan tracking kendaraan real-time" />
+                    <VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} onStatusChange={setTrackingStatus} />
+                </section>}
+                {liveEmission ? (
+                    <>
+                        <section className={PANEL_SECTION_CLASS}>
+                            <SectionTitle title="Emisi saat ini" meta="Nilai dalam g/min" />
+                            <EmissionStats cameraId={camera.properties.camera_id} />
+                        </section>
+                        <section className={PANEL_SECTION_CLASS}>
+                            <SectionTitle title="Deteksi kendaraan" meta="Hitungan kendaraan terkini" />
+                            <VehicleCount emission={liveEmission} />
+                        </section>
+                        <section className={`${PANEL_SECTION_CLASS} border-b-0`}>
+                            <SectionTitle title="Tren emisi" meta="Monitoring emisi real-time" />
+                            <EmissionChart cameraId={camera.properties.camera_id} liveEmission={liveEmission} />
+                        </section>
+                    </>
+                ) : historical ? (
+                    <section className={PANEL_SECTION_CLASS}>
+                        <SectionTitle title="Emisi statis" meta="Nilai dalam g/min (data tidak langsung)" />
+                        <HistoricalCameraStats historical={historical} />
+                    </section>
+                ) : estimate ? (
+                    <section className={`${PANEL_SECTION_CLASS} bg-[rgba(245,165,36,0.025)]`}>
+                        <SectionTitle
+                            title="Perkiraan dari data sekitar"
+                            meta={`Kamera ${estimate.cameraName}, sekitar ${formatNumber(estimate.distanceKm)} km`}
+                            aside={<b className={ESTIMATE_BADGE_CLASS}>Perkiraan</b>}
+                        />
+                        <p className={ANALYTICS_NOTE_CLASS}>
+                            Kamera ini belum punya pembacaan sendiri. Nilai berikut diperkirakan dari kamera terdekat, bukan arus langsung kamera ini.
+                        </p>
+                        {estimate.emission ? (
+                            <>
+                                <EmissionStats cameraId={camera.properties.camera_id} emission={estimate.emission} />
+                                <div className="h-3" />
+                                <VehicleCount emission={estimate.emission} />
+                            </>
+                        ) : estimate.historical ? (
+                            <HistoricalCameraStats historical={estimate.historical} />
+                        ) : null}
+                    </section>
+                ) : (
+                    <div className={SEGMENT_STATE_CLASS} role="status">
+                        <strong>Belum ada data</strong>
+                        <span>Kamera ini belum mengirim pembacaan dan tidak ada kamera sekitar dengan data untuk diperkirakan.</span>
+                    </div>
+                )}
             </div>
-        </div>
+        </aside>
     );
 }
