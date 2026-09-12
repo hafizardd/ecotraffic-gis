@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_dir"
+
+if [[ ! -f "$repo_dir/backend/.env" ]]; then
+  printf 'Missing backend/.env. Copy backend/.env.example and fill in the production values.\n' >&2
+  exit 1
+fi
+
+if [[ ! -f "$repo_dir/frontend/.env" ]]; then
+  printf 'Missing frontend/.env. Copy frontend/.env.example and set the public API/WS URLs.\n' >&2
+  exit 1
+fi
+
+exec sudo docker compose \
+  --env-file "$repo_dir/backend/.env" \
+  -f "$repo_dir/docker-compose.yml" \
+  -f "$repo_dir/compose.vm.yaml" \
+  "$@"
