@@ -22,7 +22,6 @@ import {
     formatMethodLabel,
 } from "@/utils/format";
 import { CRITERIA_GRID_CLASS, DATA_MISSING_CLASS, ESTIMATE_BADGE_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, POLLUTANT_DOT_CLASS, POLLUTANT_TEXT_CLASS, SEGMENT_EMPTY_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS, STAT_CARD_CLASS, STAT_GRID_CLASS } from "@/styles/tailwind";
-import SpatialProvenanceRail, { freshnessItem, type ProvenanceItem } from "./SpatialProvenanceRail";
 
 const VEHICLE_TYPES = ["car", "motorcycle", "bus", "truck"] as const;
 const VEHICLE_SUMMARY_CLASS = `${CRITERIA_GRID_CLASS} max-[420px]:grid-cols-1`;
@@ -87,27 +86,6 @@ function SegmentDetailPanel({
         }
         return null;
     })();
-    const provenanceCameras = liveDetail ? readStringArray(liveDetail.provenance, "source_cameras") : [];
-    const provenanceSource = liveDetail ? readString(liveDetail.provenance, "source") : null;
-    const freshness = freshnessItem(liveDetail?.freshness_status);
-    const sourceItem: ProvenanceItem | null = !liveDetail
-        ? null
-        : fallback
-            ? { label: "Sumber", value: `CCTV ${formatCameraName(fallback.camId)}`, tone: "estimated" }
-            : provenanceCameras.length > 0
-                ? { label: "Sumber", value: provenanceCameras.map(formatCameraName).join(", "), title: provenanceCameras.join(", ") }
-                : provenanceSource
-                    ? { label: "Sumber", value: provenanceSource }
-                    : liveDetail.volume_status === "estimated"
-                        ? { label: "Sumber", value: "Estimasi CCTV", tone: "estimated" }
-                        : null;
-    const qualityItem: ProvenanceItem | null = !liveDetail
-        ? null
-        : fallback || liveDetail.volume_status === "estimated"
-            ? { label: "Kualitas", value: "Estimasi", tone: "estimated" }
-            : freshness
-                ? { label: "Kualitas", ...freshness }
-                : null;
 
     return (
         <aside className={PANEL_CLASS} aria-label={`Detail segmen ${detail?.name ?? segmentId}`}>
@@ -132,12 +110,6 @@ function SegmentDetailPanel({
                 {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data segmen tidak tersedia</strong><span>{error.message}</span></div>}
                 {liveDetail && (
                     <>
-                        <SpatialProvenanceRail items={[
-                            { label: "Entitas", value: liveDetail.road_segment_id, title: liveDetail.road_segment_id },
-                            sourceItem,
-                            liveDetail.calculated_at ? { label: "Observasi", value: fmtDateTimeId(liveDetail.calculated_at), title: liveDetail.calculated_at } : null,
-                            qualityItem,
-                        ]} />
                         <SegmentDetails detail={liveDetail} fallback={fallback} />
                         <AutoInsightCard entity={{ type: "segment", id: liveDetail.road_segment_id }} label={liveDetail.name} />
                     </>
@@ -145,16 +117,6 @@ function SegmentDetailPanel({
             </div>
         </aside>
     );
-}
-
-function readString(record: Record<string, unknown>, key: string): string | null {
-    const value = record?.[key];
-    return typeof value === "string" && value.trim() ? value : null;
-}
-
-function readStringArray(record: Record<string, unknown>, key: string): string[] {
-    const value = record?.[key];
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
 type Fallback = { camId: string; emission: Record<string, number>; at?: string } | null;

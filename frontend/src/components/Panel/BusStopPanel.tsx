@@ -10,7 +10,6 @@ import { interventionColor, readableTextOn } from "@/constants/mapColors";
 import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
 import AutoInsightCard from "@/components/Panel/AutoInsightCard";
 import { CRITERIA_GRID_CLASS, DATA_MISSING_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, SEGMENT_EMPTY_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS, STAT_CARD_CLASS, STAT_GRID_CLASS } from "@/styles/tailwind";
-import SpatialProvenanceRail from "./SpatialProvenanceRail";
 
 const COMPONENTS: { keys: (keyof BusStopDetail)[]; label: string }[] = [
     { keys: ["accessibility_score_100", "accessibility_score"], label: "Aksesibilitas (survei 0-100)" },
@@ -87,12 +86,6 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                 {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data halte tidak tersedia</strong><span>{error.message}</span></div>}
                 {detail && (
                     <>
-                        <SpatialProvenanceRail items={[
-                            { label: "Entitas", value: detail.source_id, title: detail.source_id },
-                            { label: "Sumber", value: detail.observer_name ? `Survei · ${detail.observer_name}` : "Survei halte" },
-                            detail.observed_at ? { label: "Observasi", value: fmtDateTimeId(detail.observed_at), title: detail.observed_at } : null,
-                            detail.score_method ? { label: "Metode", value: detail.score_method } : detail.ahp_weight_version ? { label: "Metode", value: detail.ahp_weight_version } : null,
-                        ]} />
                         <div className={SEGMENT_OVERVIEW_CLASS}>
                             <strong>{detail.intervention_class ?? "Belum dinilai"}</strong>
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>

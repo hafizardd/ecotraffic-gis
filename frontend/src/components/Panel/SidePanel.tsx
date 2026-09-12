@@ -11,9 +11,8 @@ import { useEmissionsContext } from "@/context/EmissionsContext";
 import EmissionChart from "./EmissionChart";
 import SectionTitle from "@/components/ui/SectionTitle";
 import type { NeighborEstimate } from "@/utils/cameraEstimate";
-import { fmtDateTimeId, formatNumber } from "@/utils/format";
+import { formatNumber } from "@/utils/format";
 import { ANALYTICS_NOTE_CLASS, ESTIMATE_BADGE_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_CONTENT_CLASS, PANEL_HEADER_CLASS, PANEL_ICON_CLASS, PANEL_SECTION_CLASS, PANEL_TITLE_CLASS, SEGMENT_STATE_CLASS } from "@/styles/tailwind";
-import SpatialProvenanceRail, { freshnessItem, type ProvenanceItem } from "./SpatialProvenanceRail";
 
 interface SidePanelProps {
     camera: CameraFeature | null;
@@ -32,31 +31,6 @@ export default function SidePanel({ camera, historical = null, estimate = null, 
     if (!camera) return null;
 
     const isTrackingSource = camera.properties.data_source === "LIVE";
-    const activeHistorical = !liveEmission ? historical : null;
-    const activeEstimate = !liveEmission && !historical ? estimate : null;
-    const observedAt = liveEmission?.captured_at ?? liveEmission?.timestamp
-        ?? activeHistorical?.observed_at
-        ?? activeEstimate?.emission?.captured_at
-        ?? activeEstimate?.emission?.timestamp
-        ?? activeEstimate?.historical?.observed_at
-        ?? camera.properties.last_success_at
-        ?? camera.properties.last_sample_at;
-    const sourceItem: ProvenanceItem | null = activeEstimate
-        ? { label: "Sumber", value: `${activeEstimate.cameraName} · ${formatNumber(activeEstimate.distanceKm)} km`, tone: "estimated", title: activeEstimate.cameraId }
-        : activeHistorical
-            ? { label: "Sumber", value: `${activeHistorical.source_mode} · segmen ${activeHistorical.segment_id}`, tone: "replay" }
-            : liveEmission
-                ? { label: "Sumber", value: liveEmission.source === "tracking" ? "Pelacakan CCTV" : camera.properties.data_source ?? "CCTV", tone: "live" }
-                : camera.properties.data_source
-                    ? { label: "Sumber", value: camera.properties.data_source, tone: camera.properties.data_source === "LIVE" ? "live" : "replay" }
-                    : null;
-    const qualityItem: ProvenanceItem | null = activeEstimate
-        ? { label: "Kualitas", value: "Estimasi kamera terdekat", tone: "estimated" }
-        : activeHistorical
-            ? { label: "Kualitas", value: activeHistorical.is_interpolated ? "Replay · interpolasi" : activeHistorical.quality_status, tone: "replay" }
-            : freshnessItem(liveEmission?.freshness_status ?? camera.properties.freshness_status)
-                ? { label: "Kualitas", ...freshnessItem(liveEmission?.freshness_status ?? camera.properties.freshness_status)! }
-                : null;
 
     return (
         <aside className={PANEL_CLASS} aria-label={`Detail CCTV ${camera.properties.name}`}>
@@ -76,12 +50,6 @@ export default function SidePanel({ camera, historical = null, estimate = null, 
             </div>
 
             <div className={PANEL_CONTENT_CLASS}>
-                <SpatialProvenanceRail items={[
-                    { label: "Entitas", value: camera.properties.camera_id, title: camera.properties.camera_id },
-                    sourceItem,
-                    observedAt ? { label: "Observasi", value: fmtDateTimeId(observedAt), title: observedAt } : null,
-                    qualityItem,
-                ]} />
                 {isTrackingSource && <section className={PANEL_SECTION_CLASS}>
                     <SectionTitle title="Pelacakan visual" meta="Deteksi dan tracking kendaraan real-time" />
                     <VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} onStatusChange={setTrackingStatus} />

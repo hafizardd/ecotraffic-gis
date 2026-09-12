@@ -6,12 +6,11 @@ import { fetchActivityGridHex } from "@/services/api";
 import { ActivityGridFeature } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
+import { MISSING_LABEL, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
 import { dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
 import AutoInsightCard from "./AutoInsightCard";
 import { CRITERIA_GRID_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS } from "@/styles/tailwind";
-import SpatialProvenanceRail, { type ProvenanceItem } from "./SpatialProvenanceRail";
 
 export default function ActivityGridPanel({ hexId, hour, onClose }: {
     hexId: number | null;
@@ -47,15 +46,6 @@ function ActivityGridDetail({ hexId, hour, onClose }: {
         : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data`
             : props?.data_status === "fallback" ? `Pukul ${currentHourLabel} · perkiraan area terdekat`
                 : `Skor pukul ${currentHourLabel} · terukur`;
-    const qualityItem: ProvenanceItem | null = !props?.data_status
-        ? null
-        : props.is_interpolated
-            ? { label: "Kualitas", value: "Replay · interpolasi", tone: "replay" }
-            : props.data_status === "fallback"
-                ? { label: "Kualitas", value: props.fallback_from == null ? "Perkiraan sel terdekat" : `Perkiraan · Hex ${props.fallback_from}`, tone: "estimated" }
-                : props.data_status === "live"
-                    ? { label: "Kualitas", value: dataStatusLabel(props.data_status), tone: "live" }
-                    : { label: "Kualitas", value: dataStatusLabel(props.data_status) };
 
     return (
         <aside className={PANEL_CLASS} aria-label={`Detail grid potensi Hex ${hexId}`}>
@@ -72,12 +62,6 @@ function ActivityGridDetail({ hexId, hour, onClose }: {
                 {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data grid tidak tersedia</strong><span>{error.message}</span></div>}
                 {props && (
                     <>
-                        <SpatialProvenanceRail items={[
-                            { label: "Entitas", value: `Hex ${hexId}` },
-                            props.source ? { label: "Sumber", value: props.source } : null,
-                            hour ? { label: "Waktu", value: fmtDateTimeId(hour), title: hour } : null,
-                            qualityItem,
-                        ]} />
                         <ActivityPotentialCard properties={props} />
                         <AutoInsightCard entity={{ type: "hex", id: hexId }} label={`grid Hex ${hexId}`} />
                         <section className={SEGMENT_SECTION_CLASS}>
