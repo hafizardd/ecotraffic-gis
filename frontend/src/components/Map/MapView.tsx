@@ -324,7 +324,7 @@ export default function MapView() {
         <div className={`map-panel-layout ${isAnyPanelOpen ? "has-panel" : ""}`}>
         <div className="map-area" ref={mapAreaRef}>
             <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
-             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "activity-grid-fill"]}
+             initialViewState={{ longitude: 110.3735, latitude: -7.8006, zoom: 12.5 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "activity-grid-fill"]}
              onMoveEnd={syncViewport}
              onZoom={handleZoom}
              onMouseMove={handleMouseMove}
