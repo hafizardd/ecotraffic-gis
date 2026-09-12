@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useBangJoChat from "@/hooks/useBangJoChat";
 import BangJoFab from "./BangJoFab";
 import BangJoPanel from "./BangJoPanel";
@@ -14,6 +14,7 @@ export default function BangJoWidget() {
     const [open, setOpen] = useState(false);
     const [minimized, setMinimized] = useState(false);
     const [selection, setSelectionState] = useState<SelectionState | null>(null);
+    const fabRef = useRef<HTMLButtonElement>(null);
     const { messages, isTyping, sendMessage } = useBangJoChat();
 
     useEffect(() => subscribeSelection(setSelectionState), []);
@@ -41,7 +42,7 @@ export default function BangJoWidget() {
 
     return (
         <>
-            {!open && <BangJoFab onOpen={() => { setOpen(true); setMinimized(false); }} />}
+            {!open && <BangJoFab buttonRef={fabRef} onOpen={() => { setOpen(true); setMinimized(false); }} />}
             {open && (
                 <BangJoPanel
                     messages={messages}
@@ -49,7 +50,11 @@ export default function BangJoWidget() {
                     minimized={minimized}
                     onSend={sendMessage}
                     onMinimize={() => setMinimized((value) => !value)}
-                    onClose={() => { setOpen(false); setMinimized(false); }}
+                    onClose={() => {
+                        setOpen(false);
+                        setMinimized(false);
+                        window.requestAnimationFrame(() => fabRef.current?.focus());
+                    }}
                 />
             )}
         </>

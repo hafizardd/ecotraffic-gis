@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { exportEmissionHistory } from "@/services/api";
 import type { AnalyticsQuery } from "@/types";
+import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS } from "@/styles/tailwind";
 
 // `query` overrides the shared context query so Riwayat's search/tab/source
 // filters are reflected in the export, not just the visible table page.
@@ -17,10 +18,10 @@ export default function EmissionExport({ query: queryOverride }: { query?: Analy
         catch (error) { setError(error instanceof Error ? error.message : "Ekspor gagal"); }
         finally { setBusy(false); }
     }
-    return <div className="analytics-export">
-        <button className="analytics-button" disabled={busy} onClick={() => void download("csv")}>{busy ? "Menyiapkan…" : "Ekspor CSV"}</button>
-        <button className="analytics-button" disabled={busy} onClick={() => void download("json")}>Ekspor JSON</button>
+    return <div className="my-[14px] flex flex-wrap items-center gap-[10px] text-xs text-[#94a3b8]">
+        <button className={ANALYTICS_BUTTON_CLASS} disabled={busy} onClick={() => void download("csv")}>{busy ? "Menyiapkan…" : "Ekspor CSV"}</button>
+        <button className={ANALYTICS_BUTTON_CLASS} disabled={busy} onClick={() => void download("json")}>Ekspor JSON</button>
         <small>Seluruh hasil sesuai filter, termasuk halaman lain.</small>
-        {error && <span role="alert" className="analytics-error">{error}</span>}
+        {error && <span role="alert" className={ANALYTICS_ERROR_CLASS}>{error}</span>}
     </div>;
 }

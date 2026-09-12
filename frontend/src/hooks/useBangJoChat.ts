@@ -55,13 +55,14 @@ export default function useBangJoChat() {
             }, history);
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant", content: formatAnswer(reply),
+                citations: reply.answer?.citations,
                 contextLabel: reply.context_label ?? undefined,
                 timestamp: new Date().toISOString(),
             }]);
         } catch (error) {
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant",
-                content: error instanceof Error ? `Maaf, terjadi kendala: ${error.message}` : "Maaf, layanan Bang Jo sedang tidak tersedia.",
+                content: error instanceof Error ? `Bang Jo tidak dapat memuat jawaban: ${error.message}` : "Layanan Bang Jo sedang tidak tersedia.",
                 timestamp: new Date().toISOString(),
             }]);
         } finally {

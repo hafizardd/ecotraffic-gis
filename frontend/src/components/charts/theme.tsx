@@ -5,17 +5,25 @@ import { useEffect, useState } from "react";
 // One interaction language for every chart: tooltip chrome, axes, grid and a
 // first-mount-only entrance animation that periodic refetches never replay.
 export const CHART_TOOLTIP_STYLE = {
-    backgroundColor: "#0e1d2e",
-    border: "1px solid #334155",
-    borderRadius: 8,
+    backgroundColor: "var(--surface-sunken)",
+    border: "1px solid var(--contour-strong)",
+    borderRadius: 6,
     boxShadow: "0 14px 34px rgba(0, 0, 0, 0.4)",
-    color: "#f8fafc",
-    fontSize: 12,
+    color: "var(--text)",
+    fontFamily: "var(--font-data)",
+    fontSize: 11,
+    lineHeight: 1.45,
+    padding: "9px 11px",
 } as const;
 
-export const CHART_TOOLTIP_LABEL_STYLE = { color: "#94a3b8", marginBottom: 6 } as const;
-export const CHART_AXIS = { stroke: "#94a3b8", tick: { fill: "#94a3b8", fontSize: 11 }, tickLine: false } as const;
-export const CHART_GRID_STROKE = "#24364a";
+export const CHART_TOOLTIP_LABEL_STYLE = { color: "var(--secondary)", marginBottom: 6, fontWeight: 600 } as const;
+export const CHART_AXIS = {
+    stroke: "var(--contour-strong)",
+    tick: { fill: "var(--muted)", fontFamily: "var(--font-data)", fontSize: 10 },
+    tickLine: false,
+} as const;
+export const CHART_GRID_STROKE = "var(--contour)";
+export const CHART_TOOLTIP_CURSOR = { stroke: "var(--selection)", strokeWidth: 1, strokeDasharray: "3 4", opacity: 0.58 } as const;
 
 export function entranceProps(active: boolean, index = 0) {
     return {

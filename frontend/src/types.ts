@@ -340,6 +340,7 @@ export interface BangJoMessage {
     id: string;
     role: "user" | "assistant";
     content: string;
+    citations?: { label: string; source?: string }[];
     contextLabel?: string;
     timestamp: string;
 }
@@ -468,6 +469,7 @@ export interface BusStopDetail {
 export interface BangJoAnswer {
     content: string;
     source?: string;
+    citations?: { label: string; source?: string }[];
 }
 
 export interface BangJoReply {

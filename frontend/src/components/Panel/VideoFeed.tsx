@@ -69,16 +69,16 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
     }, [onStatusChange, scheduleRetry]);
 
     return (
-        <div className="video-frame" style={{ position: "relative" }}>
+        <div className="relative aspect-video overflow-hidden rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[var(--canvas)]">
             {status === "loading" && (
-                <div className="video-loading">
+                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-[var(--canvas)] text-[10px] text-[var(--secondary)]" role="status" aria-label="Menghubungkan stream CCTV">
                     <Skeleton height="100%" width="100%" radius={0} />
                 </div>
             )}
             {status === "error" && (
-                <div className="video-error" role="status">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[var(--canvas)] px-4 text-center [&>strong]:text-[12px] [&>strong]:text-[#fca5a5] [&>span]:text-[10px] [&>span]:text-[var(--muted)]" role="status">
                     <strong>Stream tidak tersedia</strong>
-                    <span>Mencoba menghubungkan kembali...</span>
+                    <span>Mencoba menghubungkan kembali…</span>
                 </div>
             )}
             {streamUrl && (
@@ -87,13 +87,12 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
                 <img
                     key={cameraId}
                     src={streamUrl}
-                    className="video-element"
+                    className={`h-full w-full object-cover ${status === "streaming" ? "block" : "hidden"}`}
                     alt={`Tracked CCTV ${cameraId}`}
                     decoding="async"
                     fetchPriority="low"
                     onLoad={handleLoad}
                     onError={handleError}
-                    style={{ display: status === "streaming" ? "block" : "none" }}
                 />
             )}
         </div>

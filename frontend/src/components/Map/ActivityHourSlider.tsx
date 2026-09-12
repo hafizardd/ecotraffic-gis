@@ -12,12 +12,16 @@ const PLAY_INTERVAL_MS = 1000;
 // request/render per pixel. The date input reuses the same profile for any
 // calendar day (the backend maps hour-of-day onto the stored buckets). The play
 // button auto-advances left to right, stopping at the rightmost hour.
-export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay }: {
+export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay, displayedCount, resolution, aggregated, stale }: {
     hours: string[];
     value: string | null;
     onChange: (hour: string) => void;
     day: string | null;
     onChangeDay: (day: string) => void;
+    displayedCount: number;
+    resolution: string;
+    aggregated: boolean;
+    stale: boolean;
 }) {
     const index = sliderIndex(hours, value);
     // null = follow the committed value; a number = the in-progress drag.
@@ -29,12 +33,13 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
         setSynced(value);
         setPreview(null);
     }
-    const [playing, setPlaying] = useState(false);
-    const last = hours.length - 1;
-    const selected = Math.min(Math.max(preview ?? index, 0), Math.max(last, 0));
     const commitTimer = useRef<number | null>(null);
 
     useEffect(() => () => { if (commitTimer.current !== null) window.clearTimeout(commitTimer.current); }, []);
+
+    const [playing, setPlaying] = useState(false);
+    const last = hours.length - 1;
+    const selected = Math.min(Math.max(preview ?? index, 0), Math.max(last, 0));
 
     // One hour per tick, left to right; stop when the rightmost hour is reached.
     // Rescheduling on `selected` (a timeout, not an interval) keeps the next step
@@ -77,31 +82,44 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
         setPlaying(true);
     };
     const maxDay = new Date().toISOString().slice(0, 10);
+    const selectedLabel = fmtDateTimeId(hours[selected]);
+    const selectedTime = new Date(hours[selected]).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
     return (
-        <div className="map-hour-slider" aria-label="Potensi aktivitas per jam">
-            <label htmlFor="activity-hour-slider"><Clock aria-hidden="true" /> Potensi per jam</label>
-            {last >= 1 && (
-                <button type="button" className="map-hour-play" onClick={togglePlay}
-                    aria-label={playing ? "Jeda" : "Putar"} title={playing ? "Jeda" : "Putar"}>
-                    {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-                </button>
-            )}
-            <input
-                id="activity-hour-slider"
-                type="range"
-                min={0}
-                max={last}
-                step={1}
-                value={selected}
-                onInput={handleRange}
-                onChange={handleRange}
-            />
-            <output htmlFor="activity-hour-slider">{fmtDateTimeId(hours[selected])}</output>
-            <label className="map-hour-day" htmlFor="activity-hour-day">Tanggal
-                <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
-                    onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
-            </label>
-        </div>
+        <section className="absolute bottom-3 left-1/2 z-20 grid w-[min(650px,calc(100%-320px))] -translate-x-1/2 gap-2 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] text-[var(--secondary)] shadow-[var(--shadow-float)] backdrop-blur-[10px] max-[980px]:right-3 max-[980px]:left-auto max-[980px]:w-[calc(100%-292px)] max-[980px]:translate-x-0 max-[760px]:right-2 max-[760px]:bottom-2 max-[760px]:left-2 max-[760px]:w-auto" aria-label="Potensi aktivitas per jam" aria-busy={stale}>
+            <div className="flex min-w-0 items-center gap-2">
+                <label className="flex items-center gap-1.5 font-semibold text-[var(--text)]" htmlFor="activity-hour-slider"><Clock className="h-4 w-4 text-[var(--selection)]" aria-hidden="true" /> Waktu aktivitas</label>
+                {last >= 1 && (
+                    <button type="button" className="grid h-6 w-6 cursor-pointer place-items-center rounded-[6px] border border-[color:rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] text-[#dce7f3] hover:border-[var(--selection)] [&>svg]:h-[13px] [&>svg]:w-[13px]" onClick={togglePlay}
+                        aria-label={playing ? "Jeda" : "Putar"} title={playing ? "Jeda" : "Putar"}>
+                        {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+                    </button>
+                )}
+                <span className="h-3 border-l border-[var(--border)]" aria-hidden="true" />
+                <output className="font-[var(--font-data)] font-semibold text-[#8edcff] tabular-nums" htmlFor="activity-hour-slider" title={selectedLabel} aria-live="polite">{selectedTime}</output>
+                <span className="ml-auto truncate text-[10px] text-[var(--muted)]">
+                    {stale ? "Memperbarui grid…" : `${displayedCount} sel · ${resolution}${aggregated ? " · agregat" : ""}`}
+                </span>
+            </div>
+            <div className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3">
+                <input
+                    id="activity-hour-slider"
+                    type="range"
+                    min={0}
+                    max={hours.length - 1}
+                    step={1}
+                    value={selected}
+                    aria-valuetext={selectedLabel}
+                    onInput={handleRange}
+                    onChange={handleRange}
+                    className="map-range w-full"
+                />
+                <label className="flex min-h-[var(--control-height)] items-center gap-2 text-[10px] font-semibold text-[var(--muted)]" htmlFor="activity-hour-day"><span className="max-[430px]:sr-only">Tanggal</span>
+                    <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
+                        className="min-h-[var(--control-height)] rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface-raised)] px-2 text-[11px] text-[var(--text)] [color-scheme:dark] hover:border-[var(--selection)]"
+                        onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
+                </label>
+            </div>
+        </section>
     );
 }

@@ -7,6 +7,7 @@ import type { AutoInsightEntity } from "@/utils/autoInsight";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import MarkdownText from "@/components/ui/MarkdownText";
+import { ANALYTICS_BUTTON_CLASS, PANEL_SECTION_CLASS, SEGMENT_EMPTY_CLASS } from "@/styles/tailwind";
 
 export default function AutoInsightCard({ entity, label }: { entity: AutoInsightEntity; label: string }) {
     const { reply, loading, generate, retry } = useAutoInsight(entity);
@@ -18,14 +19,14 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
     const started = loading || reply !== null;
 
     return (
-        <section className="panel-section auto-insight-section">
-            <SectionTitle title="Insight Bang Jo" meta={meta} />
+        <section className={PANEL_SECTION_CLASS}>
+            <SectionTitle title="Insight Bang Jo" eyebrow="Konteks keputusan" meta={meta} />
             {!started && (
-                <div className="auto-insight-actions">
-                    <button type="button" className="analytics-button auto-insight-generate" onClick={generate}>
+                <div className="mb-[10px] grid grid-cols-2 gap-2">
+                    <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center justify-center gap-2`} onClick={generate}>
                         <Sparkles aria-hidden="true" /> Buat insight
                     </button>
-                    <button type="button" className="analytics-button bangjo-promote" onClick={() => askBangJo(question)}>
+                    <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center justify-center gap-2`} onClick={() => askBangJo(question)}>
                         <MessageCircle aria-hidden="true" /> Tanya Bang Jo
                     </button>
                 </div>
@@ -33,26 +34,26 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
             {started && (
                 <>
                     {loading && !answer && (
-                        <div className="auto-insight-skeleton" aria-hidden="true">
+                        <div role="status" aria-label="Memuat insight Bang Jo" className="mb-[10px] grid gap-[7px]">
                             <Skeleton height={10} width="92%" />
                             <Skeleton height={10} width="100%" />
                             <Skeleton height={10} width="68%" />
                         </div>
                     )}
                     {!loading && !answer && (
-                        <div className="auto-insight-body">
-                            {reply?.detail && <p className="data-empty">{reply.detail}</p>}
-                            <button type="button" className="analytics-button auto-insight-generate" onClick={retry}>
+                        <div className="mb-3 grid gap-2">
+                            {reply?.detail && <p className={SEGMENT_EMPTY_CLASS}>{reply.detail}</p>}
+                            <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center justify-center gap-2`} onClick={retry}>
                                 <Sparkles aria-hidden="true" /> Coba lagi
                             </button>
                         </div>
                     )}
                     {answer && (
-                        <div className="auto-insight-body">
-                            <MarkdownText className="auto-insight-summary">{answer.content}</MarkdownText>
+                        <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(9,26,34,0.42)] p-3">
+                            <MarkdownText className="m-0 text-[11px] leading-[1.65] text-[var(--text)] [overflow-wrap:anywhere]">{answer.content}</MarkdownText>
                         </div>
                     )}
-                    <button type="button" className="analytics-button bangjo-promote is-full" onClick={() => askBangJo(question)}>
+                    <button type="button" className={`${ANALYTICS_BUTTON_CLASS} flex w-full items-center justify-center gap-2`} onClick={() => askBangJo(question)}>
                         <MessageCircle aria-hidden="true" /> Tanya Bang Jo
                     </button>
                 </>

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { analyticsQuery, analyticsLiveStatus, clampPage, filterSelectOptions, isNewerSegment, numberDuplicateNames, pageWindow, validRealtimeSegment } from "../src/utils/emissionAnalytics.ts";
+import { fmtChartTickId } from "../src/utils/format.ts";
 
 const now = "2026-09-10T12:00:00.000Z";
 const filter = { timeRange: "1h", segmentId: "A", corridorId: "C", from: null, to: null };
@@ -74,4 +75,15 @@ test("select search is case-insensitive and trims the query", () => {
     assert.deepEqual(filterSelectOptions(options, "  JALAN  "), options);
     assert.deepEqual(filterSelectOptions(options, ""), options);
     assert.deepEqual(filterSelectOptions(options, "zzz"), []);
+});
+
+test("chart ticks add calendar context when an analytical range spans days", () => {
+    const value = "2026-09-10T12:30:00.000Z";
+    const intraday = fmtChartTickId(value, "2026-09-10T00:00:00.000Z", "2026-09-10T23:00:00.000Z");
+    const multiDay = fmtChartTickId(value, "2026-09-08T00:00:00.000Z", "2026-09-12T00:00:00.000Z");
+    const month = fmtChartTickId(value, "2026-08-20T00:00:00.000Z", "2026-09-12T00:00:00.000Z");
+    assert.match(intraday, /\d{2}[:.]\d{2}/);
+    assert.match(multiDay, /10\s+Sep/i);
+    assert.match(month, /10\s+Sep/i);
+    assert.equal(fmtChartTickId("invalid"), "Data tidak tersedia");
 });

@@ -4,6 +4,8 @@ import { useEmissionsContext } from "@/context/EmissionsContext"
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import Skeleton from "@/components/ui/Skeleton";
 import { formatNumber } from "@/utils/format";
+import { POLLUTANT_TEXT_CLASS } from "@/styles/tailwind";
+import { ChevronDown } from "lucide-react";
 
 export default function GlobalCounter() {
     const { emissionMap } = useEmissionsContext();
@@ -19,28 +21,41 @@ export default function GlobalCounter() {
     }
 
     const hasData = emissionMap.size > 0;
+    const co2Total = totals.co2;
+
+    const metrics = EMISSION_DEFINITIONS.map(({ key, label }) => (
+        <div key={key} className={`grid min-w-[92px] grid-rows-[auto_auto_auto] content-center gap-y-0.5 border-r border-[var(--border)] px-3 last:border-0 ${POLLUTANT_TEXT_CLASS[key]}`}>
+            {hasData ? <>
+                <dt className="flex min-w-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.04em] uppercase"><span className="h-1.5 w-1.5 flex-[0_0_6px] rounded-full bg-current" aria-hidden="true" />{label}</dt>
+                <dd className="m-0 flex min-w-0 items-baseline gap-1.5 text-[var(--text)]"><strong className="font-[var(--font-data)] text-[15px] leading-5 font-semibold tabular-nums">{formatNumber(totals[key])}</strong><span className="text-[10px] text-[var(--secondary)]">g/min</span></dd>
+                <dd className="m-0 font-[var(--font-data)] text-[10px] leading-3 text-[var(--muted)] tabular-nums">{formatNumber(totalsKgHr[key])} kg/jam</dd>
+            </> : <>
+                <dt><Skeleton height={10} width="62%" /></dt>
+                <dd className="m-0"><Skeleton height={18} width="82%" /></dd>
+                <dd className="m-0"><Skeleton height={8} width="54%" /></dd>
+            </>}
+        </div>
+    ));
+
     return (
-        <section className="emissions-bar" aria-label="Ringkasan emisi global">
-            <div className="emissions-bar-label"><span>GLOBAL</span><strong>Emisi Saat Ini</strong></div>
-            <div className="emissions-summary">
-                {hasData ? (
-                    EMISSION_DEFINITIONS.map(({ key, label }) => (
-                        <div key={key} className={`emission-total pollutant-${key}`}>
-                            <span className="summary-label"><span className="pollutant-dot" />{label}</span>
-                            <span className="summary-value"><strong>{formatNumber(totals[key])}</strong><span className="unit">g/min</span></span>
-                            <span className="hourly">{formatNumber(totalsKgHr[key])} kg/hr</span>
-                        </div>
-                    ))
-                ) : (
-                    EMISSION_DEFINITIONS.map(({ key }) => (
-                        <div key={key} className="emission-total">
-                            <span className="summary-label"><Skeleton height={10} width="68%" /></span>
-                            <span className="summary-value"><Skeleton height={16} width="82%" /></span>
-                            <span className="hourly"><Skeleton height={8} width="56%" /></span>
-                        </div>
-                    ))
-                )}
-            </div>
-        </section>
+        <>
+            <section className="flex min-h-[60px] min-w-0 items-stretch border-b border-[var(--border)] bg-[var(--surface-sunken)] py-2 pr-3 pl-4 max-[760px]:hidden" aria-label="Ringkasan emisi kota">
+                <div className="flex w-[142px] flex-[0_0_142px] flex-col justify-center border-r border-[var(--border)] max-[1100px]:w-[124px] max-[1100px]:basis-[124px]"><span className="text-[10px] font-bold tracking-[0.14em] text-[var(--brand-strong)] uppercase">Telemetri kota</span><strong className="mt-0.5 text-[12px] font-semibold">8 polutan · saat ini</strong></div>
+                <dl className="grid min-w-0 flex-1 grid-cols-[repeat(8,minmax(92px,1fr))]">{metrics}</dl>
+            </section>
+            <details className="group hidden min-w-0 max-w-full overflow-hidden border-b border-[var(--border)] bg-[var(--surface-sunken)] max-[760px]:block">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 marker:content-none [&::-webkit-details-marker]:hidden">
+                    <span className="text-[10px] font-bold tracking-[0.12em] text-[var(--brand-strong)] uppercase">Telemetri</span>
+                    <span className="h-3 border-l border-[var(--border)]" aria-hidden="true" />
+                    <span className="text-[12px] text-[var(--secondary)]">CO₂</span>
+                    <strong className="font-[var(--font-data)] text-[13px] font-semibold tabular-nums">{hasData ? `${formatNumber(co2Total)} g/min` : "Memuat data"}</strong>
+                    <span className="ml-auto text-[10px] text-[var(--muted)]">Lihat 8 polutan</span>
+                    <ChevronDown className="h-4 w-4 text-[var(--secondary)] transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="overflow-x-auto border-t border-[var(--border)]">
+                    <dl className="grid min-w-[896px] grid-cols-[repeat(8,minmax(112px,1fr))] py-2">{metrics}</dl>
+                </div>
+            </details>
+        </>
     );
 }
