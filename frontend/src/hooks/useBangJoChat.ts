@@ -8,6 +8,9 @@ function newId() {
 }
 
 function formatAnswer(reply: Awaited<ReturnType<typeof fetchBangJoReply>>): string {
+    if (reply.blocked) {
+        return reply.message ?? "Maaf, pertanyaan ini di luar cakupan yang bisa saya bantu.";
+    }
     if (reply.answer) {
         const answer = reply.answer;
         return [
@@ -49,7 +52,9 @@ export default function useBangJoChat() {
             const reply = await fetchBangJoReply(content, getSelectedSegmentId(), history);
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant", content: formatAnswer(reply),
-                contextLabel: reply.context_label ?? undefined, timestamp: new Date().toISOString(),
+                contextLabel: reply.context_label ?? undefined,
+                citations: reply.answer?.citations ?? undefined,
+                timestamp: new Date().toISOString(),
             }]);
         } catch (error) {
             setMessages((prev) => [...prev, {

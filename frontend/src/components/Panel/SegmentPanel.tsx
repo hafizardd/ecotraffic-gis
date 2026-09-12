@@ -9,6 +9,7 @@ import { useEmissionsContext } from "@/context/EmissionsContext";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ActivityPotentialCard from "@/components/Panel/ActivityPotentialCard";
+import AutoInsightCard from "@/components/Panel/AutoInsightCard";
 import {
     MISSING_LABEL,
     fmtDateTimeId,
@@ -112,6 +113,7 @@ function SegmentDetailPanel({
                                 ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}`
                                 : "Belum ada perhitungan emisi"}
                         </div>
+                        <AutoInsightCard entity={{ type: "segment", id: liveDetail.road_segment_id }} label={liveDetail.name} />
                         <SegmentDetails detail={liveDetail} fallback={fallback} />
                     </>
                 )}

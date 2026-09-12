@@ -333,6 +333,7 @@ export interface BangJoMessage {
     role: "user" | "assistant";
     content: string;
     contextLabel?: string;
+    citations?: { label: string; source?: string }[];
     timestamp: string;
 }
 
@@ -463,6 +464,7 @@ export interface BangJoAnswer {
     asi_category: string;
     recommendation: string;
     evidence: string[];
+    citations?: { label: string; source?: string }[];
     source?: string;
 }
 
@@ -471,5 +473,24 @@ export interface BangJoReply {
     answer: BangJoAnswer | null;
     context_label: string | null;
     candidates?: { road_segment_id: string; name: string; count?: number }[];
+    detail?: string;
+    blocked?: boolean;
+    message?: string | null;
+}
+
+export type BangJoEntityType = "segment" | "hex" | "stop";
+
+export interface BangJoAutoInsightRequest {
+    road_segment_id?: string;
+    hex_id?: number;
+    stop_id?: string;
+}
+
+export interface BangJoAutoInsightReply {
+    needs_selection: boolean;
+    answer: BangJoAnswer | null;
+    context_label: string | null;
+    entity: { type: BangJoEntityType; id: string | number } | null;
+    cached: boolean;
     detail?: string;
 }

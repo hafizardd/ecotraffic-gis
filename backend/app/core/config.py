@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     BANGJO_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
     BANGJO_DEBUG_RAW: bool = False
 
+    # Entity-resolution embeddings (OpenRouter-compatible /embeddings). Reuses
+    # OPENROUTER_API_KEY + httpx; every failure falls back to string matching.
+    BANGJO_EMBEDDINGS_ENABLED: bool = True
+    BANGJO_EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
+    BANGJO_EMBEDDINGS_URL: str = "https://openrouter.ai/api/v1/embeddings"
+    BANGJO_RESOLUTION_THRESHOLD: float = Field(default=0.82, ge=0.0, le=1.0)
+    BANGJO_AUTOINSIGHT_TTL_SECONDS: int = Field(default=300, gt=0)
+    BANGJO_CACHE_TTL_SECONDS: int = Field(default=300, gt=0)
+
     # Deployments may define settings for adjacent services; they should not
     # prevent this application from starting when those keys are unrelated.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

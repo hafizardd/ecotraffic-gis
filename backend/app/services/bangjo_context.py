@@ -171,3 +171,32 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
         "coverage_gap": coverage_gap,
         "intervention_hint": intervention_hint,
     }
+
+
+async def segments_for_hex(db: AsyncSession, hex_id: int) -> list[str]:
+    """Reverse of the hex-intersection query: segments crossing one hex cell."""
+    hex_geom = select(ActivityGridHex.geometry).where(ActivityGridHex.hex_id == hex_id).scalar_subquery()
+    rows = (
+        await db.execute(
+            select(RoadSegment.road_segment_id).where(func.ST_Intersects(RoadSegment.geometry, hex_geom))
+        )
+    ).scalars().all()
+    return list(rows)
+
+
+async def segment_for_stop(db: AsyncSession, stop_id: str) -> str | None:
+    """Nearest road segment to a surveyed bus stop within the K4 buffer."""
+    stop_geom = (
+        select(SurveyStopObservation.geometry)
+        .where(SurveyStopObservation.source_id == stop_id)
+        .scalar_subquery()
+    )
+    row = (
+        await db.execute(
+            select(RoadSegment.road_segment_id)
+            .where(func.ST_DWithin(cast(RoadSegment.geometry, _geog), cast(stop_geom, _geog), K4_BUFFER_M))
+            .order_by(func.ST_Distance(cast(RoadSegment.geometry, _geog), cast(stop_geom, _geog)))
+            .limit(1)
+        )
+    ).first()
+    return row[0] if row else None

@@ -5,6 +5,7 @@ asked to recall or invent values. Any LLM failure degrades to a deterministic
 summary built from the same context (never a 500).
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -13,13 +14,16 @@ import time
 import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.road_segment import RoadSegment
-from app.services.bangjo_context import build_context
+from app.models.segment_emission import SegmentEmission
+from app.services.bangjo_context import build_context, segment_for_stop, segments_for_hex
+from app.services.bangjo_guardrails import sanitize_history, screen_query
+from app.services.bangjo_retrieval import resolve_by_embedding
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -52,6 +56,28 @@ INTERVENTION_TEXT = {
     "add_new_stop": "tambah halte baru di segmen ini",
     "improve_existing_stop": "tingkatkan fasilitas/lingkungan halte yang ada",
     "increase_frequency": "tambah frekuensi layanan (jumlah armada)",
+}
+
+AUTO_INSIGHT_PROMPT = (
+    "Berikan analisis singkat dan tepat satu rekomendasi intervensi ASI untuk koridor ini "
+    "berdasarkan konteks yang diberikan."
+)
+
+# Process-level capability cache: set once a structured-probe call is rejected
+# by the model, so later requests skip the doomed structured round-trip.
+_STRUCTURED_UNSUPPORTED = False
+
+_RANKING_QUERY = re.compile(
+    r"\b(tersibuk|tertinggi|terbesar|terbanyak|terburuk|"
+    r"paling\s+(sibuk|tinggi|besar|banyak)|top|ranking|peringkat)\b",
+    re.IGNORECASE,
+)
+
+# Colloquial corridor names -> canonical normalized name. Extend as needed.
+_ALIAS_MAP = {
+    "malioboro": "jalan malioboro",
+    "jogja": "yogyakarta",
+    "ugm": "universitas gadjah mada",
 }
 
 
@@ -110,14 +136,24 @@ def _fallback_answer(context: dict, message: str, reason: str = "llm_error") -> 
         "asi_category": CLASS_ASI.get(activity_class, "Improve"),
         "recommendation": recommendation,
         "evidence": evidence,
+        "citations": [],
         "source": "fallback",
         "fallback_reason": reason,
     }
 
 
 def _normalize_name(name: str) -> str:
-    text = re.sub(r"\b(?:jl|jln)\.?\s+", "jalan ", (name or "").casefold())
-    return re.sub(r"\s+", " ", text).strip()
+    text = (name or "").casefold()
+    text = re.sub(r"\b(?:jl|jln)\.?\s+", "jalan ", text)
+    text = re.sub(r"\bgg\.?\s+", "gang ", text)
+    text = re.sub(r"\bkor\.?\s+", "koridor ", text)
+    text = re.sub(r"[^\w\s]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return _ALIAS_MAP.get(text, text)
+
+
+def _is_ranking_query(message: str) -> bool:
+    return bool(_RANKING_QUERY.search(message or ""))
 
 
 def _candidate_list(groups: list[list[dict]]) -> list[dict]:
@@ -149,6 +185,96 @@ async def _resolve_segment(db: AsyncSession, message: str) -> tuple[list[str] | 
     if scored and scored[0][0] >= 2:
         return [member["road_segment_id"] for member in scored[0][1]], []
     return None, _candidate_list([members for _, members in scored[:5]])
+
+
+async def _resolve_segment_cascade(
+    db: AsyncSession, message: str
+) -> tuple[list[str] | None, list[dict], str]:
+    """Layer A (normalized name/alias) -> Layer B (embeddings) -> string fallback."""
+    rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
+    lower = _normalize_name(message)
+    groups: dict[str, list[dict]] = {}
+    for rid, name in rows:
+        key = _normalize_name(name)
+        if key:
+            groups.setdefault(key, []).append({"road_segment_id": rid, "name": name})
+    named = [members for key, members in groups.items() if key in lower or (lower and lower in key)]
+    if len(named) == 1:
+        return [member["road_segment_id"] for member in named[0]], [], "alias"
+    if len(named) > 1:
+        return None, _candidate_list(named), "ambiguous"
+    embedded = await resolve_by_embedding(db, message)
+    if embedded:
+        return embedded, [], "embedding"
+    ids, candidates = await _resolve_segment(db, message)
+    return ids, candidates, "string"
+
+
+async def _top_segment_ids(db: AsyncSession) -> list[str]:
+    """Road-segment chunk ids of the busiest named corridor by latest emission."""
+    latest = (
+        select(SegmentEmission.road_segment_id, func.max(SegmentEmission.period_end).label("period_end"))
+        .group_by(SegmentEmission.road_segment_id)
+        .subquery()
+    )
+    rows = (
+        await db.execute(
+            select(RoadSegment.road_segment_id, RoadSegment.name, SegmentEmission.pollutant_totals_g_h)
+            .join(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
+            .join(
+                latest,
+                and_(
+                    latest.c.road_segment_id == SegmentEmission.road_segment_id,
+                    latest.c.period_end == SegmentEmission.period_end,
+                ),
+            )
+        )
+    ).all()
+    groups: dict[str, list[tuple[str, float]]] = {}
+    for rid, name, totals in rows:
+        total = sum(value for value in (totals or {}).values() if isinstance(value, (int, float)))
+        groups.setdefault(name, []).append((rid, float(total)))
+    if not groups:
+        return []
+    ranked = sorted(groups.values(), key=lambda members: sum(total for _, total in members), reverse=True)
+    return [rid for rid, _ in ranked[0]]
+
+
+async def _cache_get(key: str) -> str | None:
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
+        try:
+            value = await client.get(key)
+        finally:
+            await client.aclose()
+        return value.decode() if isinstance(value, bytes) else value
+    except Exception:
+        logger.warning("bangjo_cache_get_failed", exc_info=True)
+        return None
+
+
+async def _cache_set(key: str, value: str, ttl_seconds: int) -> None:
+    try:
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
+        try:
+            await client.setex(key, ttl_seconds, value)
+        finally:
+            await client.aclose()
+    except Exception:
+        logger.warning("bangjo_cache_set_failed", exc_info=True)
+
+
+def _chat_cache_key(message: str, segment_ids: list[str], history: list[dict]) -> str:
+    digest = hashlib.sha256()
+    digest.update(_normalize_name(message).encode("utf-8"))
+    digest.update("|".join(segment_ids).encode("utf-8"))
+    for turn in history[-4:]:
+        digest.update(f"{turn['role']}:{turn['content']}".encode("utf-8"))
+    return f"bangjo:chat:{digest.hexdigest()}"
 
 
 _STRING_KEYS = ("summary", "asi_category", "recommendation")
@@ -187,6 +313,8 @@ def _normalize_answer(parsed: dict) -> dict:
         answer["summary"] = answer["recommendation"]
     if not answer["summary"]:
         raise ValueError("LLM answer missing summary")
+    if isinstance(parsed.get("citations"), list):
+        answer["citations"] = parsed["citations"]
     return answer
 
 
@@ -239,10 +367,20 @@ def _parse_answer(text: str) -> dict:
     return _regex_answer(text)
 
 
-async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> dict:
+def _history_turns(history) -> list[dict]:
+    turns = []
+    for turn in history or []:
+        role = turn.get("role") if isinstance(turn, dict) else getattr(turn, "role", None)
+        content = turn.get("content") if isinstance(turn, dict) else getattr(turn, "content", None)
+        if role in ("user", "assistant"):
+            turns.append({"role": role, "content": content})
+    return turns
+
+
+async def _ask_llm(message: str, context: dict, history, timings: dict | None = None) -> dict:
     if not settings.OPENROUTER_API_KEY:
         return _fallback_answer(context, message, "no_api_key")
-    turns = [{"role": turn.role, "content": turn.content} for turn in history if turn.role in ("user", "assistant")]
+    turns = _history_turns(history)
     turns.append({"role": "user", "content": f"Konteks:\n{json.dumps(context, ensure_ascii=False)}\n\nPertanyaan: {message}"})
     base = {"model": settings.BANGJO_MODEL, "max_tokens": settings.BANGJO_MAX_TOKENS}
     url = settings.BANGJO_BASE_URL
@@ -250,9 +388,11 @@ async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> d
     started = time.monotonic()
 
     async def call(client: httpx.AsyncClient, messages: list[dict], structured: bool) -> dict | None:
+        global _STRUCTURED_UNSUPPORTED
         body = {**base, "messages": messages, **({"response_format": {"type": "json_object"}} if structured else {})}
         response = await client.post(url, headers=headers, json=body)
         if structured and response.status_code in (400, 404, 422):
+            _STRUCTURED_UNSUPPORTED = True
             return None
         response.raise_for_status()
         data = response.json()
@@ -280,12 +420,18 @@ async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> d
         return extra
 
     result: dict | None = None
+    parse_started = started
+    llm_ms: float | None = None
+    parse_ms: float | None = None
     try:
         async with httpx.AsyncClient(timeout=settings.BANGJO_TIMEOUT_SECONDS) as client:
             conversation = [{"role": "system", "content": SYSTEM_PROMPT}, *turns]
-            result = await call(client, conversation, structured=True)
+            if not _STRUCTURED_UNSUPPORTED:
+                result = await call(client, conversation, structured=True)
             if result is None:
                 result = await call(client, conversation, structured=False)
+            llm_ms = round((time.monotonic() - started) * 1000, 2)
+            parse_started = time.monotonic()
             try:
                 parsed = _parse_answer(result["raw"])
             except ValueError:
@@ -294,6 +440,7 @@ async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> d
                          {"role": "user", "content": CORRECTIVE_PROMPT}]
                 result = await call(client, retry, structured=False)
                 parsed = _parse_answer(result["raw"])
+            parse_ms = round((time.monotonic() - parse_started) * 1000, 2)
         logger.info("bangjo_llm_call", extra={
             "source": "llm",
             "latency_s": round(time.monotonic() - started, 3),
@@ -302,8 +449,11 @@ async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> d
             "finish_reason": result["finish_reason"],
             "structured": result["structured"],
             "model": settings.BANGJO_MODEL,
+            "llm_ms": llm_ms,
+            "parse_ms": parse_ms,
+            **(timings or {}),
         })
-        return {**parsed, "source": "llm"}
+        return {**parsed, "source": "llm", "citations": parsed.get("citations", [])}
     except httpx.TimeoutException:
         logger.exception("bangjo_llm_failed", extra=diagnostics(result, "timeout"))
         return _fallback_answer(context, message, "timeout")
@@ -426,18 +576,108 @@ def _merge_contexts(contexts: list[dict]) -> dict:
 
 @router.post("/bangjo")
 async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
+    started = time.monotonic()
+    timings: dict = {"cache_hit": False, "blocked": False}
+    try:
+        gate = screen_query(payload.message)
+    except Exception:
+        logger.warning("bangjo_guardrail_error", exc_info=True)
+        gate = {"blocked": False, "reason": None, "message": None}
+    timings["guardrail_ms"] = round((time.monotonic() - started) * 1000, 2)
+    if gate["blocked"]:
+        timings["blocked"] = True
+        logger.info("bangjo_llm_call", extra={**timings, "source": "blocked"})
+        return {"needs_selection": False, "answer": None, "context_label": None,
+                "blocked": True, "message": gate["message"]}
+
+    history = sanitize_history(payload.history)
     segment_ids = [payload.road_segment_id] if payload.road_segment_id else None
+    if not segment_ids and _is_ranking_query(payload.message):
+        segment_ids = await _top_segment_ids(db)
+    timings["resolve_ms"] = round((time.monotonic() - started) * 1000, 2)
+    candidates: list[dict] = []
     if not segment_ids:
-        segment_ids, candidates = await _resolve_segment(db, payload.message)
+        segment_ids, candidates, _method = await _resolve_segment_cascade(db, payload.message)
+        timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
         if not segment_ids:
-            return {"needs_selection": True, "candidates": candidates, "answer": None, "context_label": None}
+            return {"needs_selection": True, "candidates": candidates, "answer": None,
+                    "context_label": None, "blocked": False, "message": None}
+
+    cache_key = _chat_cache_key(payload.message, segment_ids, history)
+    cached = await _cache_get(cache_key)
+    if cached:
+        try:
+            response = json.loads(cached)
+            response["blocked"] = False
+            response["message"] = None
+            timings["cache_hit"] = True
+            logger.info("bangjo_llm_call", extra={**timings, "source": "cache"})
+            return response
+        except ValueError:
+            pass
+
+    context_started = time.monotonic()
     contexts = [context for context in [await build_context(db, sid) for sid in segment_ids] if context]
     if not contexts:
         return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
-                "detail": f"Segmen '{segment_ids[0]}' tidak ditemukan."}
+                "detail": f"Segmen '{segment_ids[0]}' tidak ditemukan.",
+                "blocked": False, "message": None}
     context = _merge_contexts(contexts)
-    answer = await _ask_llm(payload.message, context, payload.history)
+    timings["context_ms"] = round((time.monotonic() - context_started) * 1000, 2)
+    answer = await _ask_llm(payload.message, context, history, timings)
     chunk_count = context["segment"]["chunk_count"]
     label = (f"{context['segment']['name']} ({chunk_count} segmen)" if chunk_count > 1
              else f"{context['segment']['name']} ({segment_ids[0]})")
-    return {"needs_selection": False, "answer": answer, "context_label": label}
+    response = {"needs_selection": False, "answer": answer, "context_label": label,
+                "blocked": False, "message": None}
+    await _cache_set(cache_key, json.dumps(response), settings.BANGJO_CACHE_TTL_SECONDS)
+    return response
+
+
+class AutoInsightRequest(BaseModel):
+    road_segment_id: str | None = None
+    hex_id: int | None = None
+    stop_id: str | None = None
+
+
+async def _entity_segment_ids(db: AsyncSession, payload: AutoInsightRequest) -> tuple[list[str], dict | None]:
+    if payload.road_segment_id:
+        return [payload.road_segment_id], {"type": "segment", "id": payload.road_segment_id}
+    if payload.hex_id is not None:
+        return list(await segments_for_hex(db, payload.hex_id)), {"type": "hex", "id": payload.hex_id}
+    if payload.stop_id:
+        segment_id = await segment_for_stop(db, payload.stop_id)
+        return ([segment_id] if segment_id else []), {"type": "stop", "id": payload.stop_id}
+    return [], None
+
+
+@router.post("/bangjo/auto-insight")
+async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = Depends(get_db)):
+    ids, entity = await _entity_segment_ids(db, payload)
+    if entity is None:
+        return {"needs_selection": True, "answer": None, "context_label": None, "entity": None,
+                "cached": False, "detail": "Pilih segmen, sel grid, atau halte terlebih dahulu."}
+
+    cache_key = f"bangjo:autoinsight:{entity['type']}:{entity['id']}"
+    cached = await _cache_get(cache_key)
+    if cached:
+        try:
+            response = json.loads(cached)
+            response["cached"] = True
+            return response
+        except ValueError:
+            pass
+
+    contexts = [context for context in [await build_context(db, sid) for sid in ids] if context]
+    if not contexts:
+        return {"needs_selection": True, "answer": None, "context_label": None, "entity": entity,
+                "cached": False, "detail": "Entitas ini belum memiliki konteks segmen."}
+    context = _merge_contexts(contexts)
+    answer = await _ask_llm(AUTO_INSIGHT_PROMPT, context, [])
+    chunk_count = context["segment"]["chunk_count"]
+    label = (f"{context['segment']['name']} ({chunk_count} segmen)" if chunk_count > 1
+             else f"{context['segment']['name']} ({ids[0]})")
+    response = {"needs_selection": False, "answer": answer, "context_label": label,
+                "entity": entity, "cached": False}
+    await _cache_set(cache_key, json.dumps(response), settings.BANGJO_AUTOINSIGHT_TTL_SECONDS)
+    return response

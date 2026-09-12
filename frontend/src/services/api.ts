@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityGridHourSeries, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
+import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityGridHourSeries, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 import type { GridLod } from "@/utils/activityGrid";
 import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, HistoricalCameraResponse, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
@@ -131,6 +131,16 @@ export async function fetchBangJoReply(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, road_segment_id: roadSegmentId, history }),
+    });
+    if (!response.ok) throw new Error(`Bang Jo tidak dapat dihubungi (${response.status})`);
+    return response.json();
+}
+
+export async function fetchBangJoAutoInsight(entity: BangJoAutoInsightRequest): Promise<BangJoAutoInsightReply> {
+    const response = await fetch(`${API_BASE}/api/chat/bangjo/auto-insight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entity),
     });
     if (!response.ok) throw new Error(`Bang Jo tidak dapat dihubungi (${response.status})`);
     return response.json();

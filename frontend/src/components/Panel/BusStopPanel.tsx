@@ -8,6 +8,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { interventionColor, readableTextOn } from "@/constants/mapColors";
 import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
+import AutoInsightCard from "@/components/Panel/AutoInsightCard";
 
 const COMPONENTS: { keys: (keyof BusStopDetail)[]; label: string }[] = [
     { keys: ["accessibility_score_100", "accessibility_score"], label: "Aksesibilitas (survei 0-100)" },
@@ -89,6 +90,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>
                             <b className="priority-badge" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
                         </div>
+                        <AutoInsightCard entity={{ type: "stop", id: sourceId }} label={detail.title ?? sourceId} />
                         <section className="panel-section">
                             <SectionTitle title="Skor komponen" meta={`Skor intervensi ${detail.intervention_score == null ? MISSING_LABEL : fmtFloatId(detail.intervention_score, 3)}`} />
                             <div className="stat-grid">

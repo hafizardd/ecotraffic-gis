@@ -10,6 +10,7 @@ import { MISSING_LABEL, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/f
 import { useActivityGridHexHourly } from "@/hooks/useActivityGrid";
 import { withDay, dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
+import AutoInsightCard from "./AutoInsightCard";
 
 export default function ActivityGridPanel({ hexId, hour, onSelectHour, onClose }: {
     hexId: number | null;
@@ -124,6 +125,7 @@ function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, o
                 {props && (
                     <>
                         <ActivityPotentialCard properties={props} />
+                        <AutoInsightCard entity={{ type: "hex", id: hexId }} label={`grid Hex ${hexId}`} />
                         <section className="panel-section">
                             <SectionTitle title="Sumber data" meta={hour ? currentHourLabel ?? undefined : "model offline"} />
                             <ul className="data-source-list">

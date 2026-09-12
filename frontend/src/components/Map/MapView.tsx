@@ -23,7 +23,7 @@ import ActivityHourSlider from "./ActivityHourSlider";
 import { nextGridLod, withDay, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel, GRID_LOD_RESOLUTION, type GridLod } from "@/utils/activityGrid";
 import { circleFeature } from "@/utils/geo";
 import { fmtDateTimeId, fmtIntId, formatNumber } from "@/utils/format";
-import { setSelectedSegmentId as publishSelectedSegment } from "@/utils/selectionStore";
+import { setSelection } from "@/utils/selectionStore";
 import {
     SEGMENT_COLORS,
     CAMERA_TIER_COLORS,
@@ -120,6 +120,17 @@ export default function MapView() {
     useEffect(() => {
         localStorage.setItem("etg-map-mode", mode);
     }, [mode]);
+
+    // Single source of truth for the selection/panel state consumed by Bang Jo
+    // (auto-insight target + dock offset).
+    useEffect(() => {
+        setSelection({
+            segmentId: selectedSegmentId,
+            hexId: selectedHexId,
+            stopId: selectedStopId,
+            cameraId: selectedCamera?.properties.camera_id ?? null,
+        });
+    }, [selectedSegmentId, selectedHexId, selectedStopId, selectedCamera]);
 
     const cameraGeoJSON = useMemo(() => ({
         type: "FeatureCollection" as const,
@@ -300,7 +311,6 @@ export default function MapView() {
         setMode(next);
         setSelectedCamera(null);
         setSelectedSegmentId(null);
-        publishSelectedSegment(null);
         setSelectedHexId(null);
         setSelectedStopId(null);
         setHoveredCamera(null);
@@ -332,17 +342,17 @@ export default function MapView() {
                 const camera = event.features?.find((item) => item.layer?.id === "camera-points");
                 if (camera?.properties?.camera_id) {
                     const found = camerasById.get(String(camera.properties.camera_id));
-                    if (found) { setSelectedCamera(found); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedHexId(null); setSelectedStopId(null); setHoveredCamera(null); setHoveredPoint(null); return; }
+                    if (found) { setSelectedCamera(found); setSelectedSegmentId(null); setSelectedHexId(null); setSelectedStopId(null); setHoveredCamera(null); setHoveredPoint(null); return; }
                 }
                 const feature = event.features?.find((item) => item.layer?.id === "segments-line");
                 if (feature?.properties?.segment_id) {
-                    setSelectedSegmentId(feature.properties.segment_id); publishSelectedSegment(feature.properties.segment_id);
+                    setSelectedSegmentId(feature.properties.segment_id);
                     setSelectedCamera(null); setSelectedHexId(null); setSelectedStopId(null); return;
                 }
                 const hexFeature = event.features?.find((item) => item.layer?.id === "activity-grid-fill");
                 if (hexFeature) {
                     if (hexFeature.properties?.hex_id != null) {
-                        setSelectedHexId(Number(hexFeature.properties.hex_id)); setSelectedCamera(null); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedStopId(null); return;
+                        setSelectedHexId(Number(hexFeature.properties.hex_id)); setSelectedCamera(null); setSelectedSegmentId(null); setSelectedStopId(null); return;
                     }
                     // Aggregated cell: re-zoom instead of opening a panel with a merged score.
                     const map = mapRef.current?.getMap();
@@ -430,7 +440,7 @@ export default function MapView() {
                              onClick={(event) => {
                                  event.stopPropagation();
                                  setSelectedStopId(String(properties.source_id));
-                                 setSelectedCamera(null); setSelectedSegmentId(null); publishSelectedSegment(null); setSelectedHexId(null);
+                                 setSelectedCamera(null); setSelectedSegmentId(null); setSelectedHexId(null);
                              }}
                          >
                              <Bus aria-hidden="true" />
@@ -507,7 +517,7 @@ export default function MapView() {
             : selectedStopId
                 ? <BusStopPanel sourceId={selectedStopId} onClose={() => setSelectedStopId(null)} />
                 : selectedSegmentId
-                    ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); publishSelectedSegment(null); }} />
+                    ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); }} />
                     : <ActivityGridPanel hexId={selectedHexId} hour={activeHour} onSelectHour={setActivityHour} onClose={() => setSelectedHexId(null)} />}
         </div>
     );

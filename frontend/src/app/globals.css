@@ -27,6 +27,7 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --control-height: 38px;
+  --data-panel-width: min(430px, 35vw);
   --weight-label: 600;
   --weight-strong: 800;
   --font-body: var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -1824,6 +1825,9 @@ button {
     flex-basis: 390px;
     min-width: 340px;
   }
+  :root {
+    --data-panel-width: 390px;
+  }
   .emission-total {
     padding: 0 8px;
   }
@@ -1891,6 +1895,9 @@ button {
     flex: 1 1 100%;
     min-width: 0;
     border-radius: 10px;
+  }
+  :root {
+    --data-panel-width: 100vw;
   }
   .panel-header {
     flex-basis: 58px;
@@ -2267,7 +2274,7 @@ button {
 .bangjo-fab {
   position: fixed;
   bottom: 22px;
-  right: 22px;
+  right: var(--bangjo-offset-right, 22px);
   z-index: 40;
   width: 52px;
   height: 52px;
@@ -2312,7 +2319,7 @@ button {
 .bangjo-panel {
   position: fixed;
   top: 84px;
-  right: 22px;
+  right: var(--bangjo-offset-right, 22px);
   bottom: 22px;
   z-index: 41;
   width: min(384px, calc(100vw - 32px));
@@ -2484,6 +2491,60 @@ button {
   padding: 0 15px 11px;
   color: var(--muted);
   font-size: 8px;
+}
+
+/* Auto-insight card rendered inside the open data panel. */
+.auto-insight-section .auto-insight-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.auto-insight-summary {
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.auto-insight-reco {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.auto-insight-asi {
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bangjo-promote {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bangjo-citations {
+  align-self: flex-start;
+  margin: -3px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.bangjo-citations li {
+  list-style: disc;
+}
+
+/* Dock beside an open data panel (root-cause fix for the FAB/panel overlap). */
+[data-bangjo-fab="hidden"] .bangjo-fab {
+  display: none;
+}
+@media (min-width: 761px) {
+  [data-data-panel="open"] .bangjo-fab,
+  [data-data-panel="open"] .bangjo-panel {
+    right: calc(var(--data-panel-width) + 34px);
+  }
 }
 
 @media (max-width: 760px) {
