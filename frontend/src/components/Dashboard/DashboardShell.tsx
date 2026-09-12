@@ -28,8 +28,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     }, []);
 
     return (
-        <EmissionAnalyticsProvider><div className="flex h-[100dvh] w-screen bg-[var(--bg)] text-[var(--text)]">
-            <a href="#main-content" className="fixed top-2 left-2 z-100 -translate-y-20 rounded-[var(--radius-sm)] bg-[var(--selection)] px-3 py-2 font-semibold text-[#06202b] transition-transform focus:translate-y-0">Langsung ke konten</a>
+        <EmissionAnalyticsProvider><div className="flex h-[100dvh] w-screen bg-(--bg) text-(--text)">
+            <a href="#main-content" className="fixed top-2 left-2 z-100 -translate-y-20 rounded-sm bg-(--selection) px-3 py-2 font-semibold text-[#06202b] transition-transform focus:translate-y-0">Langsung ke konten</a>
             <Sidebar
                 open={sidebarOpen}
                 mobileOpen={mobileNavOpen}

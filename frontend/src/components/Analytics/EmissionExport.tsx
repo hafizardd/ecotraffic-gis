@@ -18,7 +18,7 @@ export default function EmissionExport({ query: queryOverride }: { query?: Analy
         catch (error) { setError(error instanceof Error ? error.message : "Ekspor gagal"); }
         finally { setBusy(false); }
     }
-    return <div className="my-[14px] flex flex-wrap items-center gap-[10px] text-xs text-[#94a3b8]">
+    return <div className="my-3.5 flex flex-wrap items-center gap-2.5 text-xs text-[#94a3b8]">
         <button className={ANALYTICS_BUTTON_CLASS} disabled={busy} onClick={() => void download("csv")}>{busy ? "Menyiapkan…" : "Ekspor CSV"}</button>
         <button className={ANALYTICS_BUTTON_CLASS} disabled={busy} onClick={() => void download("json")}>Ekspor JSON</button>
         <small>Seluruh hasil sesuai filter, termasuk halaman lain.</small>

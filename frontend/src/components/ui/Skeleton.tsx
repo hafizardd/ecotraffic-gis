@@ -8,7 +8,7 @@ interface SkeletonProps {
 }
 
 export default function Skeleton({ width = "100%", height = 16, radius, className }: SkeletonProps) {
-    return <span className={`relative block overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-raised)] after:absolute after:inset-0 after:-translate-x-full after:bg-[linear-gradient(90deg,transparent,rgba(184,200,204,0.14),transparent)] after:animate-[skeleton-shimmer_1.4s_ease-in-out_infinite] after:content-[''] motion-reduce:after:animate-none${className ? ` ${className}` : ""}`} style={{ width, height, borderRadius: radius }} aria-hidden="true" />;
+    return <span className={`relative block overflow-hidden rounded-sm bg-(--surface-raised) after:absolute after:inset-0 after:-translate-x-full after:bg-[linear-gradient(90deg,transparent,rgba(184,200,204,0.14),transparent)] after:animate-[skeleton-shimmer_1.4s_ease-in-out_infinite] after:content-[''] motion-reduce:after:animate-none${className ? ` ${className}` : ""}`} style={{ width, height, borderRadius: radius }} aria-hidden="true" />;
 }
 
 const CHART_BAR_HEIGHTS = ["38%", "62%", "46%", "78%", "54%", "88%", "42%", "70%", "58%"];

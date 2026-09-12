@@ -22,7 +22,7 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
         <section className={PANEL_SECTION_CLASS}>
             <SectionTitle title="Insight Bang Jo" eyebrow="Konteks keputusan" meta={meta} />
             {!started && (
-                <div className="mb-[10px] grid grid-cols-2 gap-2">
+                <div className="mb-2.5 grid grid-cols-2 gap-2">
                     <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center justify-center gap-2`} onClick={generate}>
                         <Sparkles aria-hidden="true" /> Buat insight
                     </button>
@@ -34,7 +34,7 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
             {started && (
                 <>
                     {loading && !answer && (
-                        <div role="status" aria-label="Memuat insight Bang Jo" className="mb-[10px] grid gap-[7px]">
+                        <div role="status" aria-label="Memuat insight Bang Jo" className="mb-2.5 grid gap-1.75">
                             <Skeleton height={10} width="92%" />
                             <Skeleton height={10} width="100%" />
                             <Skeleton height={10} width="68%" />
@@ -49,8 +49,8 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
                         </div>
                     )}
                     {answer && (
-                        <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(9,26,34,0.42)] p-3">
-                            <MarkdownText className="m-0 text-[11px] leading-[1.65] text-[var(--text)] [overflow-wrap:anywhere]">{answer.content}</MarkdownText>
+                        <div className="mb-3 rounded-md border border-(--border) bg-[rgba(9,26,34,0.42)] p-3">
+                            <MarkdownText className="m-0 text-[11px] leading-[1.65] text-(--text) [overflow-wrap:anywhere]">{answer.content}</MarkdownText>
                         </div>
                     )}
                     <button type="button" className={`${ANALYTICS_BUTTON_CLASS} flex w-full items-center justify-center gap-2`} onClick={() => askBangJo(question)}>

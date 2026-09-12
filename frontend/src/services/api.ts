@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityGridHourSeries, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoChatFocus, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
+import { ActivityGridFeature, ActivityGridFeatureCollection, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoChatFocus, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 import type { GridLod } from "@/utils/activityGrid";
 import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, HistoricalCameraResponse, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
@@ -35,28 +35,6 @@ export async function fetchCameraEmissions(
 
     if (!response.ok) throw new Error('Failed to fetch emissions');
     
-    return response.json();
-}
-
-export async function fetchEmissionsSummary(): Promise<EmissionSummary> {
-    const response = await fetch(`${API_BASE}/api/emissions/summary`);
-    if (!response.ok) throw new Error(`Failed to fetch emission summary: ${response.statusText}`);
-    return response.json();
-}
-
-export interface SegmentHistoryBucket {
-    bucket_start: string;
-    segment_id: string;
-    avg_total_emission_g_h: number;
-    avg_volume_per_hour: number;
-    sample_count: number;
-}
-
-export async function fetchSegmentEmissionHistory(segmentId?: string): Promise<SegmentHistoryBucket[]> {
-    const params = new URLSearchParams({ bucket: "hour" });
-    if (segmentId) params.set("segment_id", segmentId);
-    const response = await fetch(`${API_BASE}/api/emissions/segments/history?${params}`);
-    if (!response.ok) throw new Error(`Failed to fetch segment history: ${response.statusText}`);
     return response.json();
 }
 
@@ -99,12 +77,6 @@ export async function fetchActivityGridAvailableHours(): Promise<ActivityGridAva
 export async function fetchActivityGridHex(hexId: number, hour?: string | null): Promise<ActivityGridFeature> {
     const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}${hour ? `?hour=${encodeURIComponent(hour)}` : ""}`);
     if (!response.ok) throw new Error(`Failed to fetch activity grid hex: ${response.statusText}`);
-    return response.json();
-}
-
-export async function fetchActivityGridHexHourly(hexId: number): Promise<ActivityGridHourSeries> {
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}/hourly`);
-    if (!response.ok) throw new Error(`Failed to fetch activity grid hourly series: ${response.statusText}`);
     return response.json();
 }
 

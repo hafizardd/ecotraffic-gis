@@ -89,18 +89,18 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         <div className={SEGMENT_OVERVIEW_CLASS}>
                             <strong>{detail.intervention_class ?? "Belum dinilai"}</strong>
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>
-                            <b className="col-span-full mt-[3px] inline-flex w-max items-center rounded-[5px] px-[7px] py-1 text-[8px] font-extrabold tracking-[0.06em] uppercase" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
+                            <b className="col-span-full mt-0.75 inline-flex w-max items-center rounded-[5px] px-1.75 py-1 text-[8px] font-extrabold tracking-[0.06em] uppercase" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
                         </div>
                         <AutoInsightCard entity={{ type: "stop", id: sourceId }} label={detail.title ?? sourceId} />
                         <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Skor komponen" meta={`Skor intervensi ${detail.intervention_score == null ? MISSING_LABEL : fmtFloatId(detail.intervention_score, 3)}`} />
-                            <div className={`${STAT_GRID_CLASS} gap-[9px]`}>
+                            <div className={`${STAT_GRID_CLASS} gap-2.25`}>
                                 {COMPONENTS.map(({ keys, label }) => {
                                     const value = pickNumber(detail, keys);
                                     return (
-                                        <div className={`${STAT_CARD_CLASS} flex min-h-[84px] min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={label}>
+                                        <div className={`${STAT_CARD_CLASS} flex min-h-21 min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={label}>
                                             <span className="text-[10px] font-extrabold leading-[1.2] tracking-[0.04em]">{label}</span>
-                                            <strong className={`mt-[10px] block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${value == null ? DATA_MISSING_CLASS : ""}`}>{value == null ? MISSING_LABEL : fmtFloatId(value, 2)}</strong>
+                                            <strong className={`mt-2.5 block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${value == null ? DATA_MISSING_CLASS : ""}`}>{value == null ? MISSING_LABEL : fmtFloatId(value, 2)}</strong>
                                         </div>
                                     );
                                 })}
@@ -125,7 +125,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                                 {damageList.length === 0 && <p className={SEGMENT_EMPTY_CLASS}>Tidak ada indikator kerusakan terdeteksi</p>}
                                 {damageList.length > 0 && <ul className="m-0 grid list-none gap-2 p-0">
                                     {damageList.map((key) => (
-                                        <li className="rounded-[0_var(--radius-sm)_var(--radius-sm)_0] border-l-2 border-[var(--accent)] bg-[rgba(245,165,36,0.07)] px-3 py-2 text-[11px] leading-4 text-[var(--secondary)]" key={key}>{DAMAGE_LABELS[key] ?? key}</li>
+                                        <li className="rounded-[0_var(--radius-sm)_var(--radius-sm)_0] border-l-2 border-(--accent) bg-[rgba(245,165,36,0.07)] px-3 py-2 text-[11px] leading-4 text-(--secondary)" key={key}>{DAMAGE_LABELS[key] ?? key}</li>
                                     ))}
                                 </ul>}
                             </section>
@@ -143,8 +143,8 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         </section>
                         <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Observasi" meta={detail.observed_at ? fmtDateTimeId(detail.observed_at) : MISSING_LABEL} />
-                            {detail.observer_name && <p className="mt-0 mb-2 text-[11px] text-[var(--muted)]">Pengamat: <strong className="font-semibold text-[var(--secondary)]">{detail.observer_name}</strong></p>}
-                            {detail.description && <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5 text-[11px] leading-[1.65] text-[var(--secondary)] [overflow-wrap:anywhere]">{detail.description}</p>}
+                            {detail.observer_name && <p className="mt-0 mb-2 text-[11px] text-(--muted)">Pengamat: <strong className="font-semibold text-(--secondary)">{detail.observer_name}</strong></p>}
+                            {detail.description && <p className="m-0 rounded-sm border border-(--border) bg-(--surface-raised) px-3 py-2.5 text-[11px] leading-[1.65] text-(--secondary) [overflow-wrap:anywhere]">{detail.description}</p>}
                             {!detail.description && !detail.observer_name && <p className={SEGMENT_EMPTY_CLASS}>{MISSING_LABEL}</p>}
                         </section>
                         {photos.length > 0 && (
@@ -153,7 +153,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                                 <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
                                     {photos.map((item, index) => (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img className="aspect-[4/3] w-full rounded-[var(--radius-sm)] border border-[var(--border)] object-cover" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} loading="lazy" />
+                                        <img className="aspect-[4/3] w-full rounded-sm border border-(--border) object-cover" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} loading="lazy" />
                                     ))}
                                 </div>
                             </section>

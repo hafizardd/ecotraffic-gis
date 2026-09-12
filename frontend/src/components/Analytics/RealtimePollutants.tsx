@@ -68,7 +68,7 @@ export default function RealtimePollutants() {
     });
     return <section aria-label="Delapan polutan terkini" aria-busy={isLoading} className={ANIMATE_IN_CLASS}>
         <SectionTitle title="Emisi segmen terkini" eyebrow="Data live" meta="Laju massa terbaru dari cakupan segmen aktif."
-            aside={<span className={`rounded px-[9px] py-[5px] text-[11px] font-bold ${statusClass}`}>{isLoading ? "Memuat" : result.error && !matches ? "Error" : state}</span>} />
+            aside={<span className={`rounded px-2.25 py-1.25 text-[11px] font-bold ${statusClass}`}>{isLoading ? "Memuat" : result.error && !matches ? "Error" : state}</span>} />
         {!isLoading && result.error && !matches && <p role="alert" className={ANALYTICS_ERROR_CLASS}>{result.error}</p>}
         <AnalyticsMeasureBand items={[
             { label: "Sumber", value: isLoading ? "Memuat" : summary?.source_mode ?? "Belum tersedia", tone: statusTone },

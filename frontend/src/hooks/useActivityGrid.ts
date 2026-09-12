@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchActivityGrid, fetchActivityGridAvailableHours, fetchActivityGridHexHourly } from "@/services/api";
-import { ActivityGridFeatureCollection, ActivityGridHourPoint } from "@/types";
+import { fetchActivityGrid, fetchActivityGridAvailableHours } from "@/services/api";
+import { ActivityGridFeatureCollection } from "@/types";
 import { hourKey, isWholeRegionLod, type GridLod } from "@/utils/activityGrid";
 
 const empty: ActivityGridFeatureCollection = { type: "FeatureCollection", features: [] };
@@ -119,23 +119,4 @@ export function useActivityGridHours(enabled: boolean): string[] {
     }, [enabled]);
 
     return hours;
-}
-
-// Per-hex 24h pattern for the detail panel. The caller mounts this per hex, so
-// the initial empty state is the loading state; scrubbing hours in the panel
-// does not refetch the series.
-export function useActivityGridHexHourly(hexId: number): ActivityGridHourPoint[] {
-    const [series, setSeries] = useState<ActivityGridHourPoint[]>([]);
-
-    useEffect(() => {
-        let mounted = true;
-        fetchActivityGridHexHourly(hexId)
-            .then((value) => mounted && setSeries(value.series))
-            .catch(() => mounted && setSeries([]));
-        return () => {
-            mounted = false;
-        };
-    }, [hexId]);
-
-    return series;
 }

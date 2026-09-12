@@ -69,14 +69,14 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
     }, [onStatusChange, scheduleRetry]);
 
     return (
-        <div className="relative aspect-video overflow-hidden rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[var(--canvas)]">
+        <div className="relative aspect-video overflow-hidden rounded-md border border-(--contour-strong) bg-(--canvas)">
             {status === "loading" && (
-                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-[var(--canvas)] text-[10px] text-[var(--secondary)]" role="status" aria-label="Menghubungkan stream CCTV">
+                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-(--canvas) text-[10px] text-(--secondary)" role="status" aria-label="Menghubungkan stream CCTV">
                     <Skeleton height="100%" width="100%" radius={0} />
                 </div>
             )}
             {status === "error" && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[var(--canvas)] px-4 text-center [&>strong]:text-[12px] [&>strong]:text-[#fca5a5] [&>span]:text-[10px] [&>span]:text-[var(--muted)]" role="status">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-(--canvas) px-4 text-center [&>strong]:text-[12px] [&>strong]:text-[#fca5a5] [&>span]:text-[10px] [&>span]:text-(--muted)" role="status">
                     <strong>Stream tidak tersedia</strong>
                     <span>Mencoba menghubungkan kembali…</span>
                 </div>
