@@ -44,20 +44,19 @@ ecotraffic-gis/
 │   │   ├── schemas/
 │   │   │   ├── camera.py             # Pydantic request/response schemas
 │   │   │   └── emission.py
-│   │   ├── services/
-│   │   │   ├── emission_calculator.py  # CO₂ math logic
-│   │   │   └── stream_reader.py        # HLS frame fetcher
+│   │   ├── services/                   # aggregation, analytics, spatial, CCTV
 │   │   ├── workers/
-│   │   │   └── inference_worker.py   # Celery tasks: fetch → YOLO → store
+│   │   │   ├── tracking_worker.py      # continuous live-camera tracking
+│   │   │   └── segment_calculation_worker.py
 │   │   └── main.py                   # FastAPI app entry point
 │   ├── cv/
 │   │   ├── detector.py               # YOLOv8 wrapper
 │   │   └── emission_factors.py       # Vehicle type → g CO₂/min constants
 │   ├── migrations/                   # Alembic migration files
 │   │   └── versions/
+│   ├── data/                         # spatial and replay source data
+│   ├── yolo/                         # mounted YOLO model weights
 │   ├── tests/
-│   │   ├── test_emission_calculator.py
-│   │   └── test_detector.py
 │   ├── alembic.ini
 │   ├── requirements.txt              # ← this file
 │   ├── .env.example
@@ -67,32 +66,27 @@ ecotraffic-gis/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── Map/
-│   │   │   │   ├── MapView.jsx         # Main Leaflet map
-│   │   │   │   └── CameraMarker.jsx    # Color-coded dot per CCTV
+│   │   │   │   ├── MapView.tsx         # Main MapLibre map
+│   │   │   │   └── MapLegend.tsx       # Map legend and layers
 │   │   │   ├── Panel/
-│   │   │   │   ├── SidePanel.jsx       # Opens on marker click
-│   │   │   │   ├── VideoFeed.jsx       # HLS.js player
-│   │   │   │   └── EmissionStats.jsx   # Per-camera stats
+│   │   │   │   ├── SidePanel.tsx       # Camera and segment details
+│   │   │   │   ├── VideoFeed.tsx       # HLS.js player
+│   │   │   │   └── EmissionStats.tsx   # Per-camera stats
 │   │   │   └── Dashboard/
-│   │   │       ├── GlobalCounter.jsx   # Total CO₂ across all cameras
-│   │   │       └── EmissionChart.jsx   # Recharts time-series
+│   │   │       ├── GlobalCounter.tsx   # Total CO₂ across all cameras
+│   │   │       └── EmissionChart.tsx   # Recharts time-series
 │   │   ├── hooks/
-│   │   │   ├── useSocket.js            # Socket.IO connection
-│   │   │   └── useCameras.js           # Fetch camera list from API
+│   │   │   ├── useEmissions.ts         # WebSocket connection
+│   │   │   └── useCameras.ts           # Fetch camera list from API
 │   │   ├── services/
-│   │   │   └── api.js                  # Axios base config
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── index.html
+│   │   │   └── api.ts                  # Fetch API client
+│   │   └── app/                        # Next.js app shell and routes
 │   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
 │   ├── .env.example
 │   └── Dockerfile
 │
-├── docker-compose.yml              # Runs Postgres, Redis, backend, frontend
-├── .env.example                    # Template — commit this
-├── .env                            # Real secrets — NEVER commit
+├── docker-compose.yml              # Postgres, Redis, API, workers, frontend
+├── .env.example                    # optional root Compose template
 ├── .gitignore
 └── README.md                       # ← this file
 ```
@@ -109,29 +103,34 @@ ecotraffic-gis/
 - Docker + Docker Compose (recommended — handles DB and Redis automatically)
 
 ### Option A — Docker (recommended for team)
-#### 1. Setup the Docker
+#### 1. Setup Docker and environment files
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/ecotraffic-gis.git
 cd ecotraffic-gis
 
-# Global .env
-cp .env.example .env       # fill in your values
-
-# Backend .env
-cd backend                  # go to backend dir
-cp .env.example .env        # fill in your values
-cp .env.example .env.local  # fill in your values
-cd ..                       # back to root dir
-
-# Frontend .env
-cd frontend                 # go to frontend dir
-cp .env.example .env        # fill in your values
-cp .env.example .env.local  # fill in your values
-cd ..                       # back to root dir
-
-docker compose up --build   # make sure it's in root directory
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
+
+Edit both files before starting. For local Docker networking, backend URLs must
+use the Compose service names `postgres` and `redis`; browser-facing frontend
+URLs must use `localhost`:
+
+```env
+# backend/.env
+DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/ecotraffic
+DATABASE_URL_SYNC=postgresql+psycopg2://postgres:password@postgres:5432/ecotraffic
+REDIS_URL=redis://redis:6379/0
+YOLO_MODEL_PATH=yolo/best100.pt
+
+# frontend/.env
+NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_WS_URL=ws://localhost:8080
+```
+
+Use `--env-file backend/.env` with Compose commands. The model files are
+mounted from `backend/yolo/` into the backend and tracker containers.
 
 ### Segment Pipeline
 
@@ -174,9 +173,8 @@ for an empty database.
 docker compose exec backend alembic upgrade head        # migrate data + add extension
 docker compose exec backend python -m app.core.seed     # seed cameras + road segments + mappings (idempotent)
 # Verify there is a single migration head; then apply it
-docker compose exec backend alembic heads      # expect a single head
-docker compose exec backend alembic upgrade head   # → 9d2c6f1a4b8e (adds survey/poi/population layers;
-                                                  #   also flips LIVE to atcs_balaikota_timur / SEG-0137)
+docker compose --env-file backend/.env run --rm backend alembic heads
+docker compose --env-file backend/.env run --rm backend alembic upgrade head
 
 # All seed/import scripts below are idempotent — safe to re-run on existing data
 docker compose exec backend python -m app.core.seed
@@ -208,18 +206,34 @@ Notes:
 - If realtime segment state looks stale, clear Redis keys matching `emission:segment:*`.
 - Re-running `generate_historical_segment_data.py` blindly duplicates rows; only run it on an empty
   segment emissions table (see `NOTES.md` for the truncate command).
+- If historical fallback is missing or stale, run the generator separately only
+  after confirming the target segment table is empty or intentionally being backfilled.
+
+Compose includes PostgreSQL and Redis healthchecks. Backend and worker services
+wait for both dependencies to become healthy, and long-running services use
+`restart: unless-stopped`.
 
 #### 4. Configure the Worker
-1. Open `docker-compose.yml` in root dir
-2. See for this line of code
-`celery -A app.workers.inference_worker worker --loglevel=info --pool=threads --concurrency=16`
-3. Change the concurrency (can 2, 4, 8, etc)
+The current Compose workers are:
+
+- `beat`: Celery scheduler
+- `tracker`: continuous ByteTrack/YOLO worker for configured live cameras
+- `segment-worker`: Celery worker for the `inference` queue
+
+Adjust tracker settings such as `TRACK_CAMS`, `TRACK_FPS`, `YOLO_DEVICE`, and
+`YOLO_IMAGE_SIZE` in `backend/.env`. Adjust segment-worker concurrency in the
+`segment-worker` command in `docker-compose.yml`.
 
 - Backend API: http://localhost:8080
 - Frontend: http://localhost:3000
 - API docs: http://localhost:8080/docs
 
 ### Option B — Manual Setup (Not Tested Yet)
+
+Docker is the supported development path. If running manually, use the same
+database and Redis settings from `backend/.env`; the worker entrypoints are
+`python -m app.workers.tracking_worker`, Celery beat, and the `inference` queue
+worker shown in `docker-compose.yml`.
 
 **1. Clone the repo**
 ```bash
@@ -238,18 +252,20 @@ alembic upgrade head            # run DB migrations
 uvicorn app.main:app --reload
 ```
 
-**3. Start the Celery worker (separate terminal)**
+**3. Start the workers (separate terminals)**
 ```bash
 cd backend
 source venv/bin/activate
-celery -A app.workers.inference_worker worker --loglevel=info
+python -m app.workers.tracking_worker
+celery -A app.workers.celery_app worker -Q inference --loglevel=info --concurrency=1
+celery -A app.workers.celery_app beat --loglevel=info
 ```
 
 **4. Set up frontend**
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local     
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -278,7 +294,19 @@ Open http://localhost:3000
 
 ## ⚙️ Environment Variables
 
-Copy `.env.example` to `.env` and `.env.local` if any and fill in your values. Never commit `.env`.
+For Docker, keep runtime configuration in `backend/.env` and browser-facing
+configuration in `frontend/.env`. Never commit either file.
+
+Backend database URLs use Docker service names:
+
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/ecotraffic
+DATABASE_URL_SYNC=postgresql+psycopg2://postgres:password@postgres:5432/ecotraffic
+REDIS_URL=redis://redis:6379/0
+```
+
+Frontend `NEXT_PUBLIC_*` values are read by the browser, so local development
+uses `localhost:8080`; a deployed frontend must use the public API hostname.
 
 ---
 

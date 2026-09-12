@@ -93,6 +93,10 @@ The seed command is idempotent and loads road geometry plus nearest camera mappi
 docker compose exec backend python -m scripts.generate_historical_segment_data
 ```
 
+The historical fallback generator is not idempotent. Do not run it on every
+restart or update; only run it when the segment-emissions table is empty or a
+deliberate local backfill is required.
+
 To clear only segment-derived data while retaining cameras, run this against PostgreSQL:
 
 ```sql
@@ -106,7 +110,7 @@ Redis segment latest state uses keys matching `emission:segment:*`; remove those
 1. Change Model in `backend\app\models\*`
 2. Generate Migrations
 ```bash
-docker compose exec backend alembic revision --autogenerate -m "migration message"
+docker compose --env-file backend/.env run --rm backend alembic revision --autogenerate -m "migration message"
 ```
 
 3. Apply Migrations
