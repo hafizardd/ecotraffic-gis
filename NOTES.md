@@ -2,58 +2,59 @@
 
 ## How to Restart Database or Clear Database
 
+Everything runs in Docker — do not start a local venv/uvicorn while using these
+commands, or `docker compose exec backend` will talk to a different process.
+
 1. Remove container
 ```bash
-    docker compose down -v
+docker compose down -v
 ```
 
-2. Re-up postgresql container (Terminal 1)
+2. Re-up postgres, redis, and backend (Terminal 1)
 ```bash
-    docker compose up postgres redis
+docker compose up -d postgres redis backend
 ```
 
-3. Go to backend directory (Terminal 2)
-```bash
-    cd backend
-```
-
-4. Activate virtual environments (Terminal 2)
-```bash
-    source .venv/scripts/activate
-```
-
-5. Run backend (Terminal 2)
-```bash
-    uvicorn app.main:app --reload --port 8000
-```
-
-6. Create extensions in postgres (Terminal 3)
+3. Create extensions in postgres (Terminal 2)
 ```bash
 docker compose exec postgres psql -U postgres -d ecotraffic -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 ```
 
-7. Run migrations (Terminal 3)
+4. Run migrations (Terminal 2)
 ```bash
-cd backend
-alembic upgrade head
+docker compose exec backend alembic upgrade head
 ```
 
-8. Seed Camera (Terminal 3)
+5. Seed Camera (Terminal 2)
 ```bash
-python -m app.core.seed
+docker compose exec backend python -m app.core.seed
 ```
 
-9. Import spatial source layers + backfill (idempotent — safe to re-run)
+6. Import spatial source layers + backfill (idempotent — safe to re-run)
 ```bash
-python scripts/import_pois.py
-python scripts/import_population.py
-python scripts/import_survey_activities.py
-python scripts/backfill_spatial_context.py
+docker compose exec backend python -m scripts.import_pois
+docker compose exec backend python -m scripts.import_population
+docker compose exec backend python -m scripts.import_survey_activities
+docker compose exec backend python -m scripts.import_survey_ahp_scores
+docker compose exec backend python -m scripts.import_activity_grid --verify
+docker compose exec backend python -m scripts.score_bus_stops
+docker compose exec backend python -m scripts.backfill_spatial_context
 ```
 
-10. Generate historical fallback (NOT idempotent — only on empty segment emissions)
+`import_survey_ahp_scores` needs `survey_stop_observations` from
+`import_survey_activities`, so keep it after that line.
+
+7. Generate historical fallback (NOT idempotent — only on empty segment emissions)
 ```bash
-python scripts/generate_historical_segment_data.py
+docker compose exec backend python -m scripts.generate_historical_segment_data
+```
+
+8. Optional data scripts
+```bash
+docker compose exec backend python -m scripts.seed_snapshot_schedule             # M4 snapshot sampler schedule
+docker compose exec backend python -m scripts.build_replay_dataset               # REPLAY profile (needs snapshot facts)
+docker compose exec backend python -m scripts.report_spatial_coverage            # coverage report (after build_replay_dataset)
+docker compose exec backend python -m scripts.backfill_segment_name_embeddings   # Bang Jo RAG — needs OPENROUTER_API_KEY
 ```
 
 ## Updating After a Git Pull
@@ -63,16 +64,19 @@ do NOT need to reset — just upgrade and re-run the idempotent seed/imports:
 
 ```bash
 git pull origin <branch>        # e.g. dev
-docker compose up -d postgres redis
+docker compose up -d postgres redis backend
 docker compose exec backend alembic heads          # expect a single head
 docker compose exec backend alembic upgrade head   # → 9d2c6f1a4b8e
 docker compose exec backend python -m app.core.seed
-docker compose exec backend python scripts/import_pois.py
-docker compose exec backend python scripts/import_population.py
-docker compose exec backend python scripts/import_survey_activities.py
-docker compose exec backend python scripts/backfill_spatial_context.py
+docker compose exec backend python -m scripts.import_pois
+docker compose exec backend python -m scripts.import_population
+docker compose exec backend python -m scripts.import_survey_activities
+docker compose exec backend python -m scripts.import_survey_ahp_scores
+docker compose exec backend python -m scripts.import_activity_grid --verify
+docker compose exec backend python -m scripts.score_bus_stops
+docker compose exec backend python -m scripts.backfill_spatial_context
 # only if historical fallback missing/stale (appends, not idempotent):
-docker compose exec backend python scripts/generate_historical_segment_data.py
+docker compose exec backend python -m scripts.generate_historical_segment_data
 docker compose up --build
 ```
 
@@ -83,10 +87,10 @@ segment state looks stale, clear Redis keys matching `emission:segment:*`.
 
 ## Segment Pipeline Reset and Backfill
 
-The seed command is idempotent and loads road geometry plus nearest camera mappings. After reseeding an empty database, run the imports + backfill above, then generate historical fallback emissions with:
+The seed command is idempotent and loads road geometry plus nearest camera mappings. After reseeding an empty database, run the imports + backfill above (keep `import_survey_ahp_scores` after `import_survey_activities`), then generate historical fallback emissions with:
 
 ```bash
-python scripts/generate_historical_segment_data.py
+docker compose exec backend python -m scripts.generate_historical_segment_data
 ```
 
 To clear only segment-derived data while retaining cameras, run this against PostgreSQL:
@@ -107,5 +111,5 @@ docker compose exec backend alembic revision --autogenerate -m "migration messag
 
 3. Apply Migrations
 ```bash
-alembic upgrade head
+docker compose exec backend alembic upgrade head
 ```

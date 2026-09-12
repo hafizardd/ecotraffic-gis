@@ -135,7 +135,7 @@ docker compose up --build   # make sure it's in root directory
 
 ### Segment Pipeline
 
-After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Then import the spatial source layers and backfill segments with `python scripts/import_pois.py`, `python scripts/import_population.py`, `python scripts/import_survey_activities.py`, `python scripts/import_activity_grid.py --verify`, `python scripts/score_bus_stops.py`, and `python scripts/backfill_spatial_context.py`. Generate the 24-hour synthetic fallback dataset with `python scripts/generate_historical_segment_data.py`.
+After migrations, seed cameras, road segments, and nearest-segment mappings with `python -m app.core.seed`. Then import the spatial source layers and backfill segments with `python -m scripts.import_pois`, `python -m scripts.import_population`, `python -m scripts.import_survey_activities`, `python -m scripts.import_survey_ahp_scores`, `python -m scripts.import_activity_grid --verify`, `python -m scripts.score_bus_stops`, and `python -m scripts.backfill_spatial_context`. Generate the 24-hour synthetic fallback dataset with `python -m scripts.generate_historical_segment_data`.
 
 Segment endpoints are `GET /api/segments/geojson`, `GET /api/emissions/map`, and `GET /api/emissions/{road_segment_id}`. Camera responses include `data_source`; filter live or historical cameras with `GET /api/cameras?data_source=LIVE` or `HISTORICAL`. The `/ws/emissions` socket forwards camera messages and `segment_update` messages.
 
@@ -178,6 +178,7 @@ docker compose exec backend python -m app.core.seed     # seed cameras + road se
 docker compose exec backend python -m scripts.import_pois                # points_of_interest  (data/poi.geojson)
 docker compose exec backend python -m scripts.import_population          # population_zones     (data/populations.geojson)
 docker compose exec backend python -m scripts.import_survey_activities   # survey_stop_observations (data/output/activities.csv)
+docker compose exec backend python -m scripts.import_survey_ahp_scores   # AHP scores (data/Perhitungan Data Survei.xlsx) — needs activities imported first
 docker compose exec backend python -m scripts.import_activity_grid --verify  # activity_grid_hexes (data/activity_grid.geojson)
 docker compose exec backend python -m scripts.score_bus_stops            # bus stop accessibility + intervention class
 docker compose exec backend python -m scripts.backfill_spatial_context   # segment spatial_metadata + population
@@ -197,7 +198,7 @@ database that already has cameras/segments up to date without resetting it:
 
 ```bash
 git pull origin <branch>                       # e.g. dev
-docker compose up -d postgres redis
+docker compose up -d postgres redis backend
 
 # Verify there is a single migration head; then apply it
 docker compose exec backend alembic heads      # expect a single head
@@ -206,20 +207,29 @@ docker compose exec backend alembic upgrade head   # → 9d2c6f1a4b8e (adds surv
 
 # All seed/import scripts below are idempotent — safe to re-run on existing data
 docker compose exec backend python -m app.core.seed
-docker compose exec backend python scripts/import_pois.py
-docker compose exec backend python scripts/import_population.py
-docker compose exec backend python scripts/import_survey_activities.py
-docker compose exec backend python scripts/import_activity_grid.py --verify
-docker compose exec backend python scripts/score_bus_stops.py
-docker compose exec backend python scripts/backfill_spatial_context.py
+docker compose exec backend python -m scripts.import_pois
+docker compose exec backend python -m scripts.import_population
+docker compose exec backend python -m scripts.import_survey_activities
+docker compose exec backend python -m scripts.import_survey_ahp_scores
+docker compose exec backend python -m scripts.import_activity_grid --verify
+docker compose exec backend python -m scripts.score_bus_stops
+docker compose exec backend python -m scripts.backfill_spatial_context
+
+# Optional data scripts (only when the data layer needs them)
+docker compose exec backend python -m scripts.seed_snapshot_schedule            # M4 snapshot sampler schedule
+docker compose exec backend python -m scripts.build_replay_dataset              # REPLAY profile (needs snapshot facts)
+docker compose exec backend python -m scripts.report_spatial_coverage           # coverage report (after build_replay_dataset)
+docker compose exec backend python -m scripts.backfill_segment_name_embeddings  # Bang Jo RAG — needs OPENROUTER_API_KEY
 
 # Only if historical fallback is missing or stale — this appends and is NOT idempotent:
-docker compose exec backend python scripts/generate_historical_segment_data.py
+docker compose exec backend python -m scripts.generate_historical_segment_data
 
 docker compose up --build
 ```
 
 Notes:
+- `import_survey_ahp_scores` matches rows by `source_id`, so it must run **after**
+  `import_survey_activities`; rows it cannot match keep their keyword scores.
 - If realtime segment state looks stale, clear Redis keys matching `emission:segment:*`.
 - Re-running `generate_historical_segment_data.py` blindly duplicates rows; only run it on an empty
   segment emissions table (see `NOTES.md` for the truncate command).
