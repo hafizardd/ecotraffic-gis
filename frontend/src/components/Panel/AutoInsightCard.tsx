@@ -6,6 +6,7 @@ import { useAutoInsight } from "@/hooks/useAutoInsight";
 import type { AutoInsightEntity } from "@/utils/autoInsight";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
+import MarkdownText from "@/components/ui/MarkdownText";
 
 export default function AutoInsightCard({ entity, label }: { entity: AutoInsightEntity; label: string }) {
     const { reply, loading } = useAutoInsight(entity);
@@ -26,8 +27,10 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
             )}
             {answer && (
                 <div className="auto-insight-body">
-                    <p className="auto-insight-summary">{answer.summary}</p>
-                    {answer.recommendation && <p className="auto-insight-reco">{answer.recommendation}</p>}
+                    <MarkdownText className="auto-insight-summary">{answer.summary}</MarkdownText>
+                    {answer.recommendation && (
+                        <MarkdownText className="auto-insight-reco">{answer.recommendation}</MarkdownText>
+                    )}
                     {answer.asi_category && <span className="auto-insight-asi">ASI: {answer.asi_category}</span>}
                 </div>
             )}

@@ -39,7 +39,9 @@ SYSTEM_PROMPT = (
     "Sebut alasan dari field context, jangan mengarang. "
     "Field hourly_series berisi jam REPLAY prakomputasi; jika is_interpolated=true, "
     "sebut jam itu sebagai perkiraan/hasil interpolasi, bukan pengamatan pasti. "
-    "Keluarkan HANYA objek JSON, tanpa pagar markdown dan tanpa penjelasan tambahan. "
+    "Isi field teks boleh memakai markdown ringan: teks tebal dengan **teks** dan "
+    "daftar dengan tanda '- ' di awal baris; jangan pakai heading, tabel, tautan, atau HTML mentah. "
+    "Keluarkan HANYA objek JSON itu sendiri (tanpa pagar kode), tanpa penjelasan di luar JSON. "
     "Balas dengan JSON valid berbentuk: "
     '{"summary": str, "drivers": [str], "asi_category": str, "recommendation": str, "evidence": [str]}.'
 )

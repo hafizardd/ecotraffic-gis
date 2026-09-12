@@ -2411,6 +2411,37 @@ button {
   align-self: flex-start;
   background: var(--card);
   border: 1px solid var(--border);
+  white-space: normal;
+}
+.bangjo-markdown {
+  display: block;
+}
+.bangjo-markdown p {
+  margin: 0 0 6px;
+}
+.bangjo-markdown > :last-child {
+  margin-bottom: 0;
+}
+.bangjo-markdown ul,
+.bangjo-markdown ol {
+  margin: 0 0 6px;
+  padding-left: 16px;
+}
+.bangjo-markdown li {
+  margin: 2px 0;
+}
+.bangjo-markdown strong {
+  color: #e2eefb;
+}
+.bangjo-markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #102238;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+.bangjo-markdown a {
+  color: var(--tsp);
 }
 .bangjo-msg-context {
   align-self: flex-start;

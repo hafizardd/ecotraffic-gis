@@ -544,6 +544,26 @@ def test_parse_answer_preserves_citations():
     assert answer["citations"] == [{"label": "Jalan Malioboro"}]
 
 
+def test_parse_answer_preserves_markdown_inside_strings():
+    raw = '{"summary": "**Ringkas**\\n- satu\\n- dua", "drivers": ["**x**"]}'
+
+    answer = _parse_answer(raw)
+
+    assert answer["summary"] == "**Ringkas**\n- satu\n- dua"
+    assert answer["drivers"] == ["**x**"]
+
+
+def test_fallback_answer_has_no_raw_html():
+    context = {"segment": {"name": "Jalan", "road_segment_id": "SEG-1"},
+               "activity_potential": {}, "bus_stops": [], "coverage_gap": False}
+
+    answer = bangjo._fallback_answer(context, "halo")
+    text = " ".join([answer["summary"], *answer["drivers"], answer["recommendation"], *answer["evidence"]])
+
+    assert "<" not in text
+    assert ">" not in text
+
+
 def test_fallback_answer_emits_empty_citations():
     context = {"segment": {"name": "Jalan", "road_segment_id": "SEG-1"},
                "activity_potential": {}, "bus_stops": [], "coverage_gap": False}
