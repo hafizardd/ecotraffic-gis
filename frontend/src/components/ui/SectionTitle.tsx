@@ -10,17 +10,18 @@ interface SectionTitleProps {
     className?: string;
 }
 
-export default function SectionTitle({ title, eyebrow, meta, aside, page, as: Heading = "h2", className }: SectionTitleProps) {
+export default function SectionTitle({ title, eyebrow, meta, aside, page, as, className }: SectionTitleProps) {
+    const Heading = as ?? (page ? "h1" : "h2");
     return (
         <div className={`mb-[14px] flex min-w-0 flex-col gap-[5px] ${page ? "mb-5" : ""}${className ? ` ${className}` : ""}`}>
             <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-col gap-[5px]">
-                    {eyebrow && <span className="text-[9px] font-extrabold tracking-[0.14em] text-[var(--green)] uppercase">{eyebrow}</span>}
-                    <Heading className={`m-0 font-[var(--font-display)] font-bold leading-[1.25] tracking-[-0.01em] text-[var(--text)] ${page ? "text-[var(--text-section)]! leading-[1.15]!" : "text-[var(--text-card-title)]"}`}>{title}</Heading>
+                    {eyebrow && <span className="text-[10px] font-bold tracking-[0.14em] text-[var(--brand-strong)] uppercase">{eyebrow}</span>}
+                    <Heading className={`m-0 font-[var(--font-display)] font-semibold leading-[1.25] tracking-[-0.02em] text-[var(--text)] ${page ? "text-[var(--text-section)]! leading-[1.2]!" : "text-[var(--text-card-title)]"}`}>{title}</Heading>
                 </div>
                 {aside && <span className="flex-[0_0_auto] text-right text-[var(--text-meta)] font-semibold text-[var(--secondary)] tabular-nums [&>div]:min-w-[150px] [&>div]:w-auto">{aside}</span>}
             </div>
-            {meta && <p className="m-0 text-[var(--text-meta)] leading-[1.55] text-[#a8b8ca]">{meta}</p>}
+            {meta && <p className="m-0 max-w-[72ch] text-[var(--text-meta)] leading-[1.55] text-[var(--secondary)]">{meta}</p>}
         </div>
     );
 }

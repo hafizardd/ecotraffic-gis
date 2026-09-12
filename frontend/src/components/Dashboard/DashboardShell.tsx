@@ -16,17 +16,26 @@ const viewMeta: Record<ActiveView, [string, string]> = { peta: ["MONITORING DASH
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [activeView, setActiveView] = useState<ActiveView>("peta");
     const analyticsView = activeView === "emisi" || activeView === "riwayat";
     const page = { emisi: <EmisiTrenPage />, kendaraan: <KendaraanPage />, riwayat: <RiwayatPage />, pengaturan: <PengaturanPage /> }[activeView as Exclude<ActiveView, "peta">];
 
     return (
-        <EmissionAnalyticsProvider><div className="flex h-[100dvh] w-screen bg-[var(--bg)]">
-            <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} activeView={activeView} onViewChange={setActiveView} />
-            <div className={`grid min-w-0 flex-1 transition-[width] duration-250 ease-in-out ${analyticsView ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[64px_66px_minmax(0,1fr)] max-[760px]:grid-rows-[58px_auto_minmax(0,1fr)]"}`}>
-                <TopHeader onMenuClick={() => setSidebarOpen((value) => !value)} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
+        <EmissionAnalyticsProvider><div className="flex h-[100dvh] w-screen bg-[var(--bg)] text-[var(--text)]">
+            <a href="#main-content" className="fixed top-2 left-2 z-100 -translate-y-20 rounded-[var(--radius-sm)] bg-[var(--selection)] px-3 py-2 font-semibold text-[#06202b] transition-transform focus:translate-y-0">Langsung ke konten</a>
+            <Sidebar
+                open={sidebarOpen}
+                mobileOpen={mobileNavOpen}
+                onToggle={() => setSidebarOpen((value) => !value)}
+                onMobileClose={() => setMobileNavOpen(false)}
+                activeView={activeView}
+                onViewChange={(view) => { setActiveView(view); setMobileNavOpen(false); }}
+            />
+            <div className={`grid min-w-0 flex-1 transition-[width] duration-200 ease-out ${analyticsView ? "grid-rows-[56px_minmax(0,1fr)]" : "grid-rows-[56px_auto_minmax(0,1fr)]"}`}>
+                <TopHeader onMenuClick={() => setMobileNavOpen(true)} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
                 {(activeView === "peta" || activeView === "kendaraan" || activeView === "pengaturan") && <GlobalCounter />}
-                <main className="min-h-0 min-w-0 overflow-hidden p-3 max-[760px]:p-2">{activeView === "peta" ? children : page}</main>
+                <main id="main-content" tabIndex={-1} className="min-h-0 min-w-0 overflow-hidden p-3 outline-none max-[760px]:p-2">{activeView === "peta" ? children : page}</main>
             </div>
             <BangJoWidget />
         </div></EmissionAnalyticsProvider>

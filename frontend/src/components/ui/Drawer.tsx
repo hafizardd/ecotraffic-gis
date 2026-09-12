@@ -33,11 +33,11 @@ export default function Drawer({ open, title, onClose, children, footer }: {
 
     if (!open) return null;
     return createPortal(
-        <div className="fixed inset-0 z-80 flex justify-end bg-[rgba(2,8,16,0.55)] backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-            <div className="flex h-full w-[min(400px,100%)] flex-col border-l border-[var(--border)] bg-[#0b1a2b] shadow-[-18px_0_40px_rgba(0,0,0,0.4)] animate-[drawer-in_0.22s_ease]" role="dialog" aria-modal="true" aria-label={title} ref={panelRef}>
+        <div className="fixed inset-0 z-80 flex justify-end bg-[rgba(3,13,17,0.68)] backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+            <div className="flex h-full w-[min(400px,100%)] flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-drawer)] animate-[drawer-in_0.22s_ease] motion-reduce:animate-none" role="dialog" aria-modal="true" aria-label={title} ref={panelRef}>
                 <header className="flex items-center justify-between border-b border-[var(--border)] px-[18px] py-4">
-                    <h2 className="m-0 text-sm">{title}</h2>
-                    <button type="button" className="grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card-2)] text-[var(--secondary)] hover:border-[var(--green)] hover:text-[var(--text)] [&>svg]:h-[15px] [&>svg]:w-[15px]" aria-label="Tutup" onClick={onClose}><X aria-hidden="true" /></button>
+                    <h2 className="m-0 font-[var(--font-display)] text-base font-semibold">{title}</h2>
+                    <button type="button" className="grid h-10 w-10 cursor-pointer place-items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--secondary)] transition-colors hover:border-[var(--selection)] hover:text-[var(--text)] [&>svg]:h-4 [&>svg]:w-4" aria-label="Tutup" onClick={onClose}><X aria-hidden="true" /></button>
                 </header>
                 <div className="grid flex-1 content-start gap-5 overflow-y-auto p-[18px]">{children}</div>
                 {footer && <footer className="flex items-center gap-2 border-t border-[var(--border)] px-[18px] py-[14px]">{footer}</footer>}
