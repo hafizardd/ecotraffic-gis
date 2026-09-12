@@ -10,5 +10,3 @@ export const EMISSION_DEFINITIONS = [
 ] as const;
 
 export type EmissionKey = typeof EMISSION_DEFINITIONS[number]["key"];
-export type EmissionField = typeof EMISSION_DEFINITIONS[number]["field"];
-export type EmissionHourlyField = typeof EMISSION_DEFINITIONS[number]["hourlyField"];

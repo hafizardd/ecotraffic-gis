@@ -36,7 +36,6 @@ export const POLLUTANT_TEXT_CLASS: Record<EmissionKey, string> = {
     n2o: "text-(--n2o)",
 };
 
-export const DATA_EMPTY_CLASS = "flex min-h-18 items-center justify-center gap-2.25 rounded-md border border-dashed border-(--border) text-[11px] text-(--secondary)";
 export const ANALYTICS_NOTE_CLASS = "mt-3 mb-0.5 text-xs leading-[1.65] text-(--muted)";
 export const TEXT_CAPTION_CLASS = "mt-0 mb-2.5 text-(--text-small) leading-(--leading-body) text-(--secondary)";
 export const ESTIMATE_BADGE_CLASS = "inline-flex items-center rounded-(--radius-badge) bg-[rgba(245,165,36,0.12)] px-2 py-1 text-[10px] font-bold tracking-[0.08em] text-[#f5c35f] uppercase";
@@ -44,9 +43,6 @@ export const ESTIMATE_BADGE_CLASS = "inline-flex items-center rounded-(--radius-
 export const PAGE_CONTAINER_CLASS = "h-full overflow-auto overscroll-contain px-5 pt-4.5 pb-7.5 [scrollbar-gutter:stable] max-[760px]:px-1 max-[760px]:pt-3 max-[760px]:pb-5";
 export const PAGE_CARD_CLASS = "mb-3.5 rounded-md border border-(--border) bg-(--card) p-4 max-[760px]:p-3.25";
 export const ANALYTICS_BUTTON_CLASS = "min-h-(--control-height) cursor-pointer rounded-sm border border-(--contour-strong) bg-(--surface-raised) px-3.5 py-2.25 text-xs font-(--weight-label) text-(--text) transition-[border-color,background,color] duration-150 hover:border-(--selection) hover:bg-(--surface-hover) disabled:cursor-default disabled:opacity-45";
-export const FOCUS_RING_CLASS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--selection)";
-export const PAGE_CARD_GRID_CLASS = "mb-3.5 grid grid-cols-4 gap-2.5 max-[760px]:grid-cols-2";
-export const SUMMARY_METRIC_CLASS = "flex flex-col gap-2 [&>span]:text-[11px] [&>span]:font-bold [&>strong]:font-(family-name:--font-data) [&>strong]:text-2xl [&>small]:text-[11px] [&>small]:text-(--muted)";
 export const CHART_CLASS = "h-80 w-full min-w-0 max-[600px]:h-70";
 export const CHART_SMALL_CLASS = "h-62.5 max-[600px]:h-57.5";
 export const CHART_INTERACTIVE_CLASS = "outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-(--green)";
