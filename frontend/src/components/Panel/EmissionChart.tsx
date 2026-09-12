@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchCameraEmissions } from "@/services/api";
 import { ChartPoint, EmissionUpdate } from "@/types";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { ChartSkeleton } from "@/components/ui/Skeleton";
-import { CHART_TOOLTIP_LABEL_STYLE, CHART_TOOLTIP_STYLE, entranceProps, useChartEntrance } from "@/components/charts/theme";
-import { formatNumber } from "@/utils/format";
+import SeriesToggles from "@/components/Analytics/SeriesToggles";
+import { CHART_AXIS, CHART_GRID_STROKE, CHART_TOOLTIP_CURSOR, CHART_TOOLTIP_LABEL_STYLE, CHART_TOOLTIP_STYLE, entranceProps, useChartEntrance } from "@/components/charts/theme";
+import { fmtChartTickId, formatNumber } from "@/utils/format";
 import { SEGMENT_EMPTY_CLASS } from "@/styles/tailwind";
 
 interface EmissionChartProps { cameraId: string; liveEmission: EmissionUpdate | null; }
@@ -16,6 +17,7 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
     const [chartData, setChartData] = useState<ChartPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+    const [selected, setSelected] = useState<Set<string>>(() => new Set(EMISSION_DEFINITIONS.map(({ key }) => key)));
     const entrance = useChartEntrance(chartData.length > 0);
 
     useEffect(() => {
@@ -47,17 +49,27 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
     if (error) return <div className={`${SEGMENT_EMPTY_CLASS} h-[190px] flex-col px-4 [&>strong]:text-[12px] [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data tren tidak tersedia</strong><span>Riwayat emisi gagal dimuat.</span></div>;
     if (!chartData.length) return <div className={`${SEGMENT_EMPTY_CLASS} h-[190px] flex-col px-4 [&>strong]:text-[12px] [&>strong]:text-[var(--text)]`} role="status"><strong>Belum ada data tren emisi</strong><span>Data akan muncul setelah monitoring dimulai.</span></div>;
 
+    function toggleSeries(key: string) {
+        setSelected((current) => {
+            const next = new Set(current);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            return next;
+        });
+    }
+    const firstTimestamp = chartData.at(0)?.timestamp;
+    const lastTimestamp = chartData.at(-1)?.timestamp;
+
     return <div className="mx-[-5px] mt-0 mb-[-4px] outline-none focus-visible:rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[var(--green)]">
         {chartData.length === 1 && <div className="mx-[5px] mt-0 mb-[5px] rounded-[var(--radius-sm)] border border-[rgba(245,165,36,0.2)] bg-[rgba(245,165,36,0.08)] px-2 py-1.5 text-center text-[9px] text-[#f5c35f]">Menunggu data berikutnya untuk membentuk tren</div>}
-        <ResponsiveContainer width="100%" height={250}>
+        <SeriesToggles items={EMISSION_DEFINITIONS.map(({ key, label, color }) => ({ key, label, color }))} active={selected} onToggle={toggleSeries} label="Polutan pada grafik kamera" compact />
+        {selected.size ? <ResponsiveContainer width="100%" height={250} initialDimension={{ width: 400, height: 250 }}>
             <LineChart data={chartData} margin={{ top: 12, right: 10, left: 2, bottom: 4 }} accessibilityLayer>
-                <CartesianGrid stroke="#213147" strokeDasharray="3 5" vertical={false} />
-                <XAxis dataKey="timestamp" tickFormatter={formatTime} minTickGap={34} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "#27364a" }} />
-                <YAxis width={44} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} label={{ value: "g/min", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 10 }} />
-                <Tooltip labelFormatter={(value) => formatTime(String(value))} contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={(value, name) => [`${formatNumber(Number(value))} g/min`, name]} />
-                <Legend iconType="circle" iconSize={7} wrapperStyle={{ width: "100%", fontSize: "10px", color: "#94a3b8", paddingTop: 8, lineHeight: "20px" }} />
-                {EMISSION_DEFINITIONS.map(({ key, color, label }, index) => <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={2} dot={chartData.length === 1 ? { r: 4, fill: color, strokeWidth: 0 } : { r: 2, fill: color, strokeWidth: 0 }} activeDot={{ r: 4 }} {...entranceProps(entrance.active, index)} />)}
+                <CartesianGrid stroke={CHART_GRID_STROKE} strokeDasharray="2 5" vertical={false} />
+                <XAxis dataKey="timestamp" tickFormatter={(value) => fmtChartTickId(String(value), firstTimestamp, lastTimestamp)} minTickGap={34} {...CHART_AXIS} />
+                <YAxis width={48} {...CHART_AXIS} axisLine={false} label={{ value: "g/min", angle: -90, position: "insideLeft", fill: "var(--muted)", fontSize: 9 }} />
+                <Tooltip cursor={CHART_TOOLTIP_CURSOR} labelFormatter={(value) => formatTime(String(value))} contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={(value, name) => [`${formatNumber(Number(value))} g/min`, name]} />
+                {EMISSION_DEFINITIONS.filter(({ key }) => selected.has(key)).map(({ key, color, label }, index) => <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={2} dot={chartData.length === 1 ? { r: 4, fill: color, strokeWidth: 0 } : false} activeDot={{ r: 4 }} connectNulls={false} {...entranceProps(entrance.active, index)} />)}
             </LineChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer> : <div className={`${SEGMENT_EMPTY_CLASS} h-[160px] flex-col px-4`} role="status"><strong>Grafik disembunyikan</strong><span>Aktifkan sedikitnya satu polutan.</span></div>}
     </div>;
 }

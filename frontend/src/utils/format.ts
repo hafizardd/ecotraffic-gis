@@ -85,3 +85,24 @@ export function fmtDateTimeId(iso: string | null | undefined): string {
     if (Number.isNaN(d.getTime())) return MISSING_LABEL;
     return d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
 }
+
+// Chart ticks adapt to the selected analytical window. Time-only labels are
+// useful intraday, but become ambiguous as soon as a custom range spans days.
+export function fmtChartTickId(
+    iso: string | null | undefined,
+    from?: string | null,
+    to?: string | null,
+): string {
+    if (!iso) return MISSING_LABEL;
+    const value = new Date(iso);
+    if (Number.isNaN(value.getTime())) return MISSING_LABEL;
+    const start = from ? Date.parse(from) : Number.NaN;
+    const end = to ? Date.parse(to) : Number.NaN;
+    const duration = Number.isFinite(start) && Number.isFinite(end) ? Math.abs(end - start) : 0;
+    const options: Intl.DateTimeFormatOptions = duration > 7 * 86400000
+        ? { day: "2-digit", month: "short" }
+        : duration > 24 * 3600000
+            ? { day: "2-digit", month: "short", hour: "2-digit" }
+            : { hour: "2-digit", minute: "2-digit" };
+    return value.toLocaleString("id-ID", options).replace(".", ":");
+}

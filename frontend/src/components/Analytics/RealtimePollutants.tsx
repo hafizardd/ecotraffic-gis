@@ -5,11 +5,12 @@ import { useEmissionsContext } from "@/context/EmissionsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchLatestSegmentEmissions } from "@/services/api";
 import { analyticsLiveStatus, isNewerSegment } from "@/utils/emissionAnalytics";
-import { fmtFloatId } from "@/utils/format";
+import { fmtDateTimeId, fmtFloatId } from "@/utils/format";
 import type { LatestSegmentEmissionsResponse } from "@/types";
+import AnalyticsMeasureBand from "@/components/Analytics/AnalyticsMeasureBand";
+import AnalyticsMetricLedger from "@/components/Analytics/AnalyticsMetricLedger";
 import SectionTitle from "@/components/ui/SectionTitle";
-import Skeleton from "@/components/ui/Skeleton";
-import { ANALYTICS_ERROR_CLASS, ANIMATE_IN_CLASS, PAGE_CARD_CLASS, PAGE_CARD_GRID_CLASS, POLLUTANT_DOT_CLASS, POLLUTANT_TEXT_CLASS, SUMMARY_METRIC_CLASS } from "@/styles/tailwind";
+import { ANALYTICS_ERROR_CLASS, ANIMATE_IN_CLASS } from "@/styles/tailwind";
 
 export default function RealtimePollutants() {
     const { filter } = useEmissionAnalytics();
@@ -52,25 +53,30 @@ export default function RealtimePollutants() {
     const isLoading = loading && !matches;
     const state = analyticsLiveStatus(summary?.observed_at ?? null, summary?.stale_after_seconds ?? 180, summary?.source_mode ?? "", now);
     const age = summary?.observed_at ? Math.max(0, Math.floor((now - Date.parse(summary.observed_at)) / 1000)) : null;
-    const meta = isLoading
-        ? "Memuat pengamatan terbaru…"
-        : `${summary?.segment_count ?? 0} segmen · Pengamatan terakhir ${age === null ? "belum tersedia" : `${age} detik lalu`}${summary?.estimated_segment_count ? ` · ${summary.estimated_segment_count} estimasi` : ""}`;
     const statusClass = state === "LIVE" ? "bg-[#123525] text-[#4ade80]" : state === "STALE" ? "bg-[#3c3018] text-[#fbbf24]" : "bg-[#334155] text-[#cbd5e1]";
+    const statusTone = state === "LIVE" ? "live" : state === "STALE" ? "stale" : "default";
+    const metrics = EMISSION_DEFINITIONS.map(({ key: pollutant, label, color }) => {
+        const value = summary?.emissions_kg_h[pollutant];
+        return {
+            key: pollutant,
+            label,
+            color,
+            value: value == null ? "–" : fmtFloatId(value, value < 0.01 ? 6 : 3),
+            unit: "kg/hour",
+            meta: summary?.segment_count ? state : "Tidak ada data",
+        };
+    });
     return <section aria-label="Delapan polutan terkini" aria-busy={isLoading} className={ANIMATE_IN_CLASS}>
-        <SectionTitle title="Emisi segmen terkini" eyebrow="Data live" meta={meta}
+        <SectionTitle title="Emisi segmen terkini" eyebrow="Data live" meta="Laju massa terbaru dari cakupan segmen aktif."
             aside={<span className={`rounded px-[9px] py-[5px] text-[11px] font-bold ${statusClass}`}>{isLoading ? "Memuat" : result.error && !matches ? "Error" : state}</span>} />
         {!isLoading && result.error && !matches && <p role="alert" className={ANALYTICS_ERROR_CLASS}>{result.error}</p>}
-        <div className={`${PAGE_CARD_GRID_CLASS} mt-[14px] grid-cols-4 max-[600px]:grid-cols-2`}>{isLoading
-            ? EMISSION_DEFINITIONS.map(({ key: pollutant }) => <div className={`${PAGE_CARD_CLASS} ${SUMMARY_METRIC_CLASS}`} key={pollutant}>
-                <Skeleton height={12} width="55%" /><Skeleton height={26} width="80%" /><Skeleton height={10} width="45%" />
-            </div>)
-            : EMISSION_DEFINITIONS.map(({ key: pollutant, label }) => {
-                const value = summary?.emissions_kg_h[pollutant];
-                return <div key={pollutant} className={`${PAGE_CARD_CLASS} ${SUMMARY_METRIC_CLASS} ${POLLUTANT_TEXT_CLASS[pollutant]}`}>
-                    <span className="flex items-center gap-1.5"><i className={POLLUTANT_DOT_CLASS} />{label}</span>
-                    <strong className="text-[clamp(18px,2vw,27px)]!">{value == null ? "-" : fmtFloatId(value, value < 0.01 ? 6 : 3)}</strong>
-                    <small>kg/hour · {summary?.segment_count ? state : "Tidak ada data"}</small>
-                </div>;
-            })}</div>
+        <AnalyticsMeasureBand items={[
+            { label: "Sumber", value: isLoading ? "Memuat" : summary?.source_mode ?? "Belum tersedia", tone: statusTone },
+            { label: "Segmen", value: isLoading ? "–" : summary?.segment_count ?? 0 },
+            { label: "Teramati", value: isLoading ? "–" : fmtDateTimeId(summary?.observed_at) },
+            { label: "Usia data", value: isLoading || age === null ? "–" : `${age} detik`, tone: statusTone },
+            { label: "Estimasi", value: isLoading ? "–" : summary?.estimated_segment_count ?? 0, tone: summary?.estimated_segment_count ? "estimated" : "default" },
+        ]} />
+        <AnalyticsMetricLedger label="Laju delapan polutan terkini" loading={isLoading} items={metrics} />
     </section>;
 }
