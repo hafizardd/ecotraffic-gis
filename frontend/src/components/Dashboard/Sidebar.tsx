@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef } from "react";
-import { Map, TrendingUp, CarFront, History, ChevronsLeft, ChevronsRight, Waypoints, X } from "lucide-react";
+import { Map, TrendingUp, CarFront, History, ChevronsLeft, ChevronsRight, X } from "lucide-react";
 import type { ActiveView } from "./DashboardShell";
 
 interface SidebarProps {
@@ -56,7 +56,7 @@ export default function Sidebar({ open, mobileOpen, onToggle, onMobileClose, act
         <button type="button" className={`fixed inset-0 z-50 hidden bg-[rgba(3,13,17,0.72)] backdrop-blur-[2px] transition-[opacity,visibility] duration-200 max-[760px]:block ${mobileOpen ? "max-[760px]:visible max-[760px]:pointer-events-auto max-[760px]:opacity-100" : "max-[760px]:invisible max-[760px]:pointer-events-none max-[760px]:opacity-0"}`} aria-label="Tutup menu navigasi" onClick={closeMobileAndRestoreFocus} />
         <aside ref={sidebarRef} id="primary-navigation" role={mobileOpen ? "dialog" : undefined} aria-modal={mobileOpen ? true : undefined} aria-label="Navigasi aplikasi" className={`z-60 flex w-54 flex-[0_0_216px] flex-col overflow-hidden border-r border-(--border) bg-(--sidebar) transition-[width,flex-basis,transform,visibility] duration-200 ease-out max-[1100px]:w-17 max-[1100px]:basis-17 max-[760px]:fixed max-[760px]:inset-y-0 max-[760px]:left-0 max-[760px]:w-54 max-[760px]:basis-54 max-[760px]:shadow-(--shadow-float) ${open ? "" : "w-17 basis-17"} ${mobileOpen ? "max-[760px]:visible max-[760px]:translate-x-0" : "max-[760px]:invisible max-[760px]:-translate-x-full"}`}>
             <div className="flex h-14 flex-[0_0_56px] items-center gap-3 whitespace-nowrap border-b border-(--border) px-4 max-[1100px]:px-3.75 max-[760px]:px-4">
-                <div className="relative grid h-9 flex-[0_0_36px] place-items-center rounded-md border border-[rgba(74,222,128,0.35)] bg-(--surface-raised) text-(--brand-strong) shadow-[inset_0_0_0_1px_rgba(255,255,255,0.025)] after:absolute after:right-1.25 after:bottom-1.25 after:h-1.5 after:w-1.5 after:rounded-full after:bg-(--brand) after:shadow-[0_0_0_3px_rgba(34,197,94,0.13)] after:content-['']" aria-hidden="true"><Waypoints className="h-4.75 w-4.75" /></div>
+                <div className="relative grid h-9 flex-[0_0_36px] place-items-center"><img src="/bangjo.svg" alt="Bang Jo" className="h-6 w-6" /></div>
                 <div className={`flex min-w-0 items-center transition-opacity duration-150 ${copyVisibility}`}><strong className="font-(family-name:--font-display) text-sm font-bold tracking-[-0.01em]">EcoTraffic GIS</strong></div>
                 <button type="button" className="ml-auto hidden h-11 w-11 place-items-center rounded-sm border border-(--border) bg-(--surface) text-(--secondary) hover:border-(--contour-strong) hover:text-(--text) max-[760px]:grid" aria-label="Tutup menu" onClick={closeMobileAndRestoreFocus}><X className="h-4.25 w-4.25" aria-hidden="true" /></button>
             </div>
