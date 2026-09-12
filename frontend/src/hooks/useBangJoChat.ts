@@ -59,7 +59,7 @@ export default function useBangJoChat() {
         } catch (error) {
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant",
-                content: error instanceof Error ? `Maaf, terjadi kendala: ${error.message}` : "Maaf, layanan Bang Jo sedang tidak tersedia.",
+                content: error instanceof Error ? `Bang Jo tidak dapat memuat jawaban: ${error.message}` : "Layanan Bang Jo sedang tidak tersedia.",
                 timestamp: new Date().toISOString(),
             }]);
         } finally {

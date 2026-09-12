@@ -10,6 +10,7 @@ import { interventionColor, readableTextOn } from "@/constants/mapColors";
 import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
 import AutoInsightCard from "@/components/Panel/AutoInsightCard";
 import { CRITERIA_GRID_CLASS, DATA_MISSING_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, SEGMENT_EMPTY_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS, STAT_CARD_CLASS, STAT_GRID_CLASS } from "@/styles/tailwind";
+import SpatialProvenanceRail from "./SpatialProvenanceRail";
 
 const COMPONENTS: { keys: (keyof BusStopDetail)[]; label: string }[] = [
     { keys: ["accessibility_score_100", "accessibility_score"], label: "Aksesibilitas (survei 0-100)" },
@@ -72,20 +73,26 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
         .map(([key]) => key);
 
     return (
-        <aside className={PANEL_CLASS}>
+        <aside className={PANEL_CLASS} aria-label={`Detail halte ${detail?.title ?? sourceId}`}>
             <div className={SEGMENT_PANEL_HEADER_CLASS}>
                 <div className={`${PANEL_ICON_CLASS} flex-[0_0_auto]`}><Bus aria-hidden="true" /></div>
                 <div className={SEGMENT_PANEL_TITLE_CLASS}>
-                    <span>HALTE SURVEI</span>
+                    <span>Halte survei</span>
                     <h2>{detail?.title ?? sourceId}</h2>
                 </div>
-                <button onClick={onClose} className={`${PANEL_CLOSE_CLASS} m-0 bg-[#0b1a2a]`} aria-label="Tutup panel halte"><X aria-hidden="true" /></button>
+                <button onClick={onClose} className={PANEL_CLOSE_CLASS} aria-label="Tutup panel halte"><X aria-hidden="true" /></button>
             </div>
             <div className={SEGMENT_PANEL_CONTENT_CLASS}>
                 {!detail && !error && <div className={SEGMENT_OVERVIEW_CLASS}><Skeleton height={16} width="62%" /><Skeleton height={14} width="28%" /></div>}
-                {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#f87171]`}><strong>Data halte tidak tersedia</strong><span>{error.message}</span></div>}
+                {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data halte tidak tersedia</strong><span>{error.message}</span></div>}
                 {detail && (
                     <>
+                        <SpatialProvenanceRail items={[
+                            { label: "Entitas", value: detail.source_id, title: detail.source_id },
+                            { label: "Sumber", value: detail.observer_name ? `Survei · ${detail.observer_name}` : "Survei halte" },
+                            detail.observed_at ? { label: "Observasi", value: fmtDateTimeId(detail.observed_at), title: detail.observed_at } : null,
+                            detail.score_method ? { label: "Metode", value: detail.score_method } : detail.ahp_weight_version ? { label: "Metode", value: detail.ahp_weight_version } : null,
+                        ]} />
                         <div className={SEGMENT_OVERVIEW_CLASS}>
                             <strong>{detail.intervention_class ?? "Belum dinilai"}</strong>
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>
@@ -123,9 +130,11 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                             <section className={SEGMENT_SECTION_CLASS}>
                                 <SectionTitle title="Indikator kerusakan" />
                                 {damageList.length === 0 && <p className={SEGMENT_EMPTY_CLASS}>Tidak ada indikator kerusakan terdeteksi</p>}
-                                {damageList.map((key) => (
-                                    <p className="mt-[10px] mb-0 rounded-[0_6px_6px_0] border-l-2 border-[rgba(245,165,36,0.42)] bg-[rgba(245,165,36,0.055)] px-[10px] py-[9px] text-[10px] leading-[1.5] text-[#8292a8]" key={key}>- {DAMAGE_LABELS[key] ?? key}</p>
-                                ))}
+                                {damageList.length > 0 && <ul className="m-0 grid list-none gap-2 p-0">
+                                    {damageList.map((key) => (
+                                        <li className="rounded-[0_var(--radius-sm)_var(--radius-sm)_0] border-l-2 border-[var(--accent)] bg-[rgba(245,165,36,0.07)] px-3 py-2 text-[11px] leading-4 text-[var(--secondary)]" key={key}>{DAMAGE_LABELS[key] ?? key}</li>
+                                    ))}
+                                </ul>}
                             </section>
                         )}
                         <section className={SEGMENT_SECTION_CLASS}>
@@ -141,17 +150,17 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         </section>
                         <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Observasi" meta={detail.observed_at ? fmtDateTimeId(detail.observed_at) : MISSING_LABEL} />
-                            {detail.observer_name && <p className="mt-[10px] mb-0 rounded-[0_6px_6px_0] border-l-2 border-[rgba(245,165,36,0.42)] bg-[rgba(245,165,36,0.055)] px-[10px] py-[9px] text-[10px] leading-[1.5] text-[#8292a8]">Pengamat: {detail.observer_name}</p>}
-                            {detail.description && <p className="mt-[10px] mb-0 rounded-[0_6px_6px_0] border-l-2 border-[rgba(245,165,36,0.42)] bg-[rgba(245,165,36,0.055)] px-[10px] py-[9px] text-[10px] leading-[1.5] text-[#8292a8]">{detail.description}</p>}
+                            {detail.observer_name && <p className="mt-0 mb-2 text-[11px] text-[var(--muted)]">Pengamat: <strong className="font-semibold text-[var(--secondary)]">{detail.observer_name}</strong></p>}
+                            {detail.description && <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5 text-[11px] leading-[1.65] text-[var(--secondary)] [overflow-wrap:anywhere]">{detail.description}</p>}
                             {!detail.description && !detail.observer_name && <p className={SEGMENT_EMPTY_CLASS}>{MISSING_LABEL}</p>}
                         </section>
                         {photos.length > 0 && (
                             <section className={SEGMENT_SECTION_CLASS}>
                                 <SectionTitle title="Foto" meta={`${photos.length} media`} />
-                                <div className={CRITERIA_GRID_CLASS}>
+                                <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
                                     {photos.map((item, index) => (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img className="w-full rounded-lg" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} />
+                                        <img className="aspect-[4/3] w-full rounded-[var(--radius-sm)] border border-[var(--border)] object-cover" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} loading="lazy" />
                                     ))}
                                 </div>
                             </section>

@@ -69,16 +69,16 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
     }, [onStatusChange, scheduleRetry]);
 
     return (
-        <div className="relative aspect-video overflow-hidden rounded-[9px] border border-[#26364a] bg-[#02060b]">
+        <div className="relative aspect-video overflow-hidden rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[var(--canvas)]">
             {status === "loading" && (
-                <div className="absolute inset-0 flex items-center justify-center gap-[9px] bg-[#050b12] text-[10px] text-[var(--secondary)]">
+                <div className="absolute inset-0 flex items-center justify-center gap-2 bg-[var(--canvas)] text-[10px] text-[var(--secondary)]" role="status" aria-label="Menghubungkan stream CCTV">
                     <Skeleton height="100%" width="100%" radius={0} />
                 </div>
             )}
             {status === "error" && (
-                <div className="flex flex-col items-center gap-[5px] [&>strong]:text-[#fca5a5] [&>span]:text-[9px]" role="status">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[var(--canvas)] px-4 text-center [&>strong]:text-[12px] [&>strong]:text-[#fca5a5] [&>span]:text-[10px] [&>span]:text-[var(--muted)]" role="status">
                     <strong>Stream tidak tersedia</strong>
-                    <span>Mencoba menghubungkan kembali...</span>
+                    <span>Mencoba menghubungkan kembali…</span>
                 </div>
             )}
             {streamUrl && (

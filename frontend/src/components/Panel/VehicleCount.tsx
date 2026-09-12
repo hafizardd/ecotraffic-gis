@@ -6,7 +6,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import { formatNumber } from "@/utils/format";
 import { STAT_GRID_CLASS, TEXT_CAPTION_CLASS } from "@/styles/tailwind";
 
-const VEHICLE_CARD_CLASS = "flex min-h-[58px] items-center gap-[11px] rounded-lg border border-[var(--border)] bg-[var(--card-2)] px-[11px] py-[9px]";
+const VEHICLE_CARD_CLASS = "flex min-h-[62px] items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5";
 
 interface VehicleCountProps {
     emission: EmissionUpdate | null;
@@ -24,10 +24,10 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
         : emission;
     const isInstant = emission.source === "tracking" && !!emission.occupancy;
     const vehicles = [
-        { label: "Car", count: counts.car ?? 0, Icon: Car },
-        { label: "Motorcycle", count: counts.motorcycle ?? 0, Icon: Bike },
+        { label: "Mobil", count: counts.car ?? 0, Icon: Car },
+        { label: "Motor", count: counts.motorcycle ?? 0, Icon: Bike },
         { label: "Bus", count: counts.bus ?? 0, Icon: Bus },
-        { label: "Truck", count: counts.truck ?? 0, Icon: Truck },
+        { label: "Truk", count: counts.truck ?? 0, Icon: Truck },
     ];
     
     return (
@@ -39,10 +39,10 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
                     key={label}
                     className={VEHICLE_CARD_CLASS}
                 >
-                    <div className="grid h-[34px] w-[34px] place-items-center rounded-[7px] bg-[#13263b] text-[#8ba0b8] [&>svg]:h-[19px] [&>svg]:w-[19px]">
+                    <div className="grid h-9 w-9 place-items-center rounded-[var(--radius-sm)] bg-[var(--canvas)] text-[var(--muted)] [&>svg]:h-[18px] [&>svg]:w-[18px]">
                         <Icon aria-hidden="true" />
                     </div>
-                    <div className="flex flex-1 items-center justify-between gap-[5px] [&>span]:text-[9px] [&>span]:text-[var(--secondary)] [&>strong]:text-[17px] [&>strong]:tabular-nums">
+                    <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2 [&>span]:text-[10px] [&>span]:text-[var(--secondary)] [&>strong]:font-[var(--font-data)] [&>strong]:text-[18px] [&>strong]:font-semibold [&>strong]:text-[var(--text)] [&>strong]:tabular-nums">
                         <span>{label}</span><strong>{isInstant ? Math.round(count) : formatNumber(count)}</strong>
                     </div>
                 </div>

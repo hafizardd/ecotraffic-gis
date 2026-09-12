@@ -30,9 +30,9 @@ export default function HistoricalCameraStats({ historical }: { historical: Hist
                     </div>
                 ))}
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-[9px]">
+            <div className="mt-3 grid grid-cols-2 gap-2">
                 {VEHICLES.map(({ key, label }) => (
-                    <div className="flex min-w-0 items-center justify-between gap-3 rounded-[7px] border border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.68)] p-[10px] text-[10px] [&>span]:text-[#718198] [&>strong]:text-right [&>strong]:text-[11px] [&>strong]:text-[#dbe7f4] [&>strong]:tabular-nums" key={key}>
+                    <div className="flex min-w-0 items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] p-2.5 text-[10px] [&>span]:text-[var(--muted)] [&>strong]:font-[var(--font-data)] [&>strong]:text-right [&>strong]:text-[12px] [&>strong]:text-[var(--text)] [&>strong]:tabular-nums" key={key}>
                         <span>{label}/jam</span>
                         <strong>{volume_per_hour?.[key] == null ? "-" : fmtIntId(volume_per_hour[key])}</strong>
                     </div>

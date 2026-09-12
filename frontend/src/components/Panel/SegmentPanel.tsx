@@ -21,14 +21,11 @@ import {
     formatCameraName,
     formatMethodLabel,
 } from "@/utils/format";
-import { DATA_EMPTY_CLASS, ESTIMATE_BADGE_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_CONTENT_CLASS, PANEL_ICON_CLASS, POLLUTANT_DOT_CLASS, POLLUTANT_TEXT_CLASS, STAT_CARD_CLASS, STAT_GRID_CLASS } from "@/styles/tailwind";
+import { CRITERIA_GRID_CLASS, DATA_MISSING_CLASS, ESTIMATE_BADGE_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, POLLUTANT_DOT_CLASS, POLLUTANT_TEXT_CLASS, SEGMENT_EMPTY_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS, STAT_CARD_CLASS, STAT_GRID_CLASS } from "@/styles/tailwind";
+import SpatialProvenanceRail, { freshnessItem, type ProvenanceItem } from "./SpatialProvenanceRail";
 
 const VEHICLE_TYPES = ["car", "motorcycle", "bus", "truck"] as const;
-const SEGMENT_SECTION_CLASS = "border-b border-[rgba(148,163,184,0.1)] px-4 py-5 last:border-b-0 max-[420px]:px-[14px] max-[420px]:py-[18px]";
-const SEGMENT_OVERVIEW_CLASS = "mx-4 mt-[10px] grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-[10px] gap-y-1.5 rounded-[9px] border border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.88)] px-[13px] py-3 max-[420px]:mx-[14px] [&>strong]:min-w-0 [&>strong]:text-sm [&>strong]:leading-[1.35] [&>strong]:[overflow-wrap:anywhere] [&>span]:whitespace-nowrap [&>span]:text-right [&>span]:text-[11px] [&>span]:leading-[1.35] [&>span]:text-[var(--secondary)]";
-const SEGMENT_EMPTY_CLASS = `${DATA_EMPTY_CLASS} m-0 min-h-[58px] border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.4)] p-[13px] text-center text-[10px] leading-[1.5] text-[#718198]`;
-const DATA_MISSING_CLASS = "text-[10px]! font-medium! leading-[1.4]! tracking-normal! text-[#718198]!";
-const VEHICLE_SUMMARY_CLASS = "grid grid-cols-2 gap-[9px] max-[420px]:grid-cols-1 [&>div]:flex [&>div]:min-h-[50px] [&>div]:min-w-0 [&>div]:items-baseline [&>div]:justify-between [&>div]:gap-2 [&>div]:rounded-[7px] [&>div]:border [&>div]:border-[rgba(148,163,184,0.1)] [&>div]:bg-[rgba(14,29,46,0.75)] [&>div]:p-[11px] [&>div]:tabular-nums [&>div]:[overflow-wrap:anywhere] [&_span]:text-[10px] [&_span]:leading-[1.3] [&_span]:text-[#7f8fa5] [&_strong]:text-right [&_strong]:text-sm [&_strong]:leading-[1.35] [&_strong]:text-[#e2e8f0] [&_strong]:tabular-nums [&_strong]:[overflow-wrap:anywhere]";
+const VEHICLE_SUMMARY_CLASS = `${CRITERIA_GRID_CLASS} max-[420px]:grid-cols-1`;
 
 export default function SegmentPanel({
     segmentId,
@@ -90,18 +87,39 @@ function SegmentDetailPanel({
         }
         return null;
     })();
+    const provenanceCameras = liveDetail ? readStringArray(liveDetail.provenance, "source_cameras") : [];
+    const provenanceSource = liveDetail ? readString(liveDetail.provenance, "source") : null;
+    const freshness = freshnessItem(liveDetail?.freshness_status);
+    const sourceItem: ProvenanceItem | null = !liveDetail
+        ? null
+        : fallback
+            ? { label: "Sumber", value: `CCTV ${formatCameraName(fallback.camId)}`, tone: "estimated" }
+            : provenanceCameras.length > 0
+                ? { label: "Sumber", value: provenanceCameras.map(formatCameraName).join(", "), title: provenanceCameras.join(", ") }
+                : provenanceSource
+                    ? { label: "Sumber", value: provenanceSource }
+                    : liveDetail.volume_status === "estimated"
+                        ? { label: "Sumber", value: "Estimasi CCTV", tone: "estimated" }
+                        : null;
+    const qualityItem: ProvenanceItem | null = !liveDetail
+        ? null
+        : fallback || liveDetail.volume_status === "estimated"
+            ? { label: "Kualitas", value: "Estimasi", tone: "estimated" }
+            : freshness
+                ? { label: "Kualitas", ...freshness }
+                : null;
 
     return (
-        <aside className={PANEL_CLASS}>
-            <div className="flex min-h-[68px] flex-[0_0_auto] items-center gap-[10px] border-b border-[rgba(148,163,184,0.12)] px-[14px] py-[9px]">
+        <aside className={PANEL_CLASS} aria-label={`Detail segmen ${detail?.name ?? segmentId}`}>
+            <div className={SEGMENT_PANEL_HEADER_CLASS}>
                 <div className={`${PANEL_ICON_CLASS} flex-[0_0_auto]`}><Route aria-hidden="true" /></div>
-                <div className="min-w-0 flex-1 [&>span]:text-[8px] [&>span]:font-bold [&>span]:leading-none [&>span]:tracking-[0.13em] [&>span]:text-[var(--muted)] [&>h2]:mt-1 [&>h2]:mb-0 [&>h2]:line-clamp-2 [&>h2]:font-[var(--font-display)] [&>h2]:text-sm [&>h2]:font-[650] [&>h2]:leading-[1.25] [&>h2]:[overflow-wrap:anywhere]">
-                    <span>SEGMEN TERPILIH</span>
+                <div className={SEGMENT_PANEL_TITLE_CLASS}>
+                    <span>Segmen terpilih</span>
                     <h2>{detail?.name ?? segmentId}</h2>
                 </div>
-                <button onClick={onClose} className={`${PANEL_CLOSE_CLASS} m-0 bg-[#0b1a2a]`} aria-label="Tutup panel segmen"><X aria-hidden="true" /></button>
+                <button onClick={onClose} className={PANEL_CLOSE_CLASS} aria-label="Tutup panel segmen"><X aria-hidden="true" /></button>
             </div>
-            <div className={`${PANEL_CONTENT_CLASS} pb-1 [scrollbar-color:#34455b_transparent] [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-[#081522] [&::-webkit-scrollbar-thumb]:bg-[#34455b] hover:[&::-webkit-scrollbar-thumb]:bg-[#465a73]`}>
+            <div className={SEGMENT_PANEL_CONTENT_CLASS}>
                 {!detail && !error && <div aria-hidden="true">
                     <div className={SEGMENT_OVERVIEW_CLASS}><Skeleton height={16} width="62%" /><Skeleton height={14} width="28%" /></div>
                     <section className={SEGMENT_SECTION_CLASS}>
@@ -111,21 +129,32 @@ function SegmentDetailPanel({
                         ))}</div>
                     </section>
                 </div>}
-                {error && <div className="flex min-h-[150px] flex-col items-center justify-center gap-[9px] p-4 text-center text-[11px] leading-[1.5] text-[var(--secondary)] [&>strong]:text-[#f87171] [&>span]:text-[10px]"><strong>Data segmen tidak tersedia</strong><span>{error.message}</span></div>}
+                {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data segmen tidak tersedia</strong><span>{error.message}</span></div>}
                 {liveDetail && (
                     <>
-                        <div className="mx-4 mt-3 rounded-[0_6px_6px_0] border-l-2 border-[rgba(74,222,128,0.5)] bg-[rgba(15,29,46,0.62)] px-[10px] py-2 text-[10px] leading-[1.45] text-[#8292a8] max-[420px]:mx-[14px]" aria-live="polite">
-                            {liveDetail.calculated_at
-                                ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}`
-                                : "Belum ada perhitungan emisi"}
-                        </div>
-                        <AutoInsightCard entity={{ type: "segment", id: liveDetail.road_segment_id }} label={liveDetail.name} />
+                        <SpatialProvenanceRail items={[
+                            { label: "Entitas", value: liveDetail.road_segment_id, title: liveDetail.road_segment_id },
+                            sourceItem,
+                            liveDetail.calculated_at ? { label: "Observasi", value: fmtDateTimeId(liveDetail.calculated_at), title: liveDetail.calculated_at } : null,
+                            qualityItem,
+                        ]} />
                         <SegmentDetails detail={liveDetail} fallback={fallback} />
+                        <AutoInsightCard entity={{ type: "segment", id: liveDetail.road_segment_id }} label={liveDetail.name} />
                     </>
                 )}
             </div>
         </aside>
     );
+}
+
+function readString(record: Record<string, unknown>, key: string): string | null {
+    const value = record?.[key];
+    return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readStringArray(record: Record<string, unknown>, key: string): string[] {
+    const value = record?.[key];
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
 type Fallback = { camId: string; emission: Record<string, number>; at?: string } | null;
