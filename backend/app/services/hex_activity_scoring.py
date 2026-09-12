@@ -8,9 +8,9 @@ missing spatial data is omitted, never invented.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.models.activity_grid import ActivityGridHex
 from app.models.road_segment import RoadSegment
@@ -20,6 +20,7 @@ from app.services.emission_analytics import (
     BUCKETS,
     VEHICLE_KEYS,
     AnalyticsFilter,
+    source_mode_expression,
     vehicle_segment_means,
 )
 
@@ -291,3 +292,71 @@ async def hourly_hex_volumes(db, hour_start: datetime) -> HexHourData:
         for hex_id, entry in grouped.items()
     }
     return HexHourData(volumes=volumes, mapped_hex_ids=mapped_hex_ids)
+
+
+# --- static 24h profile addressing (shared by the map route and Bang Jo) -------
+
+
+async def all_cells_with_centroids(db):
+    """All native cells plus their centroid lon/lat, for the fallback distance test."""
+    rows = (await db.execute(
+        select(
+            ActivityGridHex,
+            text("ST_X(ST_Centroid(activity_grid_hexes.geometry))::float"),
+            text("ST_Y(ST_Centroid(activity_grid_hexes.geometry))::float"),
+        )
+    )).all()
+    cells = [row[0] for row in rows]
+    centroids = {row[0].hex_id: (row[1], row[2]) for row in rows}
+    return cells, centroids
+
+
+async def hour_scores(db, hour: datetime) -> tuple[list, dict[int, dict]]:
+    """Global (whole-grid) live scores for one hour, so map and panel agree."""
+    cells, centroids = await all_cells_with_centroids(db)
+    scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, hour), centroids)
+    return cells, scores
+
+
+async def _max_bucket(db, where) -> datetime | None:
+    bucket = func.to_timestamp(func.floor(func.extract("epoch", SegmentEmission.period_start) / 3600) * 3600)
+    value = (await db.execute(select(func.max(bucket)).where(where))).scalar_one_or_none()
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+
+async def profile_anchor(db) -> datetime | None:
+    """Anchor of the static 24h profile.
+
+    Prefers the precomputed REPLAY dataset so its buckets stay addressable on
+    any requested day; falls back to the newest observed sample when no REPLAY
+    rows exist yet (e.g. a live-only dev database).
+    """
+    replay = await _max_bucket(db, source_mode_expression() == "REPLAY")
+    if replay is not None:
+        return replay
+    return await _max_bucket(db, source_mode_expression().notin_(["SYNTHETIC"]))
+
+
+def canonical_hour(anchor: datetime, requested: datetime | None) -> datetime:
+    """Map a requested instant onto the anchor day's bucket with the same UTC hour-of-day.
+
+    The precomputed REPLAY facts are one static 24h profile, so any calendar day
+    resolves to the same underlying buckets ("view lens") without duplicating rows.
+    """
+    hour_of_day = requested.hour if requested is not None else anchor.hour
+    return anchor - timedelta(hours=(anchor.hour - hour_of_day) % 24)
+
+
+async def profile_hour(db, requested: datetime | None) -> datetime | None:
+    anchor = await profile_anchor(db)
+    return canonical_hour(anchor, requested) if anchor is not None else None
+
+
+async def available_hours(db) -> list[datetime]:
+    """The static profile's 24 hourly buckets (oldest first)."""
+    anchor = await profile_anchor(db)
+    if anchor is None:
+        return []
+    return [anchor - timedelta(hours=23 - index) for index in range(24)]

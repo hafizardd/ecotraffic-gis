@@ -3,12 +3,18 @@ export interface SelectionState {
     hexId: number | null;
     stopId: string | null;
     cameraId: string | null;
+    // Active activity-grid filters, so Bang Jo can answer for what is displayed.
+    activityHour: string | null;
+    profileDay: string | null;
     isPanelOpen: boolean;
 }
 
 type SelectionListener = (state: SelectionState) => void;
 
-const EMPTY: SelectionState = { segmentId: null, hexId: null, stopId: null, cameraId: null, isPanelOpen: false };
+const EMPTY: SelectionState = {
+    segmentId: null, hexId: null, stopId: null, cameraId: null,
+    activityHour: null, profileDay: null, isPanelOpen: false,
+};
 
 let selection: SelectionState = { ...EMPTY };
 const listeners = new Set<SelectionListener>();
@@ -31,15 +37,6 @@ export function subscribeSelection(listener: SelectionListener) {
     return () => {
         listeners.delete(listener);
     };
-}
-
-// Backwards-compatible segment helpers used by the chat hook and map clicks.
-export function setSelectedSegmentId(id: string | null) {
-    setSelection({ segmentId: id, hexId: null, stopId: null, cameraId: null });
-}
-
-export function getSelectedSegmentId() {
-    return selection.segmentId;
 }
 
 // Chat promotion bus: a panel can hand a question to the open Bang Jo widget.

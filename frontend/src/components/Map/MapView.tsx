@@ -20,7 +20,7 @@ import useSpatialLayers from "@/hooks/useSpatialLayers";
 import useActivityGrid, { useActivityGridHours } from "@/hooks/useActivityGrid";
 import useHistoricalCameraEmissions from "@/hooks/useHistoricalCameraEmissions";
 import ActivityHourSlider from "./ActivityHourSlider";
-import { nextGridLod, withDay, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel, GRID_LOD_RESOLUTION, type GridLod } from "@/utils/activityGrid";
+import { nextGridLod, withDay, adjacentTierToPrefetch, dataStatusLabel, noDataReasonLabel, type GridLod } from "@/utils/activityGrid";
 import { circleFeature } from "@/utils/geo";
 import { fmtDateTimeId, fmtIntId, formatNumber } from "@/utils/format";
 import { setSelection } from "@/utils/selectionStore";
@@ -129,8 +129,17 @@ export default function MapView() {
             hexId: selectedHexId,
             stopId: selectedStopId,
             cameraId: selectedCamera?.properties.camera_id ?? null,
+            activityHour: activeHour,
+            profileDay,
         });
-    }, [selectedSegmentId, selectedHexId, selectedStopId, selectedCamera]);
+    }, [selectedSegmentId, selectedHexId, selectedStopId, selectedCamera, activeHour, profileDay]);
+
+    // Leaving the map (e.g. switching to Emisi & Tren) unmounts this view; clear
+    // the shared selection so Bang Jo undocks instead of staying parked beside a
+    // panel that no longer exists.
+    useEffect(() => () => {
+        setSelection({ segmentId: null, hexId: null, stopId: null, cameraId: null, isPanelOpen: false });
+    }, []);
 
     const cameraGeoJSON = useMemo(() => ({
         type: "FeatureCollection" as const,
@@ -164,13 +173,6 @@ export default function MapView() {
     // Viewport-scoped quantile stops; null when the visible scores have no
     // spread, in which case the fill falls back to the classification tier.
     const activityBreaks = useMemo(() => breaksToStops(activityGrid.breaks), [activityGrid.breaks]);
-
-    // Aggregated tiers ship the whole region (so zoom-out has no empty edges);
-    // the count card still reports only what is inside the viewport.
-    const displayedCount = useMemo(
-        () => activityGrid.features.filter((feature) => featureInBbox(feature, isWholeRegionLod(lod) ? bbox : null)).length,
-        [activityGrid.features, lod, bbox],
-    );
 
     // Rebuilt only when the underlying data changes, not on every hover/pan
     // render; the segment set can be large and was previously remapped per render.
@@ -286,8 +288,6 @@ export default function MapView() {
     });
 
     const hoverCounts = {
-        fresh: cameraGeoJSON.features.filter((f) => (f.properties as { freshness: number }).freshness === 0).length,
-        stale: cameraGeoJSON.features.filter((f) => (f.properties as { freshness: number }).freshness >= 2).length,
         historical: cameraGeoJSON.features.filter((f) => (f.properties as { historical: number }).historical === 1).length,
         total: cameras.length,
     };
@@ -361,21 +361,19 @@ export default function MapView() {
                 }
              }}>
              <NavigationControl position="bottom-right" showCompass={false} />
-             {/* Exclusive thematic mode; the basemap and style toggle stay global. */}
-             <div className="map-mode-switch" role="tablist" aria-label="Mode peta">
-                 {MAP_MODES.map(({ key, label }) => (
-                     <button key={key} type="button" role="tab" aria-selected={mode === key}
-                         className={`map-mode-tab${mode === key ? " is-active" : ""}`}
-                         onClick={() => selectMode(key)}>{label}</button>
-                 ))}
-             </div>
-             {visible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
-                 day={profileDay ?? anchorDay} onChangeDay={changeDay} />}
-             {visible.activityGrid && (
-                 <div className="map-coarse-note">
-                     Sel ditampilkan: {displayedCount} · {GRID_LOD_RESOLUTION[lod]}{lod !== "fine" ? " · agregat" : ""}
+             {/* Exclusive thematic mode; the basemap and style toggle stay global.
+                 The hour slider sits above the mode pill, which drops below it. */}
+             <div className="map-top-controls">
+                 {visible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
+                     day={profileDay ?? anchorDay} onChangeDay={changeDay} />}
+                 <div className="map-mode-switch" role="tablist" aria-label="Mode peta">
+                     {MAP_MODES.map(({ key, label }) => (
+                         <button key={key} type="button" role="tab" aria-selected={mode === key}
+                             className={`map-mode-tab${mode === key ? " is-active" : ""}`}
+                             onClick={() => selectMode(key)}>{label}</button>
+                     ))}
                  </div>
-             )}
+             </div>
              {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
              </Source>}
@@ -459,7 +457,7 @@ export default function MapView() {
                             return (
                                 <>
                                     <small>CO₂: {point.emission == null ? "N/A" : `${fmtIntId(point.emission)} g/min`}</small>
-                                    {point.historical && <small>Nilai segmen pukul {fmtDateTimeId(point.observedAt)}, bukan arus live{point.interpolated ? ", hasil interpolasi jam" : ""}</small>}
+                                    {point.historical && <small>Nilai statis pukul {fmtDateTimeId(point.observedAt)}, bukan arus langsung{point.interpolated ? ", nilai perkiraan jam" : ""}</small>}
                                 </>
                             );
                         })()}
@@ -472,12 +470,12 @@ export default function MapView() {
                     <div className="marker-popup">
                         {hoveredHex.count != null ? (
                             <>
-                                <strong>Agregat {hoveredHex.count} sel grid</strong>
+                                <strong>Agregat {hoveredHex.count} sel</strong>
                                 <small>Tampilan perkiraan, bukan skor sel mandiri</small>
                             </>
                         ) : (
                             <>
-                                <strong>Hex {hoveredHex.id}</strong>
+                                <strong>Sel {hoveredHex.id}</strong>
                                 <small>{dataStatusLabel(hoveredHex.status)}</small>
                                 {noDataReasonLabel(hoveredHex.reason) && <small>{noDataReasonLabel(hoveredHex.reason)}</small>}
                             </>
@@ -488,8 +486,6 @@ export default function MapView() {
               <MapLegend
                 mode={mode}
                 segmentBuckets={SEGMENT_BUCKET_COLORS}
-                cameraFresh={hoverCounts.fresh}
-                cameraStale={hoverCounts.stale}
                 cameraHistorical={hoverCounts.historical}
                 cameraTotal={hoverCounts.total}
                 activityBreaks={activityGrid.breaks ?? null}
@@ -518,7 +514,7 @@ export default function MapView() {
                 ? <BusStopPanel sourceId={selectedStopId} onClose={() => setSelectedStopId(null)} />
                 : selectedSegmentId
                     ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); }} />
-                    : <ActivityGridPanel hexId={selectedHexId} hour={activeHour} onSelectHour={setActivityHour} onClose={() => setSelectedHexId(null)} />}
+                    : <ActivityGridPanel hexId={selectedHexId} hour={activeHour} onClose={() => setSelectedHexId(null)} />}
         </div>
     );
 }

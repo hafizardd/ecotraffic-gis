@@ -5,6 +5,10 @@ export type AutoInsightEntityType = "segment" | "hex" | "stop";
 export interface AutoInsightEntity {
     type: AutoInsightEntityType;
     id: string | number;
+    // Active grid hour (ISO) + display label; part of the cache key so scrubbing
+    // the hour slider regenerates an insight that matches the displayed hour.
+    hour?: string | null;
+    hourLabel?: string | null;
 }
 
 export interface AutoInsightOptions<T> {
@@ -15,7 +19,8 @@ export interface AutoInsightOptions<T> {
 }
 
 export function entityKey(entity: AutoInsightEntity): string {
-    return `${entity.type}:${entity.id}`;
+    const base = `${entity.type}:${entity.id}`;
+    return entity.hour ? `${base}:${entity.hour}` : base;
 }
 
 export function createAutoInsight<T>({

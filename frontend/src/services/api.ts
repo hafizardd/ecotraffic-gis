@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityGridHourSeries, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
+import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityGridHourSeries, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoChatFocus, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 import type { GridLod } from "@/utils/activityGrid";
 import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, HistoricalCameraResponse, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
@@ -124,15 +124,18 @@ export async function fetchBusStopDetail(sourceId: string): Promise<BusStopDetai
 
 export async function fetchBangJoReply(
     message: string,
-    roadSegmentId: string | null,
+    focus: BangJoChatFocus,
     history: { role: string; content: string }[],
 ): Promise<BangJoReply> {
     const response = await fetch(`${API_BASE}/api/chat/bangjo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, road_segment_id: roadSegmentId, history }),
+        body: JSON.stringify({ message, ...focus, history }),
     });
-    if (!response.ok) throw new Error(`Bang Jo tidak dapat dihubungi (${response.status})`);
+    if (!response.ok) {
+        const body: { detail?: unknown } = await response.json().catch(() => ({}));
+        throw new Error(typeof body.detail === "string" ? body.detail : `Bang Jo tidak dapat dihubungi (${response.status}). Coba lagi.`);
+    }
     return response.json();
 }
 
@@ -142,7 +145,10 @@ export async function fetchBangJoAutoInsight(entity: BangJoAutoInsightRequest): 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entity),
     });
-    if (!response.ok) throw new Error(`Bang Jo tidak dapat dihubungi (${response.status})`);
+    if (!response.ok) {
+        const body: { detail?: unknown } = await response.json().catch(() => ({}));
+        throw new Error(typeof body.detail === "string" ? body.detail : `Bang Jo tidak dapat dihubungi (${response.status}). Coba lagi.`);
+    }
     return response.json();
 }
 

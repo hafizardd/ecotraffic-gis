@@ -1,7 +1,7 @@
 "use client";
 import SectionTitle from "@/components/ui/SectionTitle";
 
-const settings = ["Bobot AHP", "Faktor emisi", "Pipeline kalkulasi", "Manajemen kamera dan sumber"];
+const settings = ["Bobot penilaian", "Faktor emisi", "Pipeline kalkulasi", "Manajemen kamera dan sumber"];
 
 export default function PengaturanPage() {
     return <div className="page-container">

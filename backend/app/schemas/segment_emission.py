@@ -23,6 +23,10 @@ class SegmentEmissionResponse(BaseModel):
     population: int | None = None
     population_district: str | None = None
     population_context: dict[str, Any] | None = None
+    data_status: str = "observed"
+    borrowed_from: str | None = None
+    is_static: bool = False
+    is_interpolated: bool = False
 
 
 class SegmentEmissionMapItem(BaseModel):
@@ -34,3 +38,7 @@ class SegmentEmissionMapItem(BaseModel):
     freshness_status: str = "unknown"
     vehicle_count_semantics: str = "unknown"
     source_cameras: list[str] = []
+    data_status: str = "observed"
+    borrowed_from: str | None = None
+    is_static: bool = False
+    is_interpolated: bool = False

@@ -5,7 +5,7 @@ import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchEmissionHistory } from "@/services/api";
 import useAnalyticsResource from "@/hooks/useAnalyticsResource";
-import { fmtDateTimeId, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
+import { fmtDateTimeId, fmtFloatId, fmtIntId, formatCalculationMode, formatCameraName, formatSemantics, formatSourceMode } from "@/utils/format";
 import EmissionBulkDelete from "./EmissionBulkDelete";
 import EmissionExport from "./EmissionExport";
 import HistoryFilterDrawer, { type HistoryFilters } from "./HistoryFilterDrawer";
@@ -16,18 +16,16 @@ import type { AnalyticsQuery, EmissionHistoryRecord, VehicleRates } from "@/type
 
 type SortKey = "period_start" | "segment_name";
 type Tab = "observed" | "estimated";
-const TABS: { key: Tab; label: string }[] = [{ key: "observed", label: "Terukur" }, { key: "estimated", label: "Estimasi" }];
+const TABS: { key: Tab; label: string }[] = [{ key: "observed", label: "Terukur" }, { key: "estimated", label: "Perkiraan" }];
 const VEHICLES: { key: keyof VehicleRates; label: string }[] = [
     { key: "car", label: "Mobil" }, { key: "motorcycle", label: "Motor" },
     { key: "bus", label: "Bus" }, { key: "truck", label: "Truk" },
 ];
-const SOURCE_LABELS: Record<string, string> = { LIVE: "Langsung", HISTORICAL: "Historis", SYNTHETIC: "Sintetis", REPLAY: "Replay", SNAPSHOT_REAL: "Snapshot" };
-
 function StatusBadge({ record }: { record: EmissionHistoryRecord }) {
-    const label = record.is_interpolated ? "Interpolasi" : record.quality_status === "estimated" ? "Estimasi" : "Terukur";
+    const label = record.is_interpolated ? "Perkiraan jam" : record.quality_status === "estimated" ? "Perkiraan" : "Terukur";
     return <div className="history-status">
         <span className={`history-badge quality-${record.is_interpolated ? "interpolated" : record.quality_status}`}>{label}</span>
-        <small>{SOURCE_LABELS[record.source_mode] ?? record.source_mode} · {record.freshness_status === "fresh" ? "segar" : "basi"}</small>
+        <small>{formatSourceMode(record.source_mode)} · {record.freshness_status === "fresh" ? "segar" : "perlu diperbarui"}</small>
     </div>;
 }
 
@@ -49,11 +47,11 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
             <dl>{VEHICLES.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{record.detail.vkt_km_h ? fmtFloatId(record.detail.vkt_km_h[key], 2) : "-"}</dd></div>)}</dl>
         </div>
         <div className="history-detail-group">
-            <h4>Provenans</h4>
+            <h4>Sumber data</h4>
             <dl>
                 <div><dt>Periode</dt><dd>{fmtDateTimeId(record.period_start)} – {fmtDateTimeId(record.period_end)}</dd></div>
-                <div><dt>Metode hitung</dt><dd>{record.detail.calculation_mode} · v{record.detail.calculation_version}</dd></div>
-                <div><dt>Semantik hitung</dt><dd>{record.vehicle_count_semantics}</dd></div>
+                <div><dt>Metode hitung</dt><dd>{formatCalculationMode(record.detail.calculation_mode)}</dd></div>
+                <div><dt>Jenis hitungan</dt><dd>{formatSemantics(record.vehicle_count_semantics)}</dd></div>
                 <div><dt>Kamera</dt><dd>{record.detail.source_cameras.map(formatCameraName).join(", ") || "Tidak tercatat"}</dd></div>
                 <div><dt>Stream</dt><dd>{record.detail.source_streams.join(", ") || "Tidak tercatat"}</dd></div>
                 <div><dt>Observasi</dt><dd>{fmtIntId(record.detail.source_observation_count)} · {fmtFloatId(record.detail.observation_duration_seconds, 1)} detik</dd></div>
@@ -151,7 +149,7 @@ export default function HistoryTable() {
     }
 
     return <section className="page-card history-card animate-in" aria-label="Riwayat emisi segmen" aria-busy={loading}>
-        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; hasil sintetis dikecualikan, jam replay hasil interpolasi ditandai.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
+        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; data perkiraan dikecualikan, jam perkiraan ditandai.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
 
         <div className="history-toolbar">
             <div className="history-tabs" role="tablist" aria-label="Status mutu data">

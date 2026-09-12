@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import activity_grid
 from app.core.database import get_db
+from app.services import hex_activity_scoring
 
 STATIC_PROPERTY_KEYS = {
     "hex_id", "luas_km2", "poi_total", "poi_breakdown", "penduduk", "volume_mean",
@@ -67,6 +68,9 @@ def _patch_volumes(monkeypatch, value):
     async def fake(db, hour):
         return value
 
+    # hour_scores() lives in the service; the hourly-series route calls the
+    # re-exported name from its own module, so patch both references.
+    monkeypatch.setattr(hex_activity_scoring, "hourly_hex_volumes", fake)
     monkeypatch.setattr(activity_grid, "hourly_hex_volumes", fake)
 
 
@@ -74,21 +78,21 @@ def _patch_profile_hour(monkeypatch, moment):
     async def fake(db, requested):
         return moment
 
-    monkeypatch.setattr(activity_grid, "_profile_hour", fake)
+    monkeypatch.setattr(activity_grid, "profile_hour", fake)
 
 
 def _patch_available_hours(monkeypatch, moments):
     async def fake(db):
         return moments
 
-    monkeypatch.setattr(activity_grid, "_available_hours", fake)
+    monkeypatch.setattr(activity_grid, "available_hours", fake)
 
 
 def test_canonical_hour_maps_any_day_to_same_hour_of_day():
     anchor = datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc)
-    assert activity_grid._canonical_hour(anchor, datetime(2026, 9, 5, 7, 0, tzinfo=timezone.utc)) == datetime(2026, 9, 10, 7, 0, tzinfo=timezone.utc)
-    assert activity_grid._canonical_hour(anchor, datetime(2026, 9, 5, 20, 0, tzinfo=timezone.utc)) == datetime(2026, 9, 9, 20, 0, tzinfo=timezone.utc)
-    assert activity_grid._canonical_hour(anchor, None) == anchor
+    assert hex_activity_scoring.canonical_hour(anchor, datetime(2026, 9, 5, 7, 0, tzinfo=timezone.utc)) == datetime(2026, 9, 10, 7, 0, tzinfo=timezone.utc)
+    assert hex_activity_scoring.canonical_hour(anchor, datetime(2026, 9, 5, 20, 0, tzinfo=timezone.utc)) == datetime(2026, 9, 9, 20, 0, tzinfo=timezone.utc)
+    assert hex_activity_scoring.canonical_hour(anchor, None) == anchor
 
 
 def test_live_hour_returns_recomputed_features(monkeypatch):
@@ -192,7 +196,7 @@ def test_available_hours_returns_static_24h_profile(monkeypatch):
     async def fake_anchor(db):
         return anchor
 
-    monkeypatch.setattr(activity_grid, "_profile_anchor", fake_anchor)
+    monkeypatch.setattr(hex_activity_scoring, "profile_anchor", fake_anchor)
     response = _client(_DB([])).get("/api/spatial/activity-grid/available-hours")
     assert response.status_code == 200
     body = response.json()

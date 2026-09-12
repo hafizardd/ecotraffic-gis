@@ -66,25 +66,42 @@ class Settings(BaseSettings):
     SNAPSHOT_FAILURES_BEFORE_OFFLINE: int = Field(default=5, gt=0)
     SNAPSHOT_DRY_RUN: bool = False
 
-    # Bang Jo assistant (OpenRouter, OpenAI-compatible). The route degrades to
-    # a deterministic, context-grounded summary when no key is configured, so a
-    # missing key never 500s the WebGIS.
-    OPENROUTER_API_KEY: str | None = None
-    BANGJO_MODEL: str = "nvidia/nemotron-3.5-lightning:free"
-    BANGJO_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
-    BANGJO_MAX_TOKENS: int = Field(default=1024, gt=0)
+    # Bang Jo assistant (Groq, OpenAI-compatible). Answers are always
+    # LLM-authored markdown; when the model is unavailable the route returns a
+    # retryable 502 instead of a synthesized fallback.
+    GROQ_API_KEY: str | None = None
+    BANGJO_MODEL: str = "openai/gpt-oss-120b"
+    BANGJO_BASE_URL: str = "https://api.groq.com/openai/v1/chat/completions"
+    # Generous so a reasoning-capable model still has room after hidden thinking.
+    # The effective output allowance is lowered automatically to keep
+    # input + output under BANGJO_REQUEST_TOKEN_LIMIT.
+    BANGJO_MAX_TOKENS: int = Field(default=2048, gt=0)
+    # Groq's free tier counts prompt tokens AND requested max_tokens against the
+    # per-minute limit, which is also a hard per-request ceiling (HTTP 413).
+    BANGJO_REQUEST_TOKEN_LIMIT: int = Field(default=8000, gt=0)
+    BANGJO_MIN_TOKENS: int = Field(default=512, gt=0)
     BANGJO_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
     BANGJO_DEBUG_RAW: bool = False
 
+    # Groq reasoning controls. Leave both unset for a plain instruct model (the
+    # recommended default): there is no chain-of-thought to leak. For a
+    # reasoning-capable Groq model set BANGJO_REASONING_FORMAT="hidden" (or
+    # "parsed" to keep the trace in a separate field for logging) and a
+    # model-appropriate BANGJO_REASONING_EFFORT. "hidden" suppresses the
+    # reasoning text but the model may still spend tokens reasoning internally.
+    BANGJO_REASONING_FORMAT: str | None = None
+    BANGJO_REASONING_EFFORT: str | None = None
+
     # Optional secondary model/provider. When set, a single retryable failure
-    # (429/5xx/timeout) on the primary is retried once here before degrading to
-    # the deterministic answer. Base URL/key default to the primary provider.
-    BANGJO_FALLBACK_MODEL: str | None = None
+    # (429/5xx/timeout) on the primary is retried once here before failing.
+    # Base URL/key default to the primary Groq provider.
+    BANGJO_FALLBACK_MODEL: str | None = "openai/gpt-oss-120b"
     BANGJO_FALLBACK_BASE_URL: str | None = None
     BANGJO_FALLBACK_API_KEY: str | None = None
 
-    # Entity-resolution embeddings (OpenRouter-compatible /embeddings). Reuses
-    # OPENROUTER_API_KEY + httpx; every failure falls back to string matching.
+    # Entity-resolution embeddings (OpenRouter-compatible /embeddings) still use
+    # OpenRouter + httpx; every failure falls back to string matching.
+    OPENROUTER_API_KEY: str | None = None
     BANGJO_EMBEDDINGS_ENABLED: bool = True
     BANGJO_EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
     BANGJO_EMBEDDINGS_URL: str = "https://openrouter.ai/api/v1/embeddings"

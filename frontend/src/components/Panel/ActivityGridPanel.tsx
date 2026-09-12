@@ -3,89 +3,26 @@
 import { useEffect, useState } from "react";
 import { Grid3x3, X } from "lucide-react";
 import { fetchActivityGridHex } from "@/services/api";
-import { ActivityGridFeature, ActivityGridHourPoint } from "@/types";
+import { ActivityGridFeature } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { MISSING_LABEL, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
-import { useActivityGridHexHourly } from "@/hooks/useActivityGrid";
-import { withDay, dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
+import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
+import { dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
 import AutoInsightCard from "./AutoInsightCard";
 
-export default function ActivityGridPanel({ hexId, hour, onSelectHour, onClose }: {
+export default function ActivityGridPanel({ hexId, hour, onClose }: {
     hexId: number | null;
     hour?: string | null;
-    onSelectHour?: (hour: string) => void;
     onClose: () => void;
 }) {
     if (hexId == null) return null;
-    return <ActivityGridSeries key={hexId} hexId={hexId} hour={hour} onSelectHour={onSelectHour} onClose={onClose} />;
+    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} onClose={onClose} />;
 }
 
-// Kept separate so the 24h series survives hourly scrubbing (the detail below
-// remounts per hour via its key, this wrapper does not).
-function ActivityGridSeries({ hexId, hour, onSelectHour, onClose }: {
-    hexId: number;
-    hour?: string | null;
-    onSelectHour?: (hour: string) => void;
-    onClose: () => void;
-}) {
-    const series = useActivityGridHexHourly(hexId);
-    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} series={series}
-        referenceDay={hour ? hour.slice(0, 10) : null} onSelectHour={onSelectHour} onClose={onClose} />;
-}
-
-function hourLabel(hour: string): string {
-    return new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit" });
-}
-
-function HourPatternChart({ series, activeHour, referenceDay, onSelectHour }: {
-    series: ActivityGridHourPoint[];
-    activeHour: string | null;
-    referenceDay: string | null;
-    onSelectHour?: (hour: string) => void;
-}) {
-    if (series.length < 2) return null;
-    const max = Math.max(...series.map((point) => point.skor_total_ahp ?? 0), 1);
-    return (
-        <section className="panel-section">
-            <SectionTitle title="Pola 24 jam" meta={`${series.length} jam tersedia`} />
-            <div className="activity-hour-chart">
-                {series.map((point) => {
-                    // The series is the canonical profile; rewrite to the day the
-                    // panel is showing so selection/highlight stay in sync.
-                    const displayHour = withDay(point.hour, referenceDay);
-                    const active = displayHour === activeHour;
-                    const score = point.skor_total_ahp;
-                    const height = score == null ? 4 : Math.max(4, Math.round((score / max) * 100));
-                    const label = hourLabel(point.hour);
-                    return (
-                        <button
-                            type="button"
-                            key={point.hour}
-                            className={active ? "active" : ""}
-                            onClick={() => onSelectHour?.(displayHour)}
-                            title={`Pukul ${label} · ${score == null ? "tanpa data" : fmtFloatId(score, 1)}`}
-                            aria-label={`Pukul ${label}${score == null ? ", tanpa data" : `, skor ${fmtFloatId(score, 1)}`}`}
-                        >
-                            <i data-empty={score == null || undefined} style={{ height: `${height}%` }} />
-                        </button>
-                    );
-                })}
-            </div>
-            <div className="activity-hour-axis" aria-hidden="true">
-                {series.map((point, index) => <span key={point.hour}>{index % 6 === 0 ? hourLabel(point.hour) : ""}</span>)}
-            </div>
-        </section>
-    );
-}
-
-function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, onClose }: {
+function ActivityGridDetail({ hexId, hour, onClose }: {
     hexId: number;
     hour: string | null;
-    series: ActivityGridHourPoint[];
-    referenceDay: string | null;
-    onSelectHour?: (hour: string) => void;
     onClose: () => void;
 }) {
     const [feature, setFeature] = useState<ActivityGridFeature | null>(null);
@@ -104,10 +41,10 @@ function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, o
     const props = feature?.properties;
     const currentHourLabel = hour ? new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null;
     const sourceMeta = !hour
-        ? "Sumber: model offline"
+        ? "Sumber: data statis"
         : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data`
-            : props?.data_status === "fallback" ? `Pukul ${currentHourLabel} · perkiraan (sel terdekat)`
-                : `Skor pukul ${currentHourLabel} · live`;
+            : props?.data_status === "fallback" ? `Pukul ${currentHourLabel} · perkiraan area terdekat`
+                : `Skor pukul ${currentHourLabel} · terukur`;
 
     return (
         <aside className="monitoring-panel segment-panel">
@@ -115,7 +52,7 @@ function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, o
                 <div className="panel-location-icon"><Grid3x3 aria-hidden="true" /></div>
                 <div className="panel-title">
                     <span>GRID POTENSI AKTIVITAS</span>
-                    <h2>Hex {hexId}</h2>
+                    <h2>Sel {hexId}</h2>
                 </div>
                 <button onClick={onClose} className="panel-close" aria-label="Tutup panel grid"><X aria-hidden="true" /></button>
             </div>
@@ -125,21 +62,23 @@ function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, o
                 {props && (
                     <>
                         <ActivityPotentialCard properties={props} />
-                        <AutoInsightCard entity={{ type: "hex", id: hexId }} label={`grid Hex ${hexId}`} />
+                        <AutoInsightCard
+                            entity={{ type: "hex", id: hexId, hour, hourLabel: hour ? fmtDateTimeId(hour) : null }}
+                            label={hour ? `grid Hex ${hexId} · ${fmtDateTimeId(hour)}` : `grid Hex ${hexId}`}
+                        />
                         <section className="panel-section">
                             <SectionTitle title="Sumber data" meta={hour ? currentHourLabel ?? undefined : "model offline"} />
                             <ul className="data-source-list">
                                 <li>Status: <strong>{dataStatusLabel(props.data_status)}</strong></li>
-                                {props.is_interpolated && <li>Jam ini hasil <strong>interpolasi</strong> 24 jam, bukan pengamatan langsung.</li>}
+                                {props.is_interpolated && <li>Jam ini <strong>nilai perkiraan</strong>, bukan pengamatan langsung.</li>}
                                 {props.data_status === "fallback" && props.fallback_from != null && (
-                                    <li>Volume dipinjam dari hex <strong>{props.fallback_from}</strong> (tetangga terdekat).</li>
+                                    <li>Nilai diperkirakan dari sel <strong>{props.fallback_from}</strong> (terdekat).</li>
                                 )}
                                 {noDataReasonLabel(props.no_data_reason) && <li>{noDataReasonLabel(props.no_data_reason)}</li>}
                                 <li>Segmen: {props.source_segments?.length ? props.source_segments.join(", ") : "tidak tercatat"}</li>
                                 <li>Kamera: {props.source_cameras?.length ? props.source_cameras.map(formatCameraName).join(", ") : "tidak tercatat"}</li>
                             </ul>
                         </section>
-                        <HourPatternChart series={series} activeHour={hour} referenceDay={referenceDay} onSelectHour={onSelectHour} />
                         <section className="panel-section">
                             <SectionTitle title="Data mentah" meta={sourceMeta} />
                             <div className="criteria-grid">

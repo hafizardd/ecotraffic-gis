@@ -158,12 +158,16 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
     const shown = hasEmission ? totals : fallbackTotals;
     const hasAny = shown != null && EMISSION_DEFINITIONS.some(({ key }) => shown[key] != null);
     const sourceBadge = !hasEmission && fallback
-        ? `Estimasi dari CCTV ${formatCameraName(fallback.camId)}`
-        : detail.volume_status === "estimated"
-            ? "Estimasi CCTV"
-            : detail.calculated_at
-                ? "Terukur"
-                : "Belum ada perhitungan";
+        ? `Perkiraan dari CCTV ${formatCameraName(fallback.camId)}`
+        : detail.data_status === "estimated"
+            ? `Perkiraan dari segmen ${detail.borrowed_from ?? "terdekat"}`
+            : detail.is_static
+                ? "Data statis"
+                : detail.volume_status === "estimated"
+                    ? "Perkiraan dari kamera"
+                    : detail.calculated_at
+                        ? "Terukur"
+                        : "Belum ada perhitungan";
     return (
         <>
             <div className="segment-overview">
@@ -185,13 +189,13 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                     <p className="data-empty">Belum ada perhitungan emisi. Data CCTV belum teragregasi.</p>
                 )}
                 {fallback && !hasEmission && (
-                    <p className="segment-note">Estimasi dari CCTV {formatCameraName(fallback.camId)}, bukan volume per jam terukur{fallback.at ? `, ${fmtDateTimeId(fallback.at)}` : ""}.</p>
+                    <p className="segment-note">Perkiraan dari CCTV {formatCameraName(fallback.camId)}, bukan volume per jam terukur{fallback.at ? `, ${fmtDateTimeId(fallback.at)}` : ""}.</p>
                 )}
             </section>
             <PopulationSection context={detail.population_context} />
             <ActivityPotentialSection segmentId={detail.road_segment_id} />
-            <VehicleMetrics title="VOLUME KENDARAAN" subtitle="Agregat per jam" values={detail.volume_per_hour} estimated={detail.volume_status === "estimated"} unavailableLabel="Volume belum tersedia dari snapshot occupancy" />
-            <VehicleMetrics title="VKT" subtitle="Kendaraan-kilometer per jam" values={detail.vkt_km_h} estimated={detail.volume_status === "estimated"} unavailableLabel="VKT belum tersedia dari snapshot occupancy" />
+            <VehicleMetrics title="VOLUME KENDARAAN" subtitle="Agregat per jam" values={detail.volume_per_hour} estimated={detail.volume_status === "estimated"} unavailableLabel="Volume belum tersedia dari pemantauan berkala" />
+            <VehicleMetrics title="VKT" subtitle="Kendaraan-kilometer per jam" values={detail.vkt_km_h} estimated={detail.volume_status === "estimated"} unavailableLabel="VKT belum tersedia dari pemantauan berkala" />
         </>
     );
 }
@@ -250,7 +254,7 @@ function ActivityPotentialSection({ segmentId }: { segmentId: string }) {
     if (loading) {
         return (
             <section className="panel-section segment-activity-section">
-                <SectionTitle title="Potensi aktivitas" meta="Grid heksagon (AHP)" />
+                <SectionTitle title="Potensi aktivitas" meta="Grid area (skor potensi)" />
                 <Skeleton height={16} width="62%" />
                 <Skeleton height={14} width="28%" />
             </section>
@@ -259,14 +263,14 @@ function ActivityPotentialSection({ segmentId }: { segmentId: string }) {
     if (!feature) {
         return (
             <section className="panel-section segment-activity-section">
-                <SectionTitle title="Potensi aktivitas" meta="Grid heksagon (AHP)" />
+                <SectionTitle title="Potensi aktivitas" meta="Grid area (skor potensi)" />
                 <p className="data-empty">Segmen ini belum tercakup dalam grid potensi aktivitas</p>
             </section>
         );
     }
     return (
         <section className="panel-section segment-activity-section">
-            <SectionTitle title="Potensi aktivitas" meta="Grid heksagon (AHP)" />
+            <SectionTitle title="Potensi aktivitas" meta="Grid area (skor potensi)" />
             <ActivityPotentialCard properties={feature.properties} />
         </section>
     );
@@ -288,14 +292,14 @@ function VehicleMetrics({
     if (values == null) {
         return (
             <section className="panel-section segment-vehicle-section">
-                <SectionTitle title={title} meta={subtitle} aside={estimated ? <b className="estimate-badge">Estimasi</b> : undefined} />
+                <SectionTitle title={title} meta={subtitle} aside={estimated ? <b className="estimate-badge">Perkiraan</b> : undefined} />
                 <p className="data-empty">{unavailableLabel}</p>
             </section>
         );
     }
     return (
         <section className="panel-section segment-vehicle-section">
-            <SectionTitle title={title} meta={subtitle} aside={estimated ? <b className="estimate-badge">Estimasi</b> : undefined} />
+            <SectionTitle title={title} meta={subtitle} aside={estimated ? <b className="estimate-badge">Perkiraan</b> : undefined} />
             <div className="vehicle-summary">
                 {VEHICLE_TYPES.map((key) => {
                     const value = values?.[key];

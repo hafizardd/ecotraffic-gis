@@ -42,6 +42,44 @@ export function formatMethodLabel(method: string | null | undefined): string {
     return METHOD_LABELS[method] ?? toDisplayName(method);
 }
 
+// Source/mode enums are internal; never render them raw in the UI.
+const SOURCE_MODE_LABELS: Record<string, string> = {
+    LIVE: "Data langsung",
+    HISTORICAL: "Data historis",
+    REPLAY: "Data statis",
+    SNAPSHOT_REAL: "Pemantauan berkala",
+    SYNTHETIC: "Perkiraan",
+};
+
+export function formatSourceMode(mode: string | null | undefined): string {
+    if (!mode) return MISSING_LABEL;
+    return SOURCE_MODE_LABELS[mode] ?? toDisplayName(mode);
+}
+
+const CALCULATION_MODE_LABELS: Record<string, string> = {
+    live_occupancy_estimate: "Perkiraan dari kamera langsung",
+    flow_based_segment: "Hitungan arus kendaraan",
+    replay_hourly_mean: "Rata-rata jam data statis",
+};
+
+export function formatCalculationMode(mode: string | null | undefined): string {
+    if (!mode) return MISSING_LABEL;
+    return CALCULATION_MODE_LABELS[mode] ?? toDisplayName(mode);
+}
+
+const SEMANTICS_LABELS: Record<string, string> = {
+    interval_count: "Hitungan arus",
+    snapshot_occupancy: "Pemantauan berkala",
+    vehicles_per_hour: "Kendaraan per jam",
+    mean_observed_snapshot_count: "Rata-rata pemantauan berkala",
+    unknown: "Tidak diketahui",
+};
+
+export function formatSemantics(semantics: string | null | undefined): string {
+    if (!semantics) return MISSING_LABEL;
+    return SEMANTICS_LABELS[semantics] ?? toDisplayName(semantics);
+}
+
 export function fmtIntId(v: number | null | undefined): string {
     if (isMissing(v)) return MISSING_LABEL;
     return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(v as number);

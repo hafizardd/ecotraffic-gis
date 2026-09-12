@@ -19,6 +19,7 @@ def test_map_response_is_lightweight():
         "road_segment_id", "total_emission",
         "calculated_at", "observed_at", "data_age_seconds", "freshness_status",
         "vehicle_count_semantics", "source_cameras",
+        "data_status", "borrowed_from", "is_static", "is_interpolated",
     }
 
 

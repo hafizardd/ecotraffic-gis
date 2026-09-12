@@ -12,6 +12,12 @@ from app.models.segment_traffic_observation import SegmentTrafficObservationReco
 from app.schemas.segment_emission import SegmentEmissionMapItem, SegmentEmissionResponse
 from app.core.config import settings
 from app.services.data_freshness import FreshnessPolicy, classify_freshness
+from app.services.segment_estimate import (
+    DisplayFact,
+    UNAVAILABLE,
+    build_display_fact,
+    build_display_facts,
+)
 
 router = APIRouter(tags=["segment-emissions"])
 
@@ -22,16 +28,12 @@ def _iso(value):
 
 @router.get("/api/segments/geojson")
 async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(RoadSegment, SegmentEmission)
-        .outerjoin(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
-        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc().nullslast())
-    )
-    latest = {}
-    for segment, emission in result:
-        latest.setdefault(segment.id, (segment, emission))
+    segments = (await db.execute(select(RoadSegment).order_by(RoadSegment.road_segment_id))).scalars().all()
+    facts = await build_display_facts(db)
     features = []
-    for segment, emission in latest.values():
+    for segment in segments:
+        fact = facts.get(segment.road_segment_id) or DisplayFact(emission=None, data_status=UNAVAILABLE)
+        emission = fact.emission
         geometry = (await db.execute(
             select(text("ST_AsGeoJSON(road_segments.geometry)::json"))
             .where(RoadSegment.id == segment.id)
@@ -48,7 +50,9 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
                       "population_context": population_context,
                       "period_start": None, "period_end": None, "observed_at": None, "calculated_at": None,
                       "source_streams": [], "aggregation_policy": None, "source_observation_count": None,
-                      "volume_status": "unavailable", "calculation_version": None}
+                      "volume_status": "unavailable", "calculation_version": None,
+                      "data_status": fact.data_status, "borrowed_from": fact.borrowed_from,
+                      "is_static": fact.is_static, "is_interpolated": fact.is_interpolated}
         if emission:
             pollutant_totals = emission.pollutant_totals_g_h
             freshness = classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings))
@@ -70,22 +74,20 @@ async def get_segments_geojson(db: AsyncSession = Depends(get_db)):
 
 @router.get("/api/emissions/map", response_model=list[SegmentEmissionMapItem])
 async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(RoadSegment, SegmentEmission)
-        .outerjoin(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
-        .order_by(RoadSegment.road_segment_id, SegmentEmission.period_end.desc().nullslast())
-    )
-    latest = {}
-    for segment, emission in result:
-        latest.setdefault(segment.road_segment_id, (segment, emission))
+    segments = (await db.execute(select(RoadSegment).order_by(RoadSegment.road_segment_id))).scalars().all()
+    facts = await build_display_facts(db)
     items = []
-    for segment, emission in latest.values():
+    for segment in segments:
+        fact = facts.get(segment.road_segment_id) or DisplayFact(emission=None, data_status=UNAVAILABLE)
+        emission = fact.emission
         if emission is None:
             items.append(SegmentEmissionMapItem(
                 road_segment_id=segment.road_segment_id,
                 total_emission=None, calculated_at=None,
                 observed_at=None, data_age_seconds=None, freshness_status="unknown",
                 vehicle_count_semantics="unknown", source_cameras=[],
+                data_status=fact.data_status, borrowed_from=fact.borrowed_from,
+                is_static=fact.is_static, is_interpolated=fact.is_interpolated,
             ))
             continue
         freshness = classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings))
@@ -97,6 +99,8 @@ async def get_segment_emission_map(db: AsyncSession = Depends(get_db)):
             freshness_status=freshness.status.value,
             vehicle_count_semantics=emission.vehicle_count_semantics,
             source_cameras=emission.source_cameras,
+            data_status=fact.data_status, borrowed_from=fact.borrowed_from,
+            is_static=fact.is_static, is_interpolated=fact.is_interpolated,
         ))
     return items
 
@@ -149,19 +153,21 @@ async def get_segment_emission_history(
 
 @router.get("/api/emissions/{road_segment_id}", response_model=SegmentEmissionResponse)
 async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(RoadSegment, SegmentEmission)
-        .outerjoin(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
-        .where(RoadSegment.road_segment_id == road_segment_id)
-        .order_by(SegmentEmission.period_end.desc().nullslast(), SegmentEmission.calculation_version.desc().nullslast())
-        .limit(1)
-    )
-    row = result.first()
-    if row is None:
+    segment = (
+        await db.execute(select(RoadSegment).where(RoadSegment.road_segment_id == road_segment_id))
+    ).scalar_one_or_none()
+    if segment is None:
         raise HTTPException(status_code=404, detail=f"Road segment '{road_segment_id}' not found")
-    segment, emission = row
+    fact = await build_display_fact(db, road_segment_id)
+    emission = fact.emission if fact else None
     spatial_metadata = segment.spatial_metadata or {}
     population_context = spatial_metadata.get("population_context")
+    display = {
+        "data_status": fact.data_status if fact else UNAVAILABLE,
+        "borrowed_from": fact.borrowed_from if fact else None,
+        "is_static": fact.is_static if fact else False,
+        "is_interpolated": fact.is_interpolated if fact else False,
+    }
     if emission is None:
         return SegmentEmissionResponse(
             road_segment_id=segment.road_segment_id, name=segment.name, length_km=segment.length_km,
@@ -172,19 +178,25 @@ async def get_segment_emission(road_segment_id: str, db: AsyncSession = Depends(
             population=segment.population,
             population_district=(population_context or {}).get("primary", {}).get("district_name"),
             population_context=population_context,
+            **display,
         )
+    volume_status = "unavailable" if emission.volume_per_hour is None else (
+        "estimated" if emission.vehicle_count_semantics == "snapshot_occupancy" or display["data_status"] == "estimated"
+        else "calculated"
+    )
     return SegmentEmissionResponse(
         road_segment_id=segment.road_segment_id, name=segment.name, length_km=segment.length_km,
         period_start=emission.period_start, period_end=emission.period_end, calculated_at=emission.calculated_at,
         raw_counts=emission.raw_counts, volume_per_hour=emission.volume_per_hour, vkt_km_h=emission.vkt_km_h,
         pollutant_totals_g_h=emission.pollutant_totals_g_h, category_pollutant_breakdown_g_h=emission.category_pollutant_breakdown_g_h,
         provenance={"source_cameras": emission.source_cameras, "source_streams": emission.source_streams, "aggregation_policy": emission.aggregation_policy},
-        volume_status="unavailable" if emission.volume_per_hour is None else ("estimated" if emission.vehicle_count_semantics == "snapshot_occupancy" else "calculated"),
+        volume_status=volume_status,
         vehicle_count_semantics=emission.vehicle_count_semantics,
         freshness_status=classify_freshness(emission.period_end, now=datetime.now(timezone.utc), policy=FreshnessPolicy.from_settings(settings)).status.value,
         population=segment.population,
         population_district=(population_context or {}).get("primary", {}).get("district_name") if population_context else None,
         population_context=population_context,
+        **display,
     )
 
 

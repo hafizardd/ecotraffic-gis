@@ -5,6 +5,7 @@ import Drawer from "@/components/ui/Drawer";
 import Select from "@/components/ui/Select";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { numberDuplicateNames } from "@/utils/emissionAnalytics";
+import { formatSourceMode } from "@/utils/format";
 
 export interface HistoryFilters {
     corridorId: string | null;
@@ -19,10 +20,10 @@ export const EMPTY_HISTORY_FILTERS: HistoryFilters = { corridorId: null, segment
 // REPLAY is the precomputed 54-camera dataset and is selectable.
 const SOURCE_OPTIONS = [
     { value: "", label: "Semua sumber" },
-    { value: "LIVE", label: "Langsung" },
-    { value: "HISTORICAL", label: "Historis" },
-    { value: "SNAPSHOT_REAL", label: "Snapshot" },
-    { value: "REPLAY", label: "Replay" },
+    { value: "LIVE", label: formatSourceMode("LIVE") },
+    { value: "HISTORICAL", label: formatSourceMode("HISTORICAL") },
+    { value: "SNAPSHOT_REAL", label: formatSourceMode("SNAPSHOT_REAL") },
+    { value: "REPLAY", label: formatSourceMode("REPLAY") },
 ];
 
 function toLocalInput(value: string | null): string {

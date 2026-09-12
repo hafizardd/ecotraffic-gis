@@ -78,7 +78,8 @@ test("featureInBbox tests polygon vertices against the viewport", () => {
 
 test("data status and no-data reasons carry user-facing labels", () => {
     assert.equal(dataStatusLabel("live"), "Terukur");
-    assert.equal(dataStatusLabel("fallback"), "Perkiraan sel terdekat");
+    assert.equal(dataStatusLabel("fallback"), "Perkiraan area terdekat");
+    assert.equal(dataStatusLabel("static"), "Data statis");
     assert.equal(dataStatusLabel(null), "Tidak tersedia");
     assert.equal(noDataReasonLabel("no_mapped_segment"), "Tidak ada segmen jalan yang memotong sel ini.");
     assert.equal(noDataReasonLabel("mapped_but_no_volume"), "Ada segmen jalan, tetapi tidak ada sampel volume pada jam ini.");

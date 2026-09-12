@@ -73,7 +73,7 @@ def source_mode_expression():
     ), "HISTORICAL")
 
 
-def fact_query(filters: AnalyticsFilter, *, latest: bool = False):
+def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: bool = False):
     corridor_id, corridor_name = corridor_columns()
     stmt = select(
         SegmentEmission,
@@ -96,6 +96,10 @@ def fact_query(filters: AnalyticsFilter, *, latest: bool = False):
         stmt = stmt.where(estimated if filters.quality_status == "estimated" else ~estimated)
     if filters.source_mode:
         stmt = stmt.where(source_mode_expression() == filters.source_mode)
+    if exclude_live:
+        # Runs before the latest-per-segment DISTINCT so a segment whose newest
+        # fact is LIVE still resolves to its newest static/REPLAY fact.
+        stmt = stmt.where(source_mode_expression() != "LIVE")
     if latest:
         from app.models.camera_road_segment import CameraRoadSegment
         from app.models.camera import Camera

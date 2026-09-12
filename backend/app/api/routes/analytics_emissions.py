@@ -113,7 +113,7 @@ async def historical_cameras(filters: AnalyticsFilter = Depends(get_filters), db
     path, so ``LIVE`` facts are excluded here.
     """
     now = datetime.now(timezone.utc)
-    facts = fact_query(filters, latest=True).cte("latest_facts")
+    facts = fact_query(filters, latest=True, exclude_live=True).cte("latest_facts")
     rows = (await db.execute(select(facts))).mappings().all()
     cases = [serialize_fact(row, now) for row in rows if row["source_mode"] != "LIVE"]
     segment_ids = [case["segment_id"] for case in cases]

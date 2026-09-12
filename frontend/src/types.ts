@@ -140,6 +140,10 @@ export interface SegmentProperties {
     source_observation_count?: number | null;
     volume_status?: string;
     calculation_version?: number | null;
+    data_status?: "observed" | "estimated" | "unavailable";
+    borrowed_from?: string | null;
+    is_static?: boolean;
+    is_interpolated?: boolean;
 }
 export interface PopulationContext {
     primary?: { district_name?: string; population?: number | null; method?: string } | null;
@@ -162,6 +166,10 @@ export interface SegmentEmissionDetail {
     population?: number | null;
     population_district?: string | null;
     population_context?: PopulationContext | null;
+    data_status?: "observed" | "estimated" | "unavailable";
+    borrowed_from?: string | null;
+    is_static?: boolean;
+    is_interpolated?: boolean;
 }
 export interface SpatialFeatureCollection { type: "FeatureCollection"; features: SpatialFeature[]; }
 export interface SpatialFeature { type: "Feature"; geometry: { type: string; coordinates: unknown }; properties: Record<string, string | number | null>; }
@@ -333,7 +341,6 @@ export interface BangJoMessage {
     role: "user" | "assistant";
     content: string;
     contextLabel?: string;
-    citations?: { label: string; source?: string }[];
     timestamp: string;
 }
 
@@ -459,12 +466,7 @@ export interface BusStopDetail {
 }
 
 export interface BangJoAnswer {
-    summary: string;
-    drivers: string[];
-    asi_category: string;
-    recommendation: string;
-    evidence: string[];
-    citations?: { label: string; source?: string }[];
+    content: string;
     source?: string;
 }
 
@@ -480,10 +482,21 @@ export interface BangJoReply {
 
 export type BangJoEntityType = "segment" | "hex" | "stop";
 
+// Active map selection + displayed grid hour, sent so answers match the screen.
+export interface BangJoChatFocus {
+    road_segment_id?: string | null;
+    hex_id?: number | null;
+    stop_id?: string | null;
+    hour?: string | null;
+    hour_label?: string | null;
+}
+
 export interface BangJoAutoInsightRequest {
     road_segment_id?: string;
     hex_id?: number;
     stop_id?: string;
+    hour?: string | null;
+    hour_label?: string | null;
 }
 
 export interface BangJoAutoInsightReply {

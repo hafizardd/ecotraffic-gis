@@ -26,7 +26,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <div className={analyticsView ? "dashboard-main dashboard-main-analytics" : "dashboard-main"}>
                 <TopHeader onMenuClick={() => setSidebarOpen((value) => !value)} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
                 {(activeView === "peta" || activeView === "kendaraan" || activeView === "pengaturan") && <GlobalCounter />}
-                <main className="dashboard-workspace">{activeView === "peta" ? children : page}</main>
+                <main className="dashboard-workspace">
+                    <div key={activeView} className="page-enter">{activeView === "peta" ? children : page}</div>
+                </main>
             </div>
             <BangJoWidget />
         </div></EmissionAnalyticsProvider>

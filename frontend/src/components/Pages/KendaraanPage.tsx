@@ -26,7 +26,7 @@ const renderActiveSector = ({ cx, cy, innerRadius, outerRadius, startAngle, endA
 );
 
 export default function KendaraanPage() {
-    const { query, setFilter } = useEmissionAnalytics();
+    const { filter, query, setFilter } = useEmissionAnalytics();
     const [hidden, setHidden] = useState<Set<VehicleKey>>(() => new Set());
     const load = useCallback((signal: AbortSignal) => fetchVehicleAnalytics(query, signal), [query]);
     const { data, loading, error } = useAnalyticsResource(JSON.stringify(query), load);
@@ -43,7 +43,10 @@ export default function KendaraanPage() {
     function toggle(key: VehicleKey) { setHidden((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); }
     function toggleFromLegend(value: unknown) { const found = VEHICLES.find((vehicle) => vehicle.label === value); if (found) toggle(found.key); }
     function legendToggle(value: unknown) { toggleFromLegend(value); }
-    function filterSegment(segmentId: string) { setFilter({ segmentId, corridorId: null }); }
+    function filterSegment(segmentId: string) {
+        // Toggle: clicking the focused segment again clears the focus.
+        setFilter(filter.segmentId === segmentId ? { segmentId: null } : { segmentId, corridorId: null });
+    }
 
     return <div className="page-container analytics-page">
         <SectionTitle page eyebrow="Analisis lalu lintas" title="Kendaraan" meta="Komposisi, peringkat segmen, VKT, dan tren volume kendaraan per jam." />
@@ -98,7 +101,8 @@ export default function KendaraanPage() {
                 </tr></thead><tbody>{(data?.ranking ?? []).map((row) => <tr key={row.segment_id}>
                     <td className="history-index">{row.rank}</td>
                     <td><strong>{row.segment_name}</strong><br /><small>{row.corridor_name}</small><br />
-                        <button type="button" className="link-button" onClick={() => filterSegment(row.segment_id)}>Saring</button></td>
+                        <button type="button" className={`link-button${filter.segmentId === row.segment_id ? " is-active" : ""}`}
+                            aria-pressed={filter.segmentId === row.segment_id} onClick={() => filterSegment(row.segment_id)}>Saring</button></td>
                     {VEHICLES.map((vehicle) => <td key={vehicle.key} className="history-num">{fmtIntId(row[vehicle.rateKey])}</td>)}
                     <td className="history-num"><strong>{fmtIntId(row.total_veh_h)}</strong></td>
                 </tr>)}</tbody></table></div>
@@ -121,7 +125,7 @@ export default function KendaraanPage() {
                     <small>km/jam</small>
                 </div>)}
             </div>
-            <p className="analytics-note">Total VKT: {fmtFloatId(data?.total_vkt_km_h, 1)} km/jam{data?.estimated_sample_count ? ` · ${data.estimated_sample_count} sampel estimasi occupancy` : ""}.</p>
+            <p className="analytics-note">Total VKT: {fmtFloatId(data?.total_vkt_km_h, 1)} km/jam{data?.estimated_sample_count ? ` · ${data.estimated_sample_count} sampel perkiraan` : ""}.</p>
         </>}
     </div>;
 }

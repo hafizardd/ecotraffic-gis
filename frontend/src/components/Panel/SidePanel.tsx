@@ -69,18 +69,18 @@ export default function SidePanel({ camera, historical = null, estimate = null, 
                     </>
                 ) : historical ? (
                     <section className="panel-section">
-                        <SectionTitle title="Emisi historis" meta="Nilai dalam g/min (profil replay)" />
+                        <SectionTitle title="Emisi statis" meta="Nilai dalam g/min (data tidak langsung)" />
                         <HistoricalCameraStats historical={historical} />
                     </section>
                 ) : estimate ? (
                     <section className="panel-section estimate-section">
                         <SectionTitle
-                            title="Estimasi dari data sekitar"
+                            title="Perkiraan dari data sekitar"
                             meta={`Kamera ${estimate.cameraName}, sekitar ${formatNumber(estimate.distanceKm)} km`}
-                            aside={<b className="estimate-badge">Estimasi</b>}
+                            aside={<b className="estimate-badge">Perkiraan</b>}
                         />
                         <p className="analytics-note">
-                            Kamera ini belum punya pembacaan sendiri. Nilai berikut diperkirakan dari kamera terdekat, bukan arus live kamera ini.
+                            Kamera ini belum punya pembacaan sendiri. Nilai berikut diperkirakan dari kamera terdekat, bukan arus langsung kamera ini.
                         </p>
                         {estimate.emission ? (
                             <>

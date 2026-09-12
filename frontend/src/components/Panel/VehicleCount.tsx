@@ -29,7 +29,7 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
     
     return (
         <>
-        <p className="text-caption">{isInstant ? "Kendaraan pada frame terbaru." : "Kendaraan terlihat atau rata-rata snapshot. Ini bukan volume lalu lintas per jam."}</p>
+        <p className="text-caption">{isInstant ? "Kendaraan pada frame terbaru." : "Kendaraan terlihat atau rata-rata pemantauan berkala. Ini bukan volume lalu lintas per jam."}</p>
         <div className="vehicle-grid">
             {vehicles.map(({ label, count, Icon }) => (
                 <div

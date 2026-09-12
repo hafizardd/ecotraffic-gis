@@ -13,13 +13,6 @@ export const CAMERA_TIER_COLORS = {
     high: "#ef4444",
 };
 
-export const FRESHNESS_COLORS = {
-    fresh: "#22c55e",
-    aging: "#f59e0b",
-    stale: "#f05252",
-    unknown: "#94a3b8",
-};
-
 export const FIVE_TIER_COLORS = {
     veryLow: "#bbf7d0",
     low: "#22c55e",
