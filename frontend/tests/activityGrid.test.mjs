@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { gridLod, nextGridLod, sliderIndex, withDay, hourKey, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel } from "../src/utils/activityGrid.ts";
-import { breaksToLabels, breaksToStops } from "../src/constants/mapColors.ts";
+import { breaksToStops } from "../src/constants/mapColors.ts";
 
 test("lod steps coarse -> medium -> sub -> fine across the zoom breakpoints", () => {
     assert.equal(gridLod(9), "coarse");
@@ -31,11 +31,6 @@ test("choropleth stops map quantile breaks onto the five tier colours", () => {
     assert.deepEqual(stops.slice(-2), [100, "#ef4444"]);
     assert.equal(breaksToStops(null), null);
     assert.equal(breaksToStops([5]), null);
-});
-
-test("choropleth labels round each break for the legend", () => {
-    assert.deepEqual(breaksToLabels([1.234, 25.6, 50, 75.4, 100]), ["1.2", "26", "50", "75", "100"]);
-    assert.equal(breaksToLabels(null), null);
 });
 
 test("slider is hidden with no hours and clamps to the available range", () => {

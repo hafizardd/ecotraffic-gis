@@ -10,14 +10,17 @@ import HistoricalCameraStats from "./HistoricalCameraStats";
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import EmissionChart from "./EmissionChart";
 import SectionTitle from "@/components/ui/SectionTitle";
+import type { NeighborEstimate } from "@/utils/cameraEstimate";
+import { formatNumber } from "@/utils/format";
 
 interface SidePanelProps {
     camera: CameraFeature | null;
     historical?: HistoricalCameraEmission | null;
+    estimate?: NeighborEstimate | null;
     onClose: () => void;
 }
 
-export default function SidePanel({ camera, historical = null, onClose }: SidePanelProps) {
+export default function SidePanel({ camera, historical = null, estimate = null, onClose }: SidePanelProps) {
     const { emissionMap } = useEmissionsContext();
     const [trackingStatus, setTrackingStatus] = useState<"loading" | "streaming" | "error">("loading");
     const liveEmission = camera
@@ -26,11 +29,6 @@ export default function SidePanel({ camera, historical = null, onClose }: SidePa
 
     if (!camera) return null;
 
-    const isHistorical = !liveEmission && !!historical;
-    const freshnessStatus = isHistorical
-        ? "historis"
-        : liveEmission?.freshness_status ?? camera.properties.freshness_status;
-    const ageSeconds = liveEmission?.data_age_seconds ?? camera.properties.data_age_seconds;
     const isTrackingSource = camera.properties.data_source === "LIVE";
 
     return (
@@ -51,21 +49,10 @@ export default function SidePanel({ camera, historical = null, onClose }: SidePa
             </div>
 
             <div className="panel-content">
-                <div className="panel-data-status" aria-live="polite">
-                    <span>DATA {freshnessStatus.toUpperCase()}</span>
-                    <small>{isHistorical
-                        ? "Nilai historis dari segmen jalan terpetakan"
-                        : ageSeconds == null ? "Belum ada data" : `${ageSeconds}s sejak capture terakhir`}</small>
-                </div>
                 <section className="panel-section video-section">
                     {isTrackingSource && <><SectionTitle title="Pelacakan visual" meta="Deteksi dan tracking kendaraan real-time" /><VideoFeed key={camera.properties.camera_id} cameraId={camera.properties.camera_id} onStatusChange={setTrackingStatus} /></>}
                 </section>
-                {isHistorical ? (
-                    <section className="panel-section">
-                        <SectionTitle title="Emisi historis" meta="Nilai dalam g/min · profil REPLAY" />
-                        <HistoricalCameraStats historical={historical} />
-                    </section>
-                ) : (
+                {liveEmission ? (
                     <>
                         <section className="panel-section">
                             <SectionTitle title="Emisi saat ini" meta="Nilai dalam g/min" />
@@ -80,6 +67,36 @@ export default function SidePanel({ camera, historical = null, onClose }: SidePa
                             <EmissionChart cameraId={camera.properties.camera_id} liveEmission={liveEmission} />
                         </section>
                     </>
+                ) : historical ? (
+                    <section className="panel-section">
+                        <SectionTitle title="Emisi historis" meta="Nilai dalam g/min (profil replay)" />
+                        <HistoricalCameraStats historical={historical} />
+                    </section>
+                ) : estimate ? (
+                    <section className="panel-section estimate-section">
+                        <SectionTitle
+                            title="Estimasi dari data sekitar"
+                            meta={`Kamera ${estimate.cameraName}, sekitar ${formatNumber(estimate.distanceKm)} km`}
+                            aside={<b className="estimate-badge">Estimasi</b>}
+                        />
+                        <p className="analytics-note">
+                            Kamera ini belum punya pembacaan sendiri. Nilai berikut diperkirakan dari kamera terdekat, bukan arus live kamera ini.
+                        </p>
+                        {estimate.emission ? (
+                            <>
+                                <EmissionStats cameraId={camera.properties.camera_id} emission={estimate.emission} />
+                                <div style={{ height: 12 }} />
+                                <VehicleCount emission={estimate.emission} />
+                            </>
+                        ) : estimate.historical ? (
+                            <HistoricalCameraStats historical={estimate.historical} />
+                        ) : null}
+                    </section>
+                ) : (
+                    <div className="segment-state" role="status">
+                        <strong>Belum ada data</strong>
+                        <span>Kamera ini belum mengirim pembacaan dan tidak ada kamera sekitar dengan data untuk diperkirakan.</span>
+                    </div>
                 )}
             </div>
         </aside>

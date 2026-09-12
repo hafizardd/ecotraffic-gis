@@ -82,7 +82,7 @@ def main(count: int, interval: int, output_dir: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="EcoTraffic — spot check annotated frames")
+    parser = argparse.ArgumentParser(description="EcoTraffic - spot check annotated frames")
     parser.add_argument("--count", type=int, default=3, help="Number of frames to grab")
     parser.add_argument("--interval", type=int, default=5, help="Seconds between frames")
     parser.add_argument("--output-dir", type=str, default=OUTPUT_DIR, help="Where to save images")

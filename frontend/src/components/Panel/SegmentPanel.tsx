@@ -17,6 +17,8 @@ import {
     fmtKm,
     fmtPercentId,
     fmtVehicleId,
+    formatCameraName,
+    formatMethodLabel,
 } from "@/utils/format";
 
 const VEHICLE_TYPES = ["car", "motorcycle", "bus", "truck"] as const;
@@ -107,7 +109,7 @@ function SegmentDetailPanel({
                     <>
                         <div className="segment-update-status" aria-live="polite">
                             {liveDetail.calculated_at
-                                ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}${liveDetail.freshness_status ? ` · Data: ${liveDetail.freshness_status}` : ""}`
+                                ? `Diperbarui ${fmtDateTimeId(liveDetail.calculated_at)}`
                                 : "Belum ada perhitungan emisi"}
                         </div>
                         <SegmentDetails detail={liveDetail} fallback={fallback} />
@@ -154,7 +156,7 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
     const shown = hasEmission ? totals : fallbackTotals;
     const hasAny = shown != null && EMISSION_DEFINITIONS.some(({ key }) => shown[key] != null);
     const sourceBadge = !hasEmission && fallback
-        ? `Estimasi dari CCTV ${fallback.camId}`
+        ? `Estimasi dari CCTV ${formatCameraName(fallback.camId)}`
         : detail.volume_status === "estimated"
             ? "Estimasi CCTV"
             : detail.calculated_at
@@ -178,10 +180,10 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                         ))}
                     </div>
                 ) : (
-                    <p className="data-empty">Belum ada perhitungan emisi — data CCTV belum teragregasi</p>
+                    <p className="data-empty">Belum ada perhitungan emisi. Data CCTV belum teragregasi.</p>
                 )}
                 {fallback && !hasEmission && (
-                    <p className="segment-note">Estimasi dari CCTV {fallback.camId} — bukan volume per jam terukur{fallback.at ? ` · ${fmtDateTimeId(fallback.at)}` : ""}</p>
+                    <p className="segment-note">Estimasi dari CCTV {formatCameraName(fallback.camId)}, bukan volume per jam terukur{fallback.at ? `, ${fmtDateTimeId(fallback.at)}` : ""}.</p>
                 )}
             </section>
             <PopulationSection context={detail.population_context} />
@@ -212,7 +214,7 @@ function PopulationSection({ context }: { context: SegmentEmissionDetail["popula
                     </div>
                     <div className="population-method">
                         <dt>Metode</dt>
-                        <dd className={primary.method == null ? "data-missing" : undefined}>{primary.method ?? MISSING_LABEL}</dd>
+                        <dd className={primary.method == null ? "data-missing" : undefined}>{formatMethodLabel(primary.method)}</dd>
                     </div>
                 </dl>
             )}

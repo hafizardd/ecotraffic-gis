@@ -1,7 +1,7 @@
 """Assemble the real, evidence-grounded context object Bang Jo narrates.
 
-Every field is a real query. Missing pieces stay ``None``/empty — nothing is
-fabricated — matching the existing ``_empty_result()``/``"status": "pending"``
+Every field is a real query. Missing pieces stay ``None``/empty - nothing is
+fabricated - matching the existing ``_empty_result()``/``"status": "pending"``
 convention.
 """
 

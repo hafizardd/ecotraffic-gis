@@ -37,6 +37,6 @@ class CameraFeature(BaseModel):
  
  
 class CameraFeatureCollection(BaseModel):
-    """GeoJSON FeatureCollection — returned by GET /api/cameras."""
+    """GeoJSON FeatureCollection - returned by GET /api/cameras."""
     type: str = "FeatureCollection"
     features: list[CameraFeature]

@@ -6,7 +6,7 @@ import { fetchActivityGridHex } from "@/services/api";
 import { ActivityGridFeature, ActivityGridHourPoint } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { MISSING_LABEL, fmtFloatId, fmtIntId } from "@/utils/format";
+import { MISSING_LABEL, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
 import { useActivityGridHexHourly } from "@/hooks/useActivityGrid";
 import { withDay, dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
@@ -134,7 +134,7 @@ function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, o
                                 )}
                                 {noDataReasonLabel(props.no_data_reason) && <li>{noDataReasonLabel(props.no_data_reason)}</li>}
                                 <li>Segmen: {props.source_segments?.length ? props.source_segments.join(", ") : "tidak tercatat"}</li>
-                                <li>Kamera: {props.source_cameras?.length ? props.source_cameras.join(", ") : "tidak tercatat"}</li>
+                                <li>Kamera: {props.source_cameras?.length ? props.source_cameras.map(formatCameraName).join(", ") : "tidak tercatat"}</li>
                             </ul>
                         </section>
                         <HourPatternChart series={series} activeHour={hour} referenceDay={referenceDay} onSelectHour={onSelectHour} />

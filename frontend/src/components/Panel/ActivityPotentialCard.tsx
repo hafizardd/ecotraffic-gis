@@ -33,7 +33,7 @@ export default function ActivityPotentialCard({ properties }: { properties: Acti
                 <p className="analytics-note">Perkiraan dari sel terdekat; tidak ada data kendaraan langsung untuk jam ini.</p>
             )}
             <section className="panel-section segment-decision-section">
-                <SectionTitle title="Skor potensi AHP" meta={`Versi ${properties.ahp_weight_version}`} />
+                <SectionTitle title="Skor potensi AHP" />
                 <div className="segment-score"><span>SKOR TOTAL AHP</span><strong>{fmtFloatId(properties.skor_total_ahp, 2)}</strong></div>
             </section>
             <section className="panel-section">

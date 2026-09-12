@@ -86,11 +86,11 @@ class VehicleDetector:
         Run vehicle detection on a single BGR frame (OpenCV format).
  
         Args:
-            frame: np.ndarray — BGR image from cv2.imread or VideoCapture.
+            frame: np.ndarray - BGR image from cv2.imread or VideoCapture.
  
         Returns:
-            counts: dict — {"car": int, "motorcycle": int, "bus": int, "truck": int}
-            annotated_frame: np.ndarray — copy of frame with bounding boxes drawn.
+            counts: dict - {"car": int, "motorcycle": int, "bus": int, "truck": int}
+            annotated_frame: np.ndarray - copy of frame with bounding boxes drawn.
  
         Raises:
             ValueError: if frame is None or empty.

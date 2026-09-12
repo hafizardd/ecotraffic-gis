@@ -11,7 +11,7 @@ from app.core.database import Base
 class Emission(Base):
     __tablename__ = "emissions"
     __table_args__ = (
-        # Composite index — speeds up "last N rows for camera X" queries
+        # Composite index - speeds up "last N rows for camera X" queries
         # and "most recent row per camera" queries
         Index("ix_emissions_camera_id_timestamp", "camera_id", "timestamp"),
     )
@@ -29,7 +29,7 @@ class Emission(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        comment="UTC time when the detection cycle ran — set explicitly by worker",
+        comment="UTC time when the detection cycle ran - set explicitly by worker",
     )
 
     # --- Vehicle counts ---
@@ -63,7 +63,7 @@ class Emission(Base):
         comment="How long the detection cycle took in seconds",
     )
 
-    # Relationship — back to parent camera
+    # Relationship - back to parent camera
     camera: Mapped["Camera"] = relationship(  # noqa: F821
         "Camera",
         back_populates="emissions",

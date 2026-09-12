@@ -1,8 +1,8 @@
 """
 backend/app/core/seed.py
  
-Seed script — inserts known Jogja CCTV cameras into the cameras table.
-Safe to run multiple times — uses ON CONFLICT DO NOTHING (idempotent).
+Seed script - inserts known Jogja CCTV cameras into the cameras table.
+Safe to run multiple times - uses ON CONFLICT DO NOTHING (idempotent).
  
 Usage:
     cd backend
@@ -73,7 +73,7 @@ async def seed_cameras(session: AsyncSession) -> None:
             logger.info(f"  Skipped (already exists): {cam['camera_id']}")
  
     await session.commit()
-    logger.info(f"Seed complete — {inserted} inserted, {skipped} skipped.")
+    logger.info(f"Seed complete - {inserted} inserted, {skipped} skipped.")
  
  
 async def main() -> None:

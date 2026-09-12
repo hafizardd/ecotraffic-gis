@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker, Session as SyncSession
 from contextlib import contextmanager
 
 # ------------------------------------------------------------------
-# Base — all models inherit from this.
+# Base - all models inherit from this.
 # Defined here at module level so Alembic can import it without
 # triggering engine creation.
 # ------------------------------------------------------------------
@@ -48,7 +48,7 @@ def get_sync_db():
 
 # ------------------------------------------------------------------
 # Lazy engine + session factory.
-# Not created at import time — only when get_engine() is first called.
+# Not created at import time - only when get_engine() is first called.
 # This prevents the asyncpg/psycopg2 conflict when Alembic imports Base.
 # ------------------------------------------------------------------
 
@@ -79,7 +79,7 @@ def get_session_factory():
 
 
 # ------------------------------------------------------------------
-# FastAPI dependency — yields a session per request, always closes it
+# FastAPI dependency - yields a session per request, always closes it
 # ------------------------------------------------------------------
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

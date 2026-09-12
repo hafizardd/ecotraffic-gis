@@ -5,7 +5,7 @@ Two scoring paths:
 * **AHP (authoritative).** Stops imported from the offline survey workbook carry
   ``ahp_total_score``/``ahp_classification`` computed with the validated Saaty
   weights (Aksesibilitas 0.4111, Kondisi 0.3278, Lingkungan 0.2611, CR = 0.048).
-  Those values are used directly — the survey team's accessibility score is
+  Those values are used directly - the survey team's accessibility score is
   trusted over the live POI join, which stays for the panel's informational
   "POI sekitar" breakdown.
 * **Keyword fallback.** Any stop without AHP data (e.g. a future lighter-weight

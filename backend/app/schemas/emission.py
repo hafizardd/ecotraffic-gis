@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 class EmissionRow(BaseModel):
-    """Single emission record — one detection cycle."""
+    """Single emission record - one detection cycle."""
     id: uuid.UUID
     timestamp: datetime
     car: float
@@ -49,7 +49,7 @@ class VehicleSummary(BaseModel):
  
  
 class EmissionSummaryResponse(BaseModel):
-    """Response for GET /api/emissions/summary — city-wide totals."""
+    """Response for GET /api/emissions/summary - city-wide totals."""
     total_cameras_active: int
     total_tsp_g_per_min: float
     total_tsp_kg_per_hr: float

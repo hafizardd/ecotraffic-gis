@@ -5,7 +5,7 @@ import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { fetchEmissionHistory } from "@/services/api";
 import useAnalyticsResource from "@/hooks/useAnalyticsResource";
-import { fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
+import { fmtDateTimeId, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
 import EmissionBulkDelete from "./EmissionBulkDelete";
 import EmissionExport from "./EmissionExport";
 import HistoryFilterDrawer, { type HistoryFilters } from "./HistoryFilterDrawer";
@@ -40,13 +40,13 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
     return <div className="history-detail">
         <div className="history-detail-group">
             <h4>Laju polutan · {record.units.emissions}</h4>
-            <dl>{EMISSION_DEFINITIONS.map((p) => <div key={p.key}><dt><i style={{ background: p.color }} />{p.label}</dt><dd>{record.emissions_kg_h[p.key] == null ? "—" : fmtFloatId(record.emissions_kg_h[p.key], 6)}</dd></div>)}</dl>
+            <dl>{EMISSION_DEFINITIONS.map((p) => <div key={p.key}><dt><i style={{ background: p.color }} />{p.label}</dt><dd>{record.emissions_kg_h[p.key] == null ? "-" : fmtFloatId(record.emissions_kg_h[p.key], 6)}</dd></div>)}</dl>
         </div>
         <div className="history-detail-group">
             <h4>Volume kendaraan · {record.units.volume_per_hour}</h4>
-            <dl>{VEHICLES.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{record.volume_per_hour ? fmtIntId(record.volume_per_hour[key]) : "—"}</dd></div>)}</dl>
+            <dl>{VEHICLES.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{record.volume_per_hour ? fmtIntId(record.volume_per_hour[key]) : "-"}</dd></div>)}</dl>
             <h4>VKT · {record.units.vkt_km_h}</h4>
-            <dl>{VEHICLES.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{record.detail.vkt_km_h ? fmtFloatId(record.detail.vkt_km_h[key], 2) : "—"}</dd></div>)}</dl>
+            <dl>{VEHICLES.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{record.detail.vkt_km_h ? fmtFloatId(record.detail.vkt_km_h[key], 2) : "-"}</dd></div>)}</dl>
         </div>
         <div className="history-detail-group">
             <h4>Provenans</h4>
@@ -54,7 +54,7 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
                 <div><dt>Periode</dt><dd>{fmtDateTimeId(record.period_start)} – {fmtDateTimeId(record.period_end)}</dd></div>
                 <div><dt>Metode hitung</dt><dd>{record.detail.calculation_mode} · v{record.detail.calculation_version}</dd></div>
                 <div><dt>Semantik hitung</dt><dd>{record.vehicle_count_semantics}</dd></div>
-                <div><dt>Kamera</dt><dd>{record.detail.source_cameras.join(", ") || "Tidak tercatat"}</dd></div>
+                <div><dt>Kamera</dt><dd>{record.detail.source_cameras.map(formatCameraName).join(", ") || "Tidak tercatat"}</dd></div>
                 <div><dt>Stream</dt><dd>{record.detail.source_streams.join(", ") || "Tidak tercatat"}</dd></div>
                 <div><dt>Observasi</dt><dd>{fmtIntId(record.detail.source_observation_count)} · {fmtFloatId(record.detail.observation_duration_seconds, 1)} detik</dd></div>
             </dl>
@@ -196,8 +196,8 @@ export default function HistoryTable() {
                                 <td className="history-index">{no}</td>
                                 <td><strong>{fmtDateTimeId(record.observed_at)}</strong><br /><small>{fmtDateTimeId(record.period_start)} – {fmtDateTimeId(record.period_end)}</small></td>
                                 <td><strong>{record.segment_name}</strong><br /><small>{record.corridor_name}</small></td>
-                                <td><strong>{record.total_vehicles_per_hour == null ? "—" : fmtIntId(record.total_vehicles_per_hour)}</strong><VehicleBreakdown volume={record.volume_per_hour} /></td>
-                                <td className="history-num"><strong>{record.total_emissions_kg_h == null ? "—" : fmtFloatId(record.total_emissions_kg_h, 3)}</strong><br /><small>{record.units.emissions}</small></td>
+                                <td><strong>{record.total_vehicles_per_hour == null ? "-" : fmtIntId(record.total_vehicles_per_hour)}</strong><VehicleBreakdown volume={record.volume_per_hour} /></td>
+                                <td className="history-num"><strong>{record.total_emissions_kg_h == null ? "-" : fmtFloatId(record.total_emissions_kg_h, 3)}</strong><br /><small>{record.units.emissions}</small></td>
                                 <td><StatusBadge record={record} /></td>
                                 <td><button type="button" className="history-expand" aria-expanded={open} aria-label={open ? "Tutup detail" : "Buka detail"} onClick={() => setExpanded(open ? null : record.id)}>
                                     {open ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}</button></td>

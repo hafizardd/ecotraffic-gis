@@ -1,4 +1,4 @@
-"""DEPRECATED — the 54-camera real-data collection is complete.
+"""DEPRECATED - the 54-camera real-data collection is complete.
 
 Superseded by the precomputed REPLAY dataset built with
 ``scripts/build_replay_dataset.py``. This sampler is no longer registered with

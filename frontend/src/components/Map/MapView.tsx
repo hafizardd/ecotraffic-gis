@@ -11,6 +11,7 @@ import MapLegend from "./MapLegend";
 import Skeleton from "@/components/ui/Skeleton";
 import { getCameraTier } from "@/utils/markerColor";
 import { cameraDisplayValue, type CameraDisplayValue } from "@/utils/cameraValue";
+import { neighborEstimate } from "@/utils/cameraEstimate";
 import useCameras from "@/hooks/useCameras";
 import { CameraFeature } from "@/types";
 import { useEmissionsContext } from "@/context/EmissionsContext";
@@ -21,7 +22,7 @@ import useHistoricalCameraEmissions from "@/hooks/useHistoricalCameraEmissions";
 import ActivityHourSlider from "./ActivityHourSlider";
 import { nextGridLod, withDay, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel, GRID_LOD_RESOLUTION, type GridLod } from "@/utils/activityGrid";
 import { circleFeature } from "@/utils/geo";
-import { fmtDateTimeId } from "@/utils/format";
+import { fmtDateTimeId, fmtIntId, formatNumber } from "@/utils/format";
 import { setSelectedSegmentId as publishSelectedSegment } from "@/utils/selectionStore";
 import {
     SEGMENT_COLORS,
@@ -273,9 +274,6 @@ export default function MapView() {
         };
     });
 
-    const hovered = segmentGeoJSON.features.find((feature) => feature.properties.segment_id === hoveredSegmentId)?.properties;
-    const hoveredFreshness = hovered?.freshness_status ?? "unknown";
-
     const hoverCounts = {
         fresh: cameraGeoJSON.features.filter((f) => (f.properties as { freshness: number }).freshness === 0).length,
         stale: cameraGeoJSON.features.filter((f) => (f.properties as { freshness: number }).freshness >= 2).length,
@@ -286,6 +284,12 @@ export default function MapView() {
     const isAnyPanelOpen = Boolean(selectedCamera || selectedSegmentId || selectedHexId != null || selectedStopId);
     const selectedStop = selectedStopId
         ? surveyStops.features.find((feature) => String(feature.properties.source_id) === selectedStopId) ?? null
+        : null;
+    // Fall back to the nearest camera with data only when this camera has none.
+    const selectedEstimate = selectedCamera
+        && !emissionMap.get(selectedCamera.properties.camera_id)
+        && !historicalCameras.get(selectedCamera.properties.camera_id)
+        ? neighborEstimate(selectedCamera, cameras, emissionMap, historicalCameras)
         : null;
     const bufferGeoJSON = selectedStop
         ? { type: "FeatureCollection" as const, features: [circleFeature(selectedStop.geometry.coordinates as [number, number], BUS_STOP_BUFFER_M)] }
@@ -421,8 +425,8 @@ export default function MapView() {
                              type="button"
                              className={`bus-stop-badge${selected ? " is-selected" : ""}`}
                              style={{ background: color, color: readableTextOn(color) }}
-                             title={`${properties.title ?? "Halte"} — ${score == null ? label ?? "Belum dinilai" : `skor ${score.toFixed(1)}`}`}
-                             aria-label={`Halte ${properties.title ?? ""}, ${score == null ? label ?? "belum dinilai" : `skor ${score.toFixed(1)}`}`}
+                             title={`${properties.title ?? "Halte"}, ${score == null ? label ?? "Belum dinilai" : `skor ${formatNumber(score)}`}`}
+                             aria-label={`Halte ${properties.title ?? ""}, ${score == null ? label ?? "belum dinilai" : `skor ${formatNumber(score)}`}`}
                              onClick={(event) => {
                                  event.stopPropagation();
                                  setSelectedStopId(String(properties.source_id));
@@ -442,11 +446,10 @@ export default function MapView() {
                         {(() => {
                             const point = cameraPoints.find((p) => p.camera.properties.id === hoveredCamera.properties.id);
                             if (!point) return null;
-                            const label = point.historical ? `historis${point.interpolated ? " · interpolasi" : ""}` : point.freshness;
                             return (
                                 <>
-                                    <small>CO₂: {point.emission == null ? "N/A" : `${point.emission.toFixed(0)} g/min`} · {label}</small>
-                                    {point.historical && <small>Nilai segmen pukul {fmtDateTimeId(point.observedAt)} — bukan arus live</small>}
+                                    <small>CO₂: {point.emission == null ? "N/A" : `${fmtIntId(point.emission)} g/min`}</small>
+                                    {point.historical && <small>Nilai segmen pukul {fmtDateTimeId(point.observedAt)}, bukan arus live{point.interpolated ? ", hasil interpolasi jam" : ""}</small>}
                                 </>
                             );
                         })()}
@@ -483,8 +486,7 @@ export default function MapView() {
             />
               {hoveredSegmentId && (
                   <div className="segment-hover-summary">
-                      <strong>{hoveredSegmentId}</strong>
-                      <span>Data: {hoveredFreshness}</span>
+                      <strong>{segments.find((segment) => segment.properties.segment_id === hoveredSegmentId)?.properties.name ?? hoveredSegmentId}</strong>
                   </div>
               )}
               <button
@@ -501,7 +503,7 @@ export default function MapView() {
          </Map>
         </div>
         {selectedCamera
-            ? <SidePanel camera={selectedCamera} historical={historicalCameras.get(selectedCamera.properties.camera_id) ?? null} onClose={() => setSelectedCamera(null)} />
+            ? <SidePanel camera={selectedCamera} historical={historicalCameras.get(selectedCamera.properties.camera_id) ?? null} estimate={selectedEstimate} onClose={() => setSelectedCamera(null)} />
             : selectedStopId
                 ? <BusStopPanel sourceId={selectedStopId} onClose={() => setSelectedStopId(null)} />
                 : selectedSegmentId

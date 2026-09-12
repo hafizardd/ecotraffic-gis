@@ -35,6 +35,13 @@
   --text-card-title: 15px;
   --text-body: 13px;
   --text-meta: 11px;
+  /* Semantic type scale: one token per UI level so panels cannot drift. */
+  --text-h1: var(--text-section);
+  --text-h2: 16px;
+  --text-h3: var(--text-card-title);
+  --text-small: var(--text-meta);
+  --leading-tight: 1.25;
+  --leading-body: 1.6;
 }
 * {
   box-sizing: border-box;
@@ -872,6 +879,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 650;
 }
@@ -895,26 +903,6 @@ button {
 }
 .panel-close svg {
   width: 15px;
-}
-.panel-data-status {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 10px 15px 0;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card-2);
-  font-size: 8px;
-  letter-spacing: 0.08em;
-}
-.panel-data-status span {
-  color: #8ba0b8;
-  font-weight: 800;
-}
-.panel-data-status small {
-  color: var(--muted);
-  letter-spacing: 0;
 }
 .panel-content {
   flex: 1;
@@ -1332,6 +1320,13 @@ button {
   background: rgba(245, 165, 36, 0.055);
   font-size: 10px;
   line-height: 1.5;
+}
+/* Neighbor-estimated CCTV data: dashed edge so it never reads as a live value. */
+.estimate-section {
+  border-left: 2px dashed rgba(250, 204, 21, 0.45);
+}
+.estimate-section .stat-card {
+  border-style: dashed;
 }
 .segment-panel .data-missing {
   color: #718198 !important;
@@ -2115,7 +2110,7 @@ button {
     width: 200px;
   }
 }
-/* Shared form controls — checkboxes and dropdowns read as one system */
+/* Shared form controls: checkboxes and dropdowns read as one system */
 .ui-checkbox { position: relative; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); color: var(--secondary); font-size: 12px; font-weight: var(--weight-label); cursor: pointer; user-select: none; }
 .ui-checkbox input { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
 .ui-checkbox-box { flex: 0 0 18px; width: 18px; height: 18px; display: grid; place-items: center; border: 1.5px solid #3b4d63; border-radius: 5px; background: var(--card-2); transition: background 0.16s ease, border-color 0.16s ease; }
@@ -2525,7 +2520,7 @@ button {
 }
 
 /* ==========================================================================
-   Foundation — type scale, section titles, skeletons, entrance animation
+   Foundation: type scale, section titles, skeletons, entrance animation
    ========================================================================== */
 .page-header-section h1,
 .section-title__text,
@@ -2584,6 +2579,15 @@ button {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* Small explanatory text under a control or title; replaces ad-hoc
+   `text-xs text-zinc-500` combos so caption typography is one class. */
+.text-caption {
+  margin: 0 0 10px;
+  color: var(--secondary);
+  font-size: var(--text-small);
+  line-height: var(--leading-body);
 }
 
 .skeleton {

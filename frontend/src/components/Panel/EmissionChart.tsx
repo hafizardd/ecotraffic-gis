@@ -7,6 +7,7 @@ import { ChartPoint, EmissionUpdate } from "@/types";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import { ChartSkeleton } from "@/components/ui/Skeleton";
 import { CHART_TOOLTIP_LABEL_STYLE, CHART_TOOLTIP_STYLE, entranceProps, useChartEntrance } from "@/components/charts/theme";
+import { formatNumber } from "@/utils/format";
 
 interface EmissionChartProps { cameraId: string; liveEmission: EmissionUpdate | null; }
 const formatTime = (ts: string) => ts.slice(11, 19);
@@ -52,7 +53,7 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
                 <CartesianGrid stroke="#213147" strokeDasharray="3 5" vertical={false} />
                 <XAxis dataKey="timestamp" tickFormatter={formatTime} minTickGap={34} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "#27364a" }} />
                 <YAxis width={44} tick={{ fill: "#64748b", fontSize: 10 }} tickLine={false} axisLine={false} label={{ value: "g/min", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 10 }} />
-                <Tooltip labelFormatter={(value) => formatTime(String(value))} contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={(value, name) => [`${Number(value).toFixed(2)} g/min`, name]} />
+                <Tooltip labelFormatter={(value) => formatTime(String(value))} contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={(value, name) => [`${formatNumber(Number(value))} g/min`, name]} />
                 <Legend iconType="circle" iconSize={7} wrapperStyle={{ width: "100%", fontSize: "10px", color: "#94a3b8", paddingTop: 8, lineHeight: "20px" }} />
                 {EMISSION_DEFINITIONS.map(({ key, color, label }, index) => <Line key={key} type="monotone" dataKey={key} name={label} stroke={color} strokeWidth={2} dot={chartData.length === 1 ? { r: 4, fill: color, strokeWidth: 0 } : { r: 2, fill: color, strokeWidth: 0 }} activeDot={{ r: 4 }} {...entranceProps(entrance.active, index)} />)}
             </LineChart>

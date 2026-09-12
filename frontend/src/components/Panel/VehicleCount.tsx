@@ -3,6 +3,7 @@
 import { Car, Bike, Bus, Truck } from "lucide-react";
 import { EmissionUpdate } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
+import { formatNumber } from "@/utils/format";
 
 interface VehicleCountProps {
     emission: EmissionUpdate | null;
@@ -28,7 +29,7 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
     
     return (
         <>
-        <p className="text-xs text-zinc-500">{isInstant ? "Kendaraan pada frame terbaru." : "Kendaraan terlihat atau rata-rata snapshot. Ini bukan volume lalu lintas per jam."}</p>
+        <p className="text-caption">{isInstant ? "Kendaraan pada frame terbaru." : "Kendaraan terlihat atau rata-rata snapshot. Ini bukan volume lalu lintas per jam."}</p>
         <div className="vehicle-grid">
             {vehicles.map(({ label, count, Icon }) => (
                 <div
@@ -39,7 +40,7 @@ export default function VehicleCount({ emission }: VehicleCountProps) {
                         <Icon aria-hidden="true" />
                     </div>
                     <div className="vehicle-copy">
-                        <span>{label}</span><strong>{isInstant ? Math.round(count) : Number.isInteger(count) ? count : count.toFixed(1)}</strong>
+                        <span>{label}</span><strong>{isInstant ? Math.round(count) : formatNumber(count)}</strong>
                     </div>
                 </div>
             ))}

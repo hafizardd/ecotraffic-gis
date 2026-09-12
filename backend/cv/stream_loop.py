@@ -1,7 +1,7 @@
 """
 backend/cv/stream_loop.py
 
-Continuous frame loop — pulls frames from one HLS stream at a fixed interval,
+Continuous frame loop - pulls frames from one HLS stream at a fixed interval,
 runs YOLOv8 vehicle detection, calculates CO₂ emission, and logs results to
 console + CSV.
 
@@ -143,7 +143,7 @@ def run_cycle(
     """
     cycle_start = time.time()
 
-    # 1. Capture frame — raises RuntimeError on failure
+    # 1. Capture frame - raises RuntimeError on failure
     frame = detector.capture_frame(stream_url, referer)
 
     # 2. Detect vehicles
@@ -218,7 +218,7 @@ def main(
     save_every: int,
 ):
     logger.info("=" * 50)
-    logger.info("  EcoTraffic GIS — Stream Loop Starting")
+    logger.info("  EcoTraffic GIS - Stream Loop Starting")
     logger.info("=" * 50)
     logger.info(f"  Camera   : {camera_id}")
     logger.info(f"  Interval : {interval}s")
@@ -300,7 +300,7 @@ def main(
                 time.sleep(sleep_time)
 
     except KeyboardInterrupt:
-        logger.info("Ctrl+C received — shutting down cleanly.")
+        logger.info("Ctrl+C received - shutting down cleanly.")
 
     finally:
         stats["elapsed"] = time.time() - session_start
@@ -314,7 +314,7 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="EcoTraffic GIS — Continuous stream detection loop"
+        description="EcoTraffic GIS - Continuous stream detection loop"
     )
     parser.add_argument(
         "--stream-url",

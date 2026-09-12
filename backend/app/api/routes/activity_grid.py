@@ -133,7 +133,7 @@ async def _live_grid(db, hour: datetime, bounds):
 async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, lod: str):
     """Zoomed-out LOD: native cells rolled up into H3 cells at ``resolution``.
 
-    Native cells stay the unit of scoring — the H3 geometry and its metrics are
+    Native cells stay the unit of scoring - the H3 geometry and its metrics are
     an area-weighted render approximation, not an independently scored cell, so
     ``hex_id`` is null to block drill-down. ``breaks`` are the viewport's own
     quantiles so the ramp rescales with whatever is on screen.

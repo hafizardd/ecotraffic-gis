@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, FIVE_TIER_COLORS, activityGradientCss, interventionGradientCss, breaksToLabels, MAP_MODES, type MapMode } from "@/constants/mapColors";
+import { CAMERA_TIER_COLORS, FRESHNESS_COLORS, FIVE_TIER_COLORS, activityGradientCss, interventionGradientCss, MAP_MODES, type MapMode } from "@/constants/mapColors";
+import { formatNumber } from "@/utils/format";
 
 interface MapLegendProps {
     mode: MapMode;
@@ -17,7 +18,9 @@ interface MapLegendProps {
 export default function MapLegend({ mode, segmentBuckets, cameraFresh, cameraStale, cameraHistorical = 0, cameraTotal, activityBreaks }: MapLegendProps) {
     const [open, setOpen] = useState(true);
     const modeLabel = MAP_MODES.find((item) => item.key === mode)?.label ?? "";
-    const activityLabels = breaksToLabels(activityBreaks);
+    const activityLabels = activityBreaks && activityBreaks.length >= 2
+        ? activityBreaks.map((value) => formatNumber(value, Math.abs(value) >= 10 ? 0 : 1))
+        : null;
 
     return (
         <div className={`map-legend ${open ? "open" : ""}`} aria-label="Legenda peta">
@@ -35,7 +38,7 @@ export default function MapLegend({ mode, segmentBuckets, cameraFresh, cameraSta
                                 <ul className="legend-swatches">{segmentBuckets.map((bucket) => <li key={bucket.label}><i style={{ background: bucket.color }} />{bucket.label}</li>)}</ul>
                             </section>
                             <section className="map-legend-section">
-                                <h3>CCTV — emisi CO₂ (g/min)</h3>
+                                <h3>CCTV: emisi CO₂ (g/min)</h3>
                                 <ul className="legend-swatches">
                                     <li><i style={{ background: CAMERA_TIER_COLORS.low }} />&lt; 500</li>
                                     <li><i style={{ background: CAMERA_TIER_COLORS.medium }} />500–1.500</li>

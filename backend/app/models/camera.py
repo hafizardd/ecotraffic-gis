@@ -44,7 +44,7 @@ class Camera(Base):
     location: Mapped[Geometry] = mapped_column(
         Geometry("POINT", srid=4326),
         nullable=False,
-        comment="PostGIS point — POINT(longitude latitude) in WGS84",
+        comment="PostGIS point - POINT(longitude latitude) in WGS84",
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -107,7 +107,7 @@ class Camera(Base):
         nullable=False,
     )
  
-    # Relationship — one camera has many emission rows
+    # Relationship - one camera has many emission rows
     emissions: Mapped[list["Emission"]] = relationship(  # noqa: F821
         "Emission",
         back_populates="camera",
