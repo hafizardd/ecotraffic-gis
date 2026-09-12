@@ -45,7 +45,7 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
     const maxDay = new Date().toISOString().slice(0, 10);
 
     return (
-        <div className="map-hour-slider" aria-label="Potensi aktivitas per jam">
+        <div className="absolute top-[14px] left-1/2 z-10 flex -translate-x-1/2 items-center gap-[10px] rounded-lg border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] px-[14px] py-[7px] text-[10px] font-semibold text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] max-[760px]:top-14 [&_label]:flex [&_label]:items-center [&_label]:gap-1.5 [&_svg]:h-3.5 [&_svg]:w-3.5" aria-label="Potensi aktivitas per jam">
             <label htmlFor="activity-hour-slider"><Clock aria-hidden="true" /> Potensi per jam</label>
             <input
                 id="activity-hour-slider"
@@ -56,10 +56,12 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
                 value={selected}
                 onInput={handleRange}
                 onChange={handleRange}
+                className="w-40 accent-[#38bdf8]"
             />
-            <output htmlFor="activity-hour-slider">{fmtDateTimeId(hours[selected])}</output>
-            <label className="map-hour-day" htmlFor="activity-hour-day">Tanggal
+            <output className="min-w-[120px] text-[#9fc3e0] tabular-nums" htmlFor="activity-hour-slider">{fmtDateTimeId(hours[selected])}</output>
+            <label className="text-[#9fc3e0]" htmlFor="activity-hour-day">Tanggal
                 <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
+                    className="rounded-md border border-[rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] px-1 py-0.5 text-[10px] text-[#dce7f3] [color-scheme:dark]"
                     onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
             </label>
         </div>

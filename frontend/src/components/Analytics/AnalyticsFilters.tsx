@@ -6,6 +6,10 @@ import type { EmissionAnalyticsFilter } from "@/types";
 import { fmtDateTimeId } from "@/utils/format";
 import { numberDuplicateNames } from "@/utils/emissionAnalytics";
 import Select from "@/components/ui/Select";
+import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS, ANALYTICS_NOTE_CLASS, PAGE_CARD_CLASS } from "@/styles/tailwind";
+
+const FILTERS_CLASS = "flex flex-wrap items-end gap-[14px] [&>label]:flex [&>label]:flex-[1_1_160px] [&>label]:flex-col [&>label]:gap-[7px] [&>label]:text-xs [&>label]:text-[var(--secondary)] [&>label>div]:max-w-[340px]";
+const DATE_INPUT_CLASS = "min-h-[var(--control-height)] w-full max-w-[340px] rounded-[var(--radius-sm)] border border-[#334155] bg-[#102238] p-[var(--space-2)] text-[#edf5ff] [color-scheme:dark]";
 
 export default function AnalyticsFilters() {
     const { filter, query, options, optionsError, setFilter, refresh } = useEmissionAnalytics();
@@ -27,8 +31,8 @@ export default function AnalyticsFilters() {
         setRangeError(null);
         setFilter({ from: start.toISOString(), to: end.toISOString() });
     }
-    return <div className="page-card analytics-filter-card">
-        <div className="analytics-filters">
+    return <div className={PAGE_CARD_CLASS}>
+        <div className={FILTERS_CLASS}>
             <label>Periode<Select ariaLabel="Periode analitik" value={filter.from ? "custom" : filter.timeRange} options={periodOptions}
                 onChange={(value) => setFilter({ timeRange: value as EmissionAnalyticsFilter["timeRange"], from: null, to: null })} /></label>
             <label>Koridor<Select ariaLabel="Koridor" searchable searchPlaceholder="Cari koridor…" value={filter.corridorId ?? ""}
@@ -38,14 +42,14 @@ export default function AnalyticsFilters() {
                 options={[{ value: "", label: "Semua segmen" }, ...options.filter((s) => !filter.corridorId || s.corridor_id === filter.corridorId)
                     .map((s) => ({ value: s.segment_id, label: `${s.segment_name} · ${s.segment_id}` }))]}
                 onChange={(value) => setFilter({ segmentId: value || null })} /></label>
-            <button type="button" className="analytics-button" onClick={refresh}>Perbarui</button>
+            <button type="button" className={ANALYTICS_BUTTON_CLASS} onClick={refresh}>Perbarui</button>
         </div>
-        <details><summary>Rentang tanggal & waktu</summary><form action={applyDates} className="analytics-filters">
-            <label>Dari (waktu lokal)<input required type="datetime-local" name="from" /></label>
-            <label>Sampai (waktu lokal)<input required type="datetime-local" name="to" /></label>
-            <button className="analytics-button" type="submit">Terapkan</button>
+        <details className="mt-[14px] text-xs text-[#94a3b8]"><summary className="cursor-pointer py-[7px]">Rentang tanggal & waktu</summary><form action={applyDates} className={FILTERS_CLASS}>
+            <label>Dari (waktu lokal)<input className={DATE_INPUT_CLASS} required type="datetime-local" name="from" /></label>
+            <label>Sampai (waktu lokal)<input className={DATE_INPUT_CLASS} required type="datetime-local" name="to" /></label>
+            <button className={ANALYTICS_BUTTON_CLASS} type="submit">Terapkan</button>
         </form></details>
-        <p className="analytics-note">Periode: {fmtDateTimeId(query.from)} – {fmtDateTimeId(query.to)}</p>
-        {(rangeError || optionsError) && <p role="alert" className="analytics-error">{rangeError || optionsError}</p>}
+        <p className={ANALYTICS_NOTE_CLASS}>Periode: {fmtDateTimeId(query.from)} – {fmtDateTimeId(query.to)}</p>
+        {(rangeError || optionsError) && <p role="alert" className={ANALYTICS_ERROR_CLASS}>{rangeError || optionsError}</p>}
     </div>;
 }

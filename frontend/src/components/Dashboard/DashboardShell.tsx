@@ -21,12 +21,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     const page = { emisi: <EmisiTrenPage />, kendaraan: <KendaraanPage />, riwayat: <RiwayatPage />, pengaturan: <PengaturanPage /> }[activeView as Exclude<ActiveView, "peta">];
 
     return (
-        <EmissionAnalyticsProvider><div className="dashboard-shell">
+        <EmissionAnalyticsProvider><div className="flex h-[100dvh] w-screen bg-[var(--bg)]">
             <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} activeView={activeView} onViewChange={setActiveView} />
-            <div className={analyticsView ? "dashboard-main dashboard-main-analytics" : "dashboard-main"}>
+            <div className={`grid min-w-0 flex-1 transition-[width] duration-250 ease-in-out ${analyticsView ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[64px_66px_minmax(0,1fr)] max-[760px]:grid-rows-[58px_auto_minmax(0,1fr)]"}`}>
                 <TopHeader onMenuClick={() => setSidebarOpen((value) => !value)} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
                 {(activeView === "peta" || activeView === "kendaraan" || activeView === "pengaturan") && <GlobalCounter />}
-                <main className="dashboard-workspace">{activeView === "peta" ? children : page}</main>
+                <main className="min-h-0 min-w-0 overflow-hidden p-3 max-[760px]:p-2">{activeView === "peta" ? children : page}</main>
             </div>
             <BangJoWidget />
         </div></EmissionAnalyticsProvider>

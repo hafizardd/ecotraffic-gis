@@ -7,6 +7,7 @@ import type { AutoInsightEntity } from "@/utils/autoInsight";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import MarkdownText from "@/components/ui/MarkdownText";
+import { ANALYTICS_BUTTON_CLASS, DATA_EMPTY_CLASS, PANEL_SECTION_CLASS } from "@/styles/tailwind";
 
 export default function AutoInsightCard({ entity, label }: { entity: AutoInsightEntity; label: string }) {
     const { reply, loading } = useAutoInsight(entity);
@@ -14,27 +15,27 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
     const question = `Berikan analisis dan rekomendasi intervensi untuk ${label}.`;
 
     return (
-        <section className="panel-section auto-insight-section">
+        <section className={PANEL_SECTION_CLASS}>
             <SectionTitle title="Insight Bang Jo" meta={reply?.cached ? "cache" : "AI"} />
             {loading && !answer && (
                 <div aria-hidden="true">
-                    <Skeleton height={12} width="82%" />
+                    <Skeleton className="mb-1.5" height={12} width="82%" />
                     <Skeleton height={12} width="64%" />
                 </div>
             )}
             {!loading && !answer && (
-                <p className="data-empty">{reply?.detail ?? "Insight belum tersedia untuk entitas ini."}</p>
+                <p className={DATA_EMPTY_CLASS}>{reply?.detail ?? "Insight belum tersedia untuk entitas ini."}</p>
             )}
             {answer && (
-                <div className="auto-insight-body">
-                    <MarkdownText className="auto-insight-summary">{answer.summary}</MarkdownText>
+                <div className="mb-[10px] flex flex-col gap-1.5">
+                    <MarkdownText className="m-0 text-[11px] leading-[1.55] text-[var(--text)]">{answer.summary}</MarkdownText>
                     {answer.recommendation && (
-                        <MarkdownText className="auto-insight-reco">{answer.recommendation}</MarkdownText>
+                        <MarkdownText className="m-0 text-[11px] leading-[1.55] text-[var(--secondary)]">{answer.recommendation}</MarkdownText>
                     )}
-                    {answer.asi_category && <span className="auto-insight-asi">ASI: {answer.asi_category}</span>}
+                    {answer.asi_category && <span className="text-[9px] font-extrabold tracking-[0.06em] text-[var(--green)] uppercase">ASI: {answer.asi_category}</span>}
                 </div>
             )}
-            <button type="button" className="analytics-button bangjo-promote" onClick={() => askBangJo(question)}>
+            <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center gap-1.5`} onClick={() => askBangJo(question)}>
                 <MessageCircle aria-hidden="true" /> Tanya Bang Jo
             </button>
         </section>

@@ -42,12 +42,12 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
         return () => window.clearTimeout(timer);
     }, [liveEmission]);
 
-    if (loading) return <div className="chart-wrap"><ChartSkeleton height={250} /></div>;
-    if (error) return <div className="chart-state error-state"><strong>Data tren tidak tersedia</strong><span>Riwayat emisi gagal dimuat.</span></div>;
-    if (!chartData.length) return <div className="chart-state"><strong>Belum ada data tren emisi</strong><span>Data akan muncul setelah monitoring dimulai.</span></div>;
+    if (loading) return <div className="mx-[-5px] mt-0 mb-[-4px]"><ChartSkeleton height={250} /></div>;
+    if (error) return <div className="flex h-[190px] flex-col items-center justify-center gap-[7px] rounded-lg border border-dashed border-[var(--border)] text-center text-[9px] text-[var(--secondary)] [&>strong]:text-[11px] [&>strong]:text-[#f87171] [&>span]:text-[10px]"><strong>Data tren tidak tersedia</strong><span>Riwayat emisi gagal dimuat.</span></div>;
+    if (!chartData.length) return <div className="flex h-[190px] flex-col items-center justify-center gap-[7px] rounded-lg border border-dashed border-[var(--border)] text-center text-[9px] text-[var(--secondary)] [&>strong]:text-[11px] [&>strong]:text-[#cbd5e1]"><strong>Belum ada data tren emisi</strong><span>Data akan muncul setelah monitoring dimulai.</span></div>;
 
-    return <div className="chart-wrap chart-interactive">
-        {chartData.length === 1 && <div className="chart-note">Menunggu data berikutnya untuk membentuk tren</div>}
+    return <div className="mx-[-5px] mt-0 mb-[-4px] outline-none focus-visible:rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[var(--green)]">
+        {chartData.length === 1 && <div className="mx-[5px] mt-0 mb-[5px] rounded-md bg-[rgba(245,165,36,0.08)] px-2 py-1.5 text-center text-[8px] text-[#e8bb5e]">Menunggu data berikutnya untuk membentuk tren</div>}
         <ResponsiveContainer width="100%" height={250}>
             <LineChart data={chartData} margin={{ top: 12, right: 10, left: 2, bottom: 4 }} accessibilityLayer>
                 <CartesianGrid stroke="#213147" strokeDasharray="3 5" vertical={false} />

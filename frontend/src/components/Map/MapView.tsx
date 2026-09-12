@@ -262,15 +262,15 @@ export default function MapView() {
 
     if (loading) {
         return (
-            <div className="map-panel-layout">
-                <div className="map-area"><Skeleton height="100%" width="100%" radius={12} /></div>
+            <div className="flex h-full min-h-0 w-full gap-3">
+                <div className="relative h-full min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[0_16px_40px_rgba(0,0,0,0.18)]"><Skeleton height="100%" width="100%" radius={12} /></div>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="map-state error-state"><strong>Peta tidak dapat dimuat</strong><span>{error.message}</span></div>
+            <div className="flex h-full flex-col items-center justify-center gap-[11px] rounded-xl border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--secondary)] [&>strong]:text-[#f87171] [&>span]:text-[10px]"><strong>Peta tidak dapat dimuat</strong><span>{error.message}</span></div>
         );
     }
 
@@ -321,8 +321,8 @@ export default function MapView() {
     };
 
     return (
-        <div className={`map-panel-layout ${isAnyPanelOpen ? "has-panel" : ""}`}>
-        <div className="map-area" ref={mapAreaRef}>
+        <div className={`flex h-full min-h-0 w-full gap-3 ${isAnyPanelOpen ? "max-[760px]:[&>div:first-child]:hidden" : ""}`}>
+        <div className="relative h-full min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[0_16px_40px_rgba(0,0,0,0.18)]" ref={mapAreaRef}>
             <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
              initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "activity-grid-fill"]}
              onMoveEnd={syncViewport}
@@ -362,17 +362,17 @@ export default function MapView() {
              }}>
              <NavigationControl position="bottom-right" showCompass={false} />
              {/* Exclusive thematic mode; the basemap and style toggle stay global. */}
-             <div className="map-mode-switch" role="tablist" aria-label="Mode peta">
+             <div className="absolute top-[14px] left-[14px] z-10 inline-flex max-w-[calc(100%-150px)] gap-[3px] overflow-x-auto rounded-full border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] p-[3px] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] max-[760px]:top-2 max-[760px]:left-2 max-[760px]:max-w-[calc(100%-16px)]" role="tablist" aria-label="Mode peta">
                  {MAP_MODES.map(({ key, label }) => (
                      <button key={key} type="button" role="tab" aria-selected={mode === key}
-                         className={`map-mode-tab${mode === key ? " is-active" : ""}`}
+                         className={`cursor-pointer whitespace-nowrap rounded-full border-0 bg-transparent px-[14px] py-1.5 text-[10px] font-bold text-[#9fc3e0] hover:text-[#e2edf9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] ${mode === key ? "bg-[#102238]! text-[#4ade80]!" : ""}`}
                          onClick={() => selectMode(key)}>{label}</button>
                  ))}
              </div>
              {visible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
                  day={profileDay ?? anchorDay} onChangeDay={changeDay} />}
              {visible.activityGrid && (
-                 <div className="map-coarse-note">
+                  <div className="absolute top-[58px] left-1/2 z-10 -translate-x-1/2 rounded-full border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] px-3 py-[5px] text-[9px] font-semibold text-[#9fc3e0] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] max-[760px]:top-[100px]">
                      Sel ditampilkan: {displayedCount} · {GRID_LOD_RESOLUTION[lod]}{lod !== "fine" ? " · agregat" : ""}
                  </div>
              )}
@@ -433,7 +433,7 @@ export default function MapView() {
                      <Marker key={String(properties.source_id)} longitude={lon} latitude={lat} anchor="center">
                          <button
                              type="button"
-                             className={`bus-stop-badge${selected ? " is-selected" : ""}`}
+                             className={`grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full border-2 border-white p-0 shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-120 hover:scale-112 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8] [&>svg]:h-3.5 [&>svg]:w-3.5 ${selected ? "scale-120 shadow-[0_0_0_3px_rgba(56,189,248,0.55),0_2px_10px_rgba(0,0,0,0.4)]" : ""}`}
                              style={{ background: color, color: readableTextOn(color) }}
                              title={`${properties.title ?? "Halte"}, ${score == null ? label ?? "Belum dinilai" : `skor ${formatNumber(score)}`}`}
                              aria-label={`Halte ${properties.title ?? ""}, ${score == null ? label ?? "belum dinilai" : `skor ${formatNumber(score)}`}`}
@@ -450,9 +450,9 @@ export default function MapView() {
              })}
               {hoveredCamera && hoveredPoint && visible.cameras && (
                 <Popup longitude={hoveredPoint[0]} latitude={hoveredPoint[1]} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
-                    <div className="marker-popup">
+                    <div className="grid min-w-[170px] grid-cols-[1fr_auto] gap-x-3 gap-y-[5px] px-3 py-[10px] [&>small]:col-span-full [&>small]:text-[8px] [&>small]:text-[var(--muted)] [&>strong]:text-[10px]">
                         <strong>{hoveredCamera.properties.name}</strong>
-                        {hoveredCamera.properties.data_source === "LIVE" && <span className="marker-tracking"><i /> Pelacakan visual</span>}
+                        {hoveredCamera.properties.data_source === "LIVE" && <span className="flex items-center gap-[5px] text-[8px] font-bold text-[#4ade80] uppercase"><i className="h-[7px] w-[7px] rounded-full bg-[var(--green)] shadow-[0_0_0_4px_rgba(34,197,94,0.12)]" /> Pelacakan visual</span>}
                         {(() => {
                             const point = cameraPoints.find((p) => p.camera.properties.id === hoveredCamera.properties.id);
                             if (!point) return null;
@@ -469,7 +469,7 @@ export default function MapView() {
               )}
               {(hoveredHex?.id != null || hoveredHex?.count != null) && (
                 <Popup longitude={hoveredHex.lon} latitude={hoveredHex.lat} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
-                    <div className="marker-popup">
+                    <div className="grid min-w-[170px] grid-cols-[1fr_auto] gap-x-3 gap-y-[5px] px-3 py-[10px] [&>small]:col-span-full [&>small]:text-[8px] [&>small]:text-[var(--muted)] [&>strong]:text-[10px]">
                         {hoveredHex.count != null ? (
                             <>
                                 <strong>Agregat {hoveredHex.count} sel grid</strong>
@@ -495,13 +495,13 @@ export default function MapView() {
                 activityBreaks={activityGrid.breaks ?? null}
             />
               {hoveredSegmentId && (
-                  <div className="segment-hover-summary">
-                      <strong>{segments.find((segment) => segment.properties.segment_id === hoveredSegmentId)?.properties.name ?? hoveredSegmentId}</strong>
+                  <div className="absolute right-[14px] bottom-[14px] z-[9] flex min-w-[185px] flex-col gap-1 rounded-lg border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.88)] px-[11px] py-[9px] text-[9px] text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px]">
+                      <strong className="text-[10px] text-[#f8fafc]">{segments.find((segment) => segment.properties.segment_id === hoveredSegmentId)?.properties.name ?? hoveredSegmentId}</strong>
                   </div>
               )}
               <button
                 onClick={() => setStyle(s => s === "street-2d-building" ? "dark" : "street-2d-building")}
-                className="map-style-toggle"
+                className="absolute top-[14px] right-[14px] z-10 flex h-[34px] cursor-pointer items-center gap-2 rounded-lg border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] px-3 text-[10px] font-semibold text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] hover:bg-[#102238] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] [&>svg]:h-[15px] [&>svg]:w-[15px]"
             >
                 {isDark ? (
                     <Sun aria-hidden="true" />

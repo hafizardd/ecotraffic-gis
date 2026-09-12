@@ -69,14 +69,14 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
     }, [onStatusChange, scheduleRetry]);
 
     return (
-        <div className="video-frame" style={{ position: "relative" }}>
+        <div className="relative aspect-video overflow-hidden rounded-[9px] border border-[#26364a] bg-[#02060b]">
             {status === "loading" && (
-                <div className="video-loading">
+                <div className="absolute inset-0 flex items-center justify-center gap-[9px] bg-[#050b12] text-[10px] text-[var(--secondary)]">
                     <Skeleton height="100%" width="100%" radius={0} />
                 </div>
             )}
             {status === "error" && (
-                <div className="video-error" role="status">
+                <div className="flex flex-col items-center gap-[5px] [&>strong]:text-[#fca5a5] [&>span]:text-[9px]" role="status">
                     <strong>Stream tidak tersedia</strong>
                     <span>Mencoba menghubungkan kembali...</span>
                 </div>
@@ -87,13 +87,12 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
                 <img
                     key={cameraId}
                     src={streamUrl}
-                    className="video-element"
+                    className={`h-full w-full object-cover ${status === "streaming" ? "block" : "hidden"}`}
                     alt={`Tracked CCTV ${cameraId}`}
                     decoding="async"
                     fetchPriority="low"
                     onLoad={handleLoad}
                     onError={handleError}
-                    style={{ display: status === "streaming" ? "block" : "none" }}
                 />
             )}
         </div>
