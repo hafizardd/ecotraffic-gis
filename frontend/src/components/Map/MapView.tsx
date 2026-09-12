@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Sun, Moon, Bus } from "lucide-react";
+import { Bus, LoaderCircle, MapPinned, TriangleAlert } from "lucide-react";
 import Map, { MapRef, NavigationControl, Source, Layer, Popup, Marker, type ViewStateChangeEvent, type MapLayerMouseEvent } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import SidePanel from "../Panel/SidePanel";
@@ -8,7 +8,6 @@ import SegmentPanel from "../Panel/SegmentPanel";
 import ActivityGridPanel from "../Panel/ActivityGridPanel";
 import BusStopPanel from "../Panel/BusStopPanel";
 import MapLegend from "./MapLegend";
-import Skeleton from "@/components/ui/Skeleton";
 import { getCameraTier } from "@/utils/markerColor";
 import { cameraDisplayValue, type CameraDisplayValue } from "@/utils/cameraValue";
 import { neighborEstimate } from "@/utils/cameraEstimate";
@@ -20,6 +19,7 @@ import useSpatialLayers from "@/hooks/useSpatialLayers";
 import useActivityGrid, { useActivityGridHours } from "@/hooks/useActivityGrid";
 import useHistoricalCameraEmissions from "@/hooks/useHistoricalCameraEmissions";
 import ActivityHourSlider from "./ActivityHourSlider";
+import MapControlDeck from "./MapControlDeck";
 import { nextGridLod, withDay, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel, GRID_LOD_RESOLUTION, type GridLod } from "@/utils/activityGrid";
 import { circleFeature } from "@/utils/geo";
 import { fmtDateTimeId, fmtIntId, formatNumber } from "@/utils/format";
@@ -30,7 +30,6 @@ import {
     FIVE_TIER_COLORS,
     ACTIVITY_SCORE_STOPS,
     breaksToStops,
-    MAP_MODES,
     MODE_VISIBILITY,
     DEFAULT_MAP_MODE,
     BUS_STOP_BUFFER_M,
@@ -38,6 +37,7 @@ import {
     classificationTier,
     interventionColor,
     readableTextOn,
+    type MapLayerKey,
     type MapMode,
 } from "@/constants/mapColors";
 
@@ -65,14 +65,22 @@ interface CameraPointProps {
 export default function MapView() {
     const { cameras, loading, error } = useCameras();
     const { emissionMap, segmentMap } = useEmissionsContext();
-    const { segments } = useSegments();
+    const { segments, loading: segmentsLoading, error: segmentsError } = useSegments();
     const [selectedCamera, setSelectedCamera] = useState<CameraFeature | null>(null);
     const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
     const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
     const [hoveredCamera, setHoveredCamera] = useState<CameraFeature | null>(null);
     const [hoveredPoint, setHoveredPoint] = useState<[number, number] | null>(null);
     const [style, setStyle] = useState<"street-2d-building" | "dark">("street-2d-building");
+    const [mapReady, setMapReady] = useState(false);
+    const [basemapError, setBasemapError] = useState<string | null>(null);
     const [mode, setMode] = useState<MapMode>(() => readStoredMode());
+    const [layerVisibility, setLayerVisibility] = useState<Record<MapLayerKey, boolean>>({
+        cameras: true,
+        segments: true,
+        surveyStops: true,
+        activityGrid: true,
+    });
     const [bbox, setBbox] = useState<string | null>(null);
     const [lod, setLod] = useState<GridLod>("fine");
     const [prefetchTier, setPrefetchTier] = useState<GridLod | null>(null);
@@ -83,7 +91,13 @@ export default function MapView() {
     const [selectedHexId, setSelectedHexId] = useState<number | null>(null);
     const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
     const visible = MODE_VISIBILITY[mode];
-    const { surveyStops } = useSpatialLayers(bbox, { surveyStops: visible.surveyStops });
+    const effectiveVisible: Record<MapLayerKey, boolean> = {
+        cameras: visible.cameras && layerVisibility.cameras,
+        segments: visible.segments && layerVisibility.segments,
+        surveyStops: visible.surveyStops && layerVisibility.surveyStops,
+        activityGrid: visible.activityGrid && layerVisibility.activityGrid,
+    };
+    const { surveyStops, errors: spatialErrors } = useSpatialLayers(bbox, { surveyStops: visible.surveyStops });
     const historicalCameras = useHistoricalCameraEmissions(visible.cameras);
     const activityHours = useActivityGridHours(visible.activityGrid);
     // The backend serves one static 24h profile; picking a day only relabels the
@@ -103,8 +117,7 @@ export default function MapView() {
             return reference ? withDay(reference, nextDay) : null;
         });
     }, [activeHour]);
-    const { activityGrid, stale: gridStale } = useActivityGrid(bbox, activeHour, visible.activityGrid, lod, activityHours, prefetchTier);
-    const isDark = style === "dark";
+    const { activityGrid, error: gridError, stale: gridStale } = useActivityGrid(bbox, activeHour, visible.activityGrid, lod, activityHours, prefetchTier);
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
     const geoMapidApiKey = process.env.NEXT_PUBLIC_GEOMAPID_API_KEY;
@@ -260,20 +273,6 @@ export default function MapView() {
         });
     }, [camerasById]);
 
-    if (loading) {
-        return (
-            <div className="flex h-full min-h-0 w-full gap-3">
-                <div className="relative h-full min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[0_16px_40px_rgba(0,0,0,0.18)]"><Skeleton height="100%" width="100%" radius={12} /></div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="flex h-full flex-col items-center justify-center gap-[11px] rounded-xl border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--secondary)] [&>strong]:text-[#f87171] [&>span]:text-[10px]"><strong>Peta tidak dapat dimuat</strong><span>{error.message}</span></div>
-        );
-    }
-
     const cameraPoints: CameraPointProps[] = cameras.map((camera) => {
         const live = emissionMap.get(camera.properties.camera_id);
         const display: CameraDisplayValue = cameraDisplayValue(live, historicalCameras.get(camera.properties.camera_id));
@@ -320,13 +319,54 @@ export default function MapView() {
         setHoveredHexId(null);
     };
 
+    const changeBasemap = (next: "street-2d-building" | "dark") => {
+        if (next === style) return;
+        setBasemapError(null);
+        setStyle(next);
+    };
+
+    const changeLayerVisibility = (layer: MapLayerKey, next: boolean) => {
+        setLayerVisibility((current) => ({ ...current, [layer]: next }));
+        if (next) return;
+        if (layer === "cameras") { setSelectedCamera(null); setHoveredCamera(null); setHoveredPoint(null); }
+        if (layer === "segments") { setSelectedSegmentId(null); setHoveredSegmentId(null); }
+        if (layer === "surveyStops") setSelectedStopId(null);
+        if (layer === "activityGrid") { setSelectedHexId(null); setHoveredHex(null); setHoveredHexId(null); }
+    };
+
+    const interactiveLayerIds = [
+        ...(effectiveVisible.segments ? ["segments-line"] : []),
+        ...(effectiveVisible.cameras ? ["camera-points", "camera-cluster"] : []),
+        ...(effectiveVisible.activityGrid ? ["activity-grid-fill"] : []),
+    ];
+
+    const activeModeLayerCount = (Object.keys(effectiveVisible) as MapLayerKey[]).filter((key) => effectiveVisible[key]).length;
+    let mapNotice: { tone: "info" | "loading" | "warning" | "error"; title: string; detail?: string } | null = null;
+    if (activeModeLayerCount === 0) {
+        mapNotice = { tone: "info", title: "Semua layer mode ini dinonaktifkan", detail: "Aktifkan layer melalui kontrol Layer." };
+    } else if (mode === "traffic") {
+        if (effectiveVisible.cameras && loading) mapNotice = { tone: "loading", title: "Memuat titik CCTV" };
+        else if (effectiveVisible.cameras && error) mapNotice = { tone: "error", title: "Titik CCTV tidak tersedia", detail: error.message };
+        else if (effectiveVisible.segments && segmentsLoading) mapNotice = { tone: "loading", title: "Memuat segmen jalan" };
+        else if (effectiveVisible.segments && segmentsError) mapNotice = { tone: "error", title: "Segmen jalan tidak tersedia", detail: segmentsError.message };
+        else if (effectiveVisible.cameras && effectiveVisible.segments && cameras.length === 0 && segments.length === 0) mapNotice = { tone: "info", title: "Belum ada objek lalu lintas pada area ini" };
+    } else {
+        if (effectiveVisible.activityGrid && gridError) mapNotice = { tone: "error", title: "Grid potensi tidak tersedia", detail: gridError.message };
+        else if (effectiveVisible.surveyStops && spatialErrors.surveyStops) mapNotice = { tone: "warning", title: "Halte survei tidak tersedia", detail: spatialErrors.surveyStops.message };
+        else if (effectiveVisible.activityGrid && gridStale) mapNotice = { tone: "loading", title: "Memperbarui grid potensi", detail: "Tampilan sebelumnya dipertahankan sementara." };
+        else if (effectiveVisible.activityGrid && activityHours.length === 0) mapNotice = { tone: "info", title: "Jam aktivitas belum tersedia" };
+        else if (effectiveVisible.activityGrid && activeHour && activityGrid.features.length === 0) mapNotice = { tone: "info", title: "Tidak ada sel pada area dan jam ini" };
+    }
+
     return (
         <div className={`flex h-full min-h-0 w-full gap-3 ${isAnyPanelOpen ? "max-[760px]:[&>div:first-child]:hidden" : ""}`}>
-        <div className="relative h-full min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[0_16px_40px_rgba(0,0,0,0.18)]" ref={mapAreaRef}>
+        <div className="relative h-full min-w-0 flex-1 overflow-hidden rounded-[var(--radius-map)] border border-[var(--border)] bg-[var(--surface-sunken)] shadow-[0_14px_36px_rgba(1,9,13,0.2)]" ref={mapAreaRef} data-map-mode={mode}>
             <Map ref={mapRef} mapLib={maplibregl} mapStyle={`https://basemap.mapid.io/styles/${style}/style.json?key=${geoMapidApiKey}`}
-             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={["segments-line", "camera-points", "camera-cluster", "activity-grid-fill"]}
+             initialViewState={{ longitude: 110.3695, latitude: -7.7956, zoom: 14 }} style={{ height: "100%", width: "100%" }} interactiveLayerIds={interactiveLayerIds}
              onMoveEnd={syncViewport}
              onZoom={handleZoom}
+             onLoad={() => { setMapReady(true); setBasemapError(null); }}
+             onError={() => { if (!mapReady) setBasemapError("Basemap tidak dapat dimuat."); }}
              onMouseMove={handleMouseMove}
              onMouseLeave={() => { setHoveredSegmentId(null); setHoveredCamera(null); setHoveredPoint(null); setHoveredHex(null); setHoveredHexId(null); }}
             onClick={(event) => {
@@ -360,26 +400,18 @@ export default function MapView() {
                     return;
                 }
              }}>
-             <NavigationControl position="bottom-right" showCompass={false} />
-             {/* Exclusive thematic mode; the basemap and style toggle stay global. */}
-             <div className="absolute top-[14px] left-[14px] z-10 inline-flex max-w-[calc(100%-150px)] gap-[3px] overflow-x-auto rounded-full border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] p-[3px] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] max-[760px]:top-2 max-[760px]:left-2 max-[760px]:max-w-[calc(100%-16px)]" role="tablist" aria-label="Mode peta">
-                 {MAP_MODES.map(({ key, label }) => (
-                     <button key={key} type="button" role="tab" aria-selected={mode === key}
-                         className={`cursor-pointer whitespace-nowrap rounded-full border-0 bg-transparent px-[14px] py-1.5 text-[10px] font-bold text-[#9fc3e0] hover:text-[#e2edf9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] ${mode === key ? "bg-[#102238]! text-[#4ade80]!" : ""}`}
-                         onClick={() => selectMode(key)}>{label}</button>
-                 ))}
-             </div>
-             {visible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
-                 day={profileDay ?? anchorDay} onChangeDay={changeDay} />}
-             {visible.activityGrid && (
-                  <div className="absolute top-[58px] left-1/2 z-10 -translate-x-1/2 rounded-full border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] px-3 py-[5px] text-[9px] font-semibold text-[#9fc3e0] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] max-[760px]:top-[100px]">
-                     Sel ditampilkan: {displayedCount} · {GRID_LOD_RESOLUTION[lod]}{lod !== "fine" ? " · agregat" : ""}
-                 </div>
-             )}
-             {visible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
+             <NavigationControl position="top-right" showCompass={false} />
+             <MapControlDeck mode={mode} onModeChange={selectMode} basemap={style} onBasemapChange={changeBasemap}
+                layerVisibility={layerVisibility} onLayerVisibilityChange={changeLayerVisibility} />
+             {!mapReady && <MapLoadingState error={basemapError} />}
+             {effectiveVisible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
+                 day={profileDay ?? anchorDay} onChangeDay={changeDay} displayedCount={displayedCount}
+                 resolution={GRID_LOD_RESOLUTION[lod]} aggregated={lod !== "fine"} stale={gridStale} />}
+             {mapReady && mapNotice && <MapNotice {...mapNotice} />}
+             {effectiveVisible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
              </Source>}
-             {visible.cameras && <Source id="camera-source" type="geojson" data={cameraGeoJSON} cluster clusterMaxZoom={14} clusterRadius={50} clusterProperties={{ maxTier: ["max", ["get", "tier"]] }}>
+             {effectiveVisible.cameras && <Source id="camera-source" type="geojson" data={cameraGeoJSON} cluster clusterMaxZoom={14} clusterRadius={50} clusterProperties={{ maxTier: ["max", ["get", "tier"]] }}>
                 <Layer id="camera-cluster" type="circle" filter={["has", "point_count"]} paint={{ "circle-color": ["step", ["get", "maxTier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 25, 26, 100, 32], "circle-opacity": 0.85 }} />
                 <Layer id="camera-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"] }} paint={{ "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 }} />
                  <Layer id="camera-selected-ring" type="circle" filter={["all", ["!", ["has", "point_count"]], ["==", ["get", "camera_id"], selectedCamera?.properties.camera_id ?? ""]]} paint={{ "circle-color": "#ffffff", "circle-radius": ["step", ["get", "tier"], 16, 1, 17, 2, 19, 3, 21], "circle-opacity": 0.35 }} />
@@ -387,7 +419,7 @@ export default function MapView() {
                  <Layer id="camera-historical-ring" type="circle" filter={["all", ["!", ["has", "point_count"]], ["==", ["get", "historical"], 1]]} paint={{ "circle-color": "rgba(0,0,0,0)", "circle-radius": ["step", ["get", "tier"], 17, 1, 18, 2, 20, 3, 22], "circle-stroke-color": "#38bdf8", "circle-stroke-width": 2, "circle-stroke-opacity": 0.9 }} />
                  <Layer id="camera-points" type="circle" filter={["!", ["has", "point_count"]]} paint={{ "circle-color": ["step", ["get", "tier"], CAMERA_TIER_COLORS.unavailable, 1, CAMERA_TIER_COLORS.low, 2, CAMERA_TIER_COLORS.medium, 3, CAMERA_TIER_COLORS.high], "circle-radius": ["step", ["get", "tier"], 11, 1, 12, 2, 14, 3, 16], "circle-stroke-color": ["case", ["==", ["get", "historical"], 1], "#38bdf8", "#ffffff"], "circle-stroke-width": 2.5, "circle-opacity": ["step", ["get", "freshness"], 1, 1, 0.8, 2, 0.35, 3, 0.6] }} />
   </Source>}
-             {visible.surveyStops && bufferGeoJSON && (
+             {effectiveVisible.surveyStops && bufferGeoJSON && (
                  <Source id="bus-stop-buffer" type="geojson" data={bufferGeoJSON as never}>
                      <Layer id="bus-stop-buffer-fill" type="fill" paint={{ "fill-color": "#38bdf8", "fill-opacity": 0.12 }} />
                      <Layer id="bus-stop-buffer-outline" type="line" paint={{ "line-color": "#38bdf8", "line-width": 1.5, "line-dasharray": [2, 2], "line-opacity": 0.85 }} />
@@ -395,7 +427,7 @@ export default function MapView() {
              )}
              {/* Declared last so the grid paints on top of segments/camera/POI. Click priority stays
                  independent of paint order: onClick checks segment/camera hits first regardless. */}
-             {visible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
+             {effectiveVisible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
                  {/* Viewport-quantile ramp when the visible scores have spread;
                      otherwise the discrete classification tier, matching the legend. */}
                  <Layer id="activity-grid-fill" type="fill" paint={{
@@ -421,7 +453,7 @@ export default function MapView() {
                     paint={{ "line-color": ["case", ["==", ["get", "hex_id"], selectedHexId ?? -2], "#38bdf8", "#e0f2fe"], "line-width": ["case", ["==", ["get", "hex_id"], selectedHexId ?? -2], 3, 2.5], "line-blur": 0.6, "line-opacity": 1 }} />
             </Source>}
              {/* Bus stops render as Lucide badges so the score colour and icon are always legible. */}
-             {visible.surveyStops && surveyStops.features.map((feature) => {
+             {effectiveVisible.surveyStops && surveyStops.features.map((feature) => {
                  const [lon, lat] = feature.geometry.coordinates as [number, number];
                  const properties = feature.properties;
                  const selected = String(properties.source_id) === selectedStopId;
@@ -448,11 +480,11 @@ export default function MapView() {
                      </Marker>
                  );
              })}
-              {hoveredCamera && hoveredPoint && visible.cameras && (
+              {hoveredCamera && hoveredPoint && effectiveVisible.cameras && (
                 <Popup longitude={hoveredPoint[0]} latitude={hoveredPoint[1]} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
-                    <div className="grid min-w-[170px] grid-cols-[1fr_auto] gap-x-3 gap-y-[5px] px-3 py-[10px] [&>small]:col-span-full [&>small]:text-[8px] [&>small]:text-[var(--muted)] [&>strong]:text-[10px]">
+                    <div className="grid min-w-[190px] grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 px-3 py-[11px] [&>small]:col-span-full [&>small]:text-[10px] [&>small]:leading-4 [&>small]:text-[var(--muted)] [&>strong]:text-[12px]">
                         <strong>{hoveredCamera.properties.name}</strong>
-                        {hoveredCamera.properties.data_source === "LIVE" && <span className="flex items-center gap-[5px] text-[8px] font-bold text-[#4ade80] uppercase"><i className="h-[7px] w-[7px] rounded-full bg-[var(--green)] shadow-[0_0_0_4px_rgba(34,197,94,0.12)]" /> Pelacakan visual</span>}
+                        {hoveredCamera.properties.data_source === "LIVE" && <span className="flex items-center gap-1.5 text-[10px] font-bold text-[var(--brand-strong)] uppercase"><i className="h-1.5 w-1.5 rounded-full bg-[var(--green)] shadow-[0_0_0_3px_rgba(34,197,94,0.12)]" /> Live</span>}
                         {(() => {
                             const point = cameraPoints.find((p) => p.camera.properties.id === hoveredCamera.properties.id);
                             if (!point) return null;
@@ -469,7 +501,7 @@ export default function MapView() {
               )}
               {(hoveredHex?.id != null || hoveredHex?.count != null) && (
                 <Popup longitude={hoveredHex.lon} latitude={hoveredHex.lat} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
-                    <div className="grid min-w-[170px] grid-cols-[1fr_auto] gap-x-3 gap-y-[5px] px-3 py-[10px] [&>small]:col-span-full [&>small]:text-[8px] [&>small]:text-[var(--muted)] [&>strong]:text-[10px]">
+                    <div className="grid min-w-[190px] grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 px-3 py-[11px] [&>small]:col-span-full [&>small]:text-[10px] [&>small]:leading-4 [&>small]:text-[var(--muted)] [&>strong]:text-[12px]">
                         {hoveredHex.count != null ? (
                             <>
                                 <strong>Agregat {hoveredHex.count} sel grid</strong>
@@ -493,23 +525,14 @@ export default function MapView() {
                 cameraHistorical={hoverCounts.historical}
                 cameraTotal={hoverCounts.total}
                 activityBreaks={activityGrid.breaks ?? null}
+                layerVisibility={layerVisibility}
             />
               {hoveredSegmentId && (
-                  <div className="absolute right-[14px] bottom-[14px] z-[9] flex min-w-[185px] flex-col gap-1 rounded-lg border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.88)] px-[11px] py-[9px] text-[9px] text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px]">
-                      <strong className="text-[10px] text-[#f8fafc]">{segments.find((segment) => segment.properties.segment_id === hoveredSegmentId)?.properties.name ?? hoveredSegmentId}</strong>
+                  <div className="absolute right-3 bottom-3 z-[18] flex min-w-[190px] flex-col gap-1 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[10px] text-[var(--secondary)] shadow-[var(--shadow-float)] backdrop-blur-[10px]">
+                      <span className="text-[9px] font-bold tracking-[0.1em] text-[var(--selection)] uppercase">Segmen jalan</span>
+                      <strong className="text-[12px] text-[var(--text)]">{segments.find((segment) => segment.properties.segment_id === hoveredSegmentId)?.properties.name ?? hoveredSegmentId}</strong>
                   </div>
               )}
-              <button
-                onClick={() => setStyle(s => s === "street-2d-building" ? "dark" : "street-2d-building")}
-                className="absolute top-[14px] right-[14px] z-10 flex h-[34px] cursor-pointer items-center gap-2 rounded-lg border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] px-3 text-[10px] font-semibold text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] hover:bg-[#102238] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] [&>svg]:h-[15px] [&>svg]:w-[15px]"
-            >
-                {isDark ? (
-                    <Sun aria-hidden="true" />
-                ) : (
-                    <Moon aria-hidden="true" />
-                )}
-                {isDark ? "Peta terang" : "Peta gelap"}
-            </button>
          </Map>
         </div>
         {selectedCamera
@@ -519,6 +542,32 @@ export default function MapView() {
                 : selectedSegmentId
                     ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); }} />
                     : <ActivityGridPanel hexId={selectedHexId} hour={activeHour} onSelectHour={setActivityHour} onClose={() => setSelectedHexId(null)} />}
+        </div>
+    );
+}
+
+function MapLoadingState({ error }: { error: string | null }) {
+    return (
+        <div className="pointer-events-none absolute inset-0 z-[15] grid place-items-center overflow-hidden bg-[var(--surface-sunken)]" role={error ? "alert" : "status"} aria-live="polite">
+            <div className="map-loading-grid absolute inset-0 opacity-55" aria-hidden="true" />
+            <div className="relative flex max-w-[300px] flex-col items-center gap-2 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] px-5 py-4 text-center shadow-[var(--shadow-float)] backdrop-blur-[10px]">
+                {error
+                    ? <TriangleAlert className="h-5 w-5 text-[var(--danger)]" aria-hidden="true" />
+                    : <LoaderCircle className="h-5 w-5 animate-spin text-[var(--selection)] motion-reduce:animate-none" aria-hidden="true" />}
+                <strong className="font-[var(--font-display)] text-[14px] font-semibold">{error ? "Basemap tidak dapat dimuat" : "Menyiapkan atlas kota"}</strong>
+                <span className="text-[11px] leading-4 text-[var(--muted)]">{error ?? "Memuat jalan, bangunan, dan referensi spasial…"}</span>
+            </div>
+        </div>
+    );
+}
+
+function MapNotice({ tone, title, detail }: { tone: "info" | "loading" | "warning" | "error"; title: string; detail?: string }) {
+    const Icon = tone === "loading" ? LoaderCircle : tone === "error" || tone === "warning" ? TriangleAlert : MapPinned;
+    const toneClass = tone === "error" ? "text-[var(--danger)]" : tone === "warning" ? "text-[var(--accent)]" : "text-[var(--selection)]";
+    return (
+        <div className="absolute top-[62px] left-3 z-[18] flex max-w-[340px] items-start gap-2 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] shadow-[var(--shadow-float)] backdrop-blur-[10px] max-[760px]:right-[58px] max-[760px]:left-2 max-[760px]:max-w-none" role={tone === "error" ? "alert" : "status"} aria-live="polite">
+            <Icon className={`mt-px h-4 w-4 flex-[0_0_16px] ${toneClass} ${tone === "loading" ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
+            <span className="min-w-0"><strong className="block font-semibold text-[var(--text)]">{title}</strong>{detail && <span className="mt-0.5 block truncate text-[10px] text-[var(--muted)]" title={detail}>{detail}</span>}</span>
         </div>
     );
 }

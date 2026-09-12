@@ -9,12 +9,16 @@ import { fmtDateTimeId } from "@/utils/format";
 // immediately but debounces the committed hour, so a scrub does not fire a
 // request/render per pixel. The date input reuses the same profile for any
 // calendar day (the backend maps hour-of-day onto the stored buckets).
-export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay }: {
+export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay, displayedCount, resolution, aggregated, stale }: {
     hours: string[];
     value: string | null;
     onChange: (hour: string) => void;
     day: string | null;
     onChangeDay: (day: string) => void;
+    displayedCount: number;
+    resolution: string;
+    aggregated: boolean;
+    stale: boolean;
 }) {
     const index = sliderIndex(hours, value);
     // null = follow the committed value; a number = the in-progress drag.
@@ -43,27 +47,38 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
     };
     const selected = Math.min(Math.max(preview ?? index, 0), hours.length - 1);
     const maxDay = new Date().toISOString().slice(0, 10);
+    const selectedLabel = fmtDateTimeId(hours[selected]);
+    const selectedTime = new Date(hours[selected]).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
     return (
-        <div className="absolute top-[14px] left-1/2 z-10 flex -translate-x-1/2 items-center gap-[10px] rounded-lg border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] px-[14px] py-[7px] text-[10px] font-semibold text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] max-[760px]:top-14 [&_label]:flex [&_label]:items-center [&_label]:gap-1.5 [&_svg]:h-3.5 [&_svg]:w-3.5" aria-label="Potensi aktivitas per jam">
-            <label htmlFor="activity-hour-slider"><Clock aria-hidden="true" /> Potensi per jam</label>
-            <input
-                id="activity-hour-slider"
-                type="range"
-                min={0}
-                max={hours.length - 1}
-                step={1}
-                value={selected}
-                onInput={handleRange}
-                onChange={handleRange}
-                className="w-40 accent-[#38bdf8]"
-            />
-            <output className="min-w-[120px] text-[#9fc3e0] tabular-nums" htmlFor="activity-hour-slider">{fmtDateTimeId(hours[selected])}</output>
-            <label className="text-[#9fc3e0]" htmlFor="activity-hour-day">Tanggal
-                <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
-                    className="rounded-md border border-[rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] px-1 py-0.5 text-[10px] text-[#dce7f3] [color-scheme:dark]"
-                    onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
-            </label>
-        </div>
+        <section className="absolute bottom-3 left-1/2 z-20 grid w-[min(650px,calc(100%-320px))] -translate-x-1/2 gap-2 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] text-[var(--secondary)] shadow-[var(--shadow-float)] backdrop-blur-[10px] max-[980px]:right-3 max-[980px]:left-auto max-[980px]:w-[calc(100%-292px)] max-[980px]:translate-x-0 max-[760px]:right-2 max-[760px]:bottom-2 max-[760px]:left-2 max-[760px]:w-auto" aria-label="Potensi aktivitas per jam" aria-busy={stale}>
+            <div className="flex min-w-0 items-center gap-2">
+                <label className="flex items-center gap-1.5 font-semibold text-[var(--text)]" htmlFor="activity-hour-slider"><Clock className="h-4 w-4 text-[var(--selection)]" aria-hidden="true" /> Waktu aktivitas</label>
+                <span className="h-3 border-l border-[var(--border)]" aria-hidden="true" />
+                <output className="font-[var(--font-data)] font-semibold text-[#8edcff] tabular-nums" htmlFor="activity-hour-slider" title={selectedLabel} aria-live="polite">{selectedTime}</output>
+                <span className="ml-auto truncate text-[10px] text-[var(--muted)]">
+                    {stale ? "Memperbarui grid…" : `${displayedCount} sel · ${resolution}${aggregated ? " · agregat" : ""}`}
+                </span>
+            </div>
+            <div className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3">
+                <input
+                    id="activity-hour-slider"
+                    type="range"
+                    min={0}
+                    max={hours.length - 1}
+                    step={1}
+                    value={selected}
+                    aria-valuetext={selectedLabel}
+                    onInput={handleRange}
+                    onChange={handleRange}
+                    className="map-range w-full"
+                />
+                <label className="flex min-h-8 items-center gap-2 text-[10px] font-semibold text-[var(--muted)]" htmlFor="activity-hour-day"><span className="max-[430px]:sr-only">Tanggal</span>
+                    <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
+                        className="min-h-8 rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface-raised)] px-2 text-[11px] text-[var(--text)] [color-scheme:dark] hover:border-[var(--selection)]"
+                        onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
+                </label>
+            </div>
+        </section>
     );
 }

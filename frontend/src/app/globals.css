@@ -156,15 +156,89 @@ summary {
   to { opacity: 1; transform: none; }
 }
 
+.map-loading-grid {
+  background-image:
+    linear-gradient(rgba(69, 97, 106, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(69, 97, 106, 0.18) 1px, transparent 1px),
+    linear-gradient(31deg, transparent 46%, rgba(56, 189, 248, 0.09) 47%, rgba(56, 189, 248, 0.09) 49%, transparent 50%);
+  background-size: 44px 44px, 44px 44px, 280px 180px;
+}
+
+.map-range {
+  height: 24px;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.map-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--selection), var(--contour-strong));
+}
+
+.map-range::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  appearance: none;
+  border: 3px solid var(--surface-sunken);
+  border-radius: 50%;
+  background: var(--selection);
+  box-shadow: 0 0 0 1px rgba(142, 220, 255, 0.65);
+}
+
+.map-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--contour-strong);
+}
+
+.map-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--selection);
+}
+
+.map-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--surface-sunken);
+  border-radius: 50%;
+  background: var(--selection);
+  box-shadow: 0 0 0 1px rgba(142, 220, 255, 0.65);
+}
+
 /* MapLibre owns these nested nodes, so utility classes cannot be attached. */
+.maplibregl-ctrl-top-right {
+  top: 54px;
+  right: 4px;
+}
+
 .maplibregl-ctrl-group {
   background: var(--surface-sunken) !important;
   border: 1px solid var(--contour);
   box-shadow: var(--shadow-float) !important;
+  overflow: hidden;
+  border-radius: var(--radius-md) !important;
 }
 
 .maplibregl-ctrl-group button {
   background-color: var(--surface-sunken) !important;
+  width: 40px !important;
+  height: 40px !important;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
+}
+
+.maplibregl-ctrl-group button:hover {
+  background-color: var(--surface-raised) !important;
+}
+
+.maplibregl-ctrl-group button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--selection) !important;
+  outline-offset: -3px;
 }
 
 .maplibregl-ctrl-icon {
@@ -221,6 +295,16 @@ summary {
 
 @media (max-width: 760px) {
   :root { --control-height: 44px; }
+
+  .maplibregl-ctrl-top-right {
+    top: 108px;
+    right: 2px;
+  }
+
+  .maplibregl-ctrl-group button {
+    width: 44px !important;
+    height: 44px !important;
+  }
 }
 
 @media (min-width: 761px) {
