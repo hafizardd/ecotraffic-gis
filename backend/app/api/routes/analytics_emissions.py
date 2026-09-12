@@ -22,7 +22,7 @@ from app.models.segment_emission import SegmentEmission
 from app.services.emission_analytics import (
     AnalyticsFilter, EXPORT_FIELDS, HISTORY_SORTS, POLLUTANTS, UNITS, VEHICLE_KEYS, composition_query,
     corridor_columns, export_row, fact_query, history_id_query, history_query, serialize_fact,
-    serialize_history, top_query, trend_query, vehicle_composition, vehicle_ranking_query,
+    serialize_history, source_mode_expression, top_query, trend_query, vehicle_composition, vehicle_ranking_query,
     vehicle_series_query, vehicle_totals_query,
 )
 
@@ -52,8 +52,12 @@ async def get_filters(
 ):
     end = to or datetime.now(timezone.utc)
     try:
+        # The analytics lens is only meaningful when a frozen REPLAY profile exists.
+        has_replay = (await db.execute(
+            select(SegmentEmission.id).where(source_mode_expression() == "REPLAY").limit(1)
+        )).first() is not None
         filters = AnalyticsFilter(from_ or end - timedelta(hours=24), end, segment_id, corridor_id,
-            search, quality_status, source_mode)
+            search, quality_status, source_mode, profile_lens=has_replay)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if segment_id and not (await db.execute(select(RoadSegment.id).where(RoadSegment.road_segment_id == segment_id).limit(1))).first():
@@ -209,7 +213,7 @@ async def history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, l
     total = (await db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()
     rows = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).mappings().all()
     return {**envelope(filters), "page": page, "page_size": page_size, "total": total,
-        "sort": sort, "order": order, "data": [serialize_history(row) for row in rows]}
+        "sort": sort, "order": order, "data": [serialize_history(row, lens=filters.profile_lens) for row in rows]}
 
 
 def _chunks(items, size):
@@ -288,7 +292,7 @@ async def export(format: Literal["csv", "json"] = "csv",
                 output.write('{"metadata":' + json.dumps(envelope(filters), default=str) + ',"data":[')
             first = True
             async for row in stream.mappings():
-                record = serialize_fact(row)
+                record = serialize_fact(row, lens=filters.profile_lens)
                 if format == "csv":
                     writer.writerow(export_row(record))
                 else:

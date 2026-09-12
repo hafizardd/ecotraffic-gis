@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from functools import reduce
 from operator import add
 
-from sqlalchemy import Float, cast, func, or_, select
+from sqlalchemy import DateTime, Float, and_, cast, func, or_, select, text
 
 from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
@@ -36,6 +36,9 @@ class AnalyticsFilter:
     search: str | None = None
     quality_status: str | None = None
     source_mode: str | None = None
+    # Opt-in profile day lens: re-address the frozen REPLAY profile onto the
+    # requested calendar days. Off by default so the map/Bang Jo read real rows.
+    profile_lens: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, "start", utc(self.start))
@@ -73,16 +76,8 @@ def source_mode_expression():
     ), "HISTORICAL")
 
 
-def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: bool = False):
+def _apply_fact_filters(stmt, filters: AnalyticsFilter):
     corridor_id, corridor_name = corridor_columns()
-    stmt = select(
-        SegmentEmission,
-        RoadSegment.road_segment_id.label("segment_id"),
-        RoadSegment.name.label("segment_name"),
-        corridor_id.label("corridor_id"), corridor_name.label("corridor_name"),
-        source_mode_expression().label("source_mode"),
-    ).join(RoadSegment, SegmentEmission.road_segment_id == RoadSegment.id)
-    stmt = stmt.where(source_mode_expression().notin_(["SYNTHETIC"]))
     if filters.segment_id:
         stmt = stmt.where(RoadSegment.road_segment_id == filters.segment_id)
     if filters.corridor_id:
@@ -96,6 +91,20 @@ def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: 
         stmt = stmt.where(estimated if filters.quality_status == "estimated" else ~estimated)
     if filters.source_mode:
         stmt = stmt.where(source_mode_expression() == filters.source_mode)
+    return stmt
+
+
+def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: bool = False):
+    corridor_id, corridor_name = corridor_columns()
+    stmt = select(
+        SegmentEmission,
+        RoadSegment.road_segment_id.label("segment_id"),
+        RoadSegment.name.label("segment_name"),
+        corridor_id.label("corridor_id"), corridor_name.label("corridor_name"),
+        source_mode_expression().label("source_mode"),
+    ).join(RoadSegment, SegmentEmission.road_segment_id == RoadSegment.id)
+    stmt = stmt.where(source_mode_expression().notin_(["SYNTHETIC"]))
+    stmt = _apply_fact_filters(stmt, filters)
     if exclude_live:
         # Runs before the latest-per-segment DISTINCT so a segment whose newest
         # fact is LIVE still resolves to its newest static/REPLAY fact.
@@ -116,13 +125,86 @@ def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: 
         SegmentEmission.calculation_version.desc(), SegmentEmission.calculated_at.desc())
 
 
+def _hour_of_day(column):
+    """UTC hour bucket (0-23), independent of the session timezone."""
+    return func.mod(func.floor(func.extract("epoch", column) / 3600), 24)
+
+
+def _effective_fact_columns(start, end):
+    columns = []
+    for column in SegmentEmission.__table__.columns:
+        if column.name == "period_start":
+            columns.append(start.label("period_start"))
+        elif column.name == "period_end":
+            columns.append(end.label("period_end"))
+        else:
+            columns.append(getattr(SegmentEmission, column.name))
+    return columns
+
+
+def _lens_labels():
+    corridor_id, corridor_name = corridor_columns()
+    return (
+        RoadSegment.road_segment_id.label("segment_id"),
+        RoadSegment.name.label("segment_name"),
+        corridor_id.label("corridor_id"), corridor_name.label("corridor_name"),
+        source_mode_expression().label("source_mode"),
+    )
+
+
+def fact_lens_query(filters: AnalyticsFilter):
+    """Static-profile day lens over the frozen 24h REPLAY dataset.
+
+    Each requested hour is re-addressed to the REPLAY fact with the same UTC
+    time-of-day, so any calendar day shows the same hourly profile and a
+    multi-day range repeats it once per day. Real LIVE interval-count facts (the
+    tracking cameras) keep their timestamps and lay over the profile; the
+    occupancy rows the profile was derived from are not counted twice. Callers
+    opt in through ``AnalyticsFilter.profile_lens`` (see ``_facts_for``).
+    """
+    hour = text("interval '1 hour'")
+    start_hour = filters.start.replace(minute=0, second=0, microsecond=0)
+    timeline = func.generate_series(start_hour, filters.end, hour).table_valued("hour").render_derived()
+    # generate_series carries no type here; pin timestamptz so downstream casts
+    # (observed_at fallback) do not hit NullType.
+    effective_start = cast(timeline.c.hour, DateTime(timezone=True))
+    effective_end = cast(timeline.c.hour + hour, DateTime(timezone=True))
+    profile = select(
+        *_effective_fact_columns(effective_start, effective_end),
+        *_lens_labels(),
+    ).select_from(timeline).join(
+        SegmentEmission,
+        and_(
+            source_mode_expression() == "REPLAY",
+            _hour_of_day(SegmentEmission.period_start) == _hour_of_day(timeline.c.hour),
+        ),
+    ).join(RoadSegment, SegmentEmission.road_segment_id == RoadSegment.id)
+    profile = _apply_fact_filters(profile, filters).where(
+        timeline.c.hour >= filters.start, timeline.c.hour < filters.end).cte("profile_lens")
+    # One profile fact per segment-hour even if REPLAY ever spans more than a day.
+    deduped = select(profile).distinct(profile.c.road_segment_id, profile.c.period_start).order_by(
+        profile.c.road_segment_id, profile.c.period_start,
+        profile.c.calculation_version.desc(), profile.c.calculated_at.desc()).subquery("profile_deduped")
+    live = fact_query(filters).where(
+        source_mode_expression() == "LIVE",
+        SegmentEmission.vehicle_count_semantics == "interval_count",
+    ).subquery("live_facts")
+    # ponytail: profile/live segments are disjoint today; if a segment ever has
+    # both, add a NOT IN to suppress its borrowed profile hours on live days.
+    return select(deduped).union_all(select(live))
+
+
+def _facts_for(filters: AnalyticsFilter):
+    return fact_lens_query(filters) if filters.profile_lens else fact_query(filters)
+
+
 def rate(column, pollutant: str):
     # Missing old pollutant values stay null; absence must never become zero.
     return cast(column[pollutant].astext, Float) / 1000.0
 
 
 def segment_means(filters: AnalyticsFilter, bucket_seconds: int | None = None):
-    facts = fact_query(filters).cte("facts")
+    facts = _facts_for(filters).cte("facts")
     keys = [facts.c.segment_id, facts.c.segment_name, facts.c.corridor_id, facts.c.corridor_name]
     if bucket_seconds:
         keys.insert(0, func.to_timestamp(func.floor(func.extract("epoch", facts.c.period_start) / bucket_seconds) * bucket_seconds).label("timestamp"))
@@ -169,7 +251,7 @@ VEHICLE_KEYS = tuple(VEHICLE_CATEGORIES)
 
 def vehicle_segment_means(filters: AnalyticsFilter, bucket_seconds: int | None = None):
     """Per-segment mean volume/VKT per vehicle type, optionally bucketed in time."""
-    facts = fact_query(filters).cte("facts")
+    facts = _facts_for(filters).cte("facts")
     keys = [facts.c.segment_id, facts.c.segment_name, facts.c.corridor_id, facts.c.corridor_name]
     if bucket_seconds:
         keys.insert(0, func.to_timestamp(func.floor(func.extract("epoch", facts.c.period_start) / bucket_seconds) * bucket_seconds).label("timestamp"))
@@ -232,7 +314,7 @@ def _history_order_by(facts, sort: str, order: str):
 
 
 def history_query(filters: AnalyticsFilter, sort: str = "period_start", order: str = "desc"):
-    facts = fact_query(filters).cte("facts")
+    facts = _facts_for(filters).cte("facts")
     return select(facts).order_by(*_history_order_by(facts, sort, order))
 
 
@@ -242,12 +324,20 @@ def history_id_query(filters: AnalyticsFilter, sort: str = "period_start", order
     return select(facts.c.id, facts.c.segment_id).order_by(*_history_order_by(facts, sort, order))
 
 
-def serialize_fact(row, now: datetime | None = None) -> dict:
-    """One serializer for REST, exports, Redis and WebSocket segment facts."""
+def serialize_fact(row, now: datetime | None = None, *, lens: bool = False) -> dict:
+    """One serializer for REST, exports, Redis and WebSocket segment facts.
+
+    ``lens=True`` reports the day-lens effective time (the requested day) instead
+    of the profile's original collection time; the original stays available as
+    ``source_observed_at`` so a filled day is never confused with an observation.
+    """
     now = now or datetime.now(timezone.utc)
     metadata = row["ahp_metadata"] or {}
     calc_meta = metadata.get("calculation_metadata") or {}
-    observed = metadata.get("observed_at") or row["period_end"]
+    source_observed = metadata.get("observed_at") or row["period_end"]
+    if isinstance(source_observed, str):
+        source_observed = datetime.fromisoformat(source_observed.replace("Z", "+00:00"))
+    observed = row["period_end"] if lens else source_observed
     if isinstance(observed, str):
         observed = datetime.fromisoformat(observed.replace("Z", "+00:00"))
     age = max(0, (now - utc(observed)).total_seconds())
@@ -257,7 +347,7 @@ def serialize_fact(row, now: datetime | None = None) -> dict:
     totals = row["pollutant_totals_g_h"] or {}
     def iso(value):
         return value.isoformat() if isinstance(value, datetime) else value
-    return {
+    result = {
         "id": str(row["id"]), "segment_id": row["segment_id"], "segment_name": row["segment_name"],
         "corridor_id": row["corridor_id"], "corridor_name": row["corridor_name"],
         "period_start": iso(row["period_start"]), "period_end": iso(row["period_end"]),
@@ -279,17 +369,31 @@ def serialize_fact(row, now: datetime | None = None) -> dict:
         "interpolation_method": calc_meta.get("interpolation_method"),
         "calculation_metadata": calc_meta, "units": UNITS,
     }
+    if lens:
+        result["source_observed_at"] = iso(source_observed)
+    return result
 
 
-def serialize_history(row, now: datetime | None = None) -> dict:
+def serialize_history(row, now: datetime | None = None, *, lens: bool = False) -> dict:
     """Curated, user-facing history record. Raw provenance sits under `detail`."""
-    fact = serialize_fact(row, now)
+    fact = serialize_fact(row, now, lens=lens)
     emissions = fact["emissions_kg_h"]
     total_emissions = (sum(emissions[p.lower()] for p in POLLUTANTS)
         if all(emissions[p.lower()] is not None for p in POLLUTANTS) else None)
     volume = fact["volume_per_hour"]
+    detail = {
+        "calculation_version": fact["calculation_version"],
+        "calculation_mode": fact["calculation_mode"], "vkt_km_h": fact["vkt_km_h"],
+        "source_cameras": fact["source_cameras"], "source_streams": fact["source_streams"],
+        "source_observation_count": fact["source_observation_count"],
+        "observation_duration_seconds": fact["observation_duration_seconds"],
+    }
+    if lens:
+        detail["profile_observed_at"] = fact.get("source_observed_at")
     return {
-        "id": fact["id"], "period_start": fact["period_start"], "period_end": fact["period_end"],
+        # A profile fact is served on every lensed day, so key it by effective day.
+        "id": f'{fact["id"]}@{fact["period_start"]}' if lens else fact["id"],
+        "period_start": fact["period_start"], "period_end": fact["period_end"],
         "observed_at": fact["observed_at"], "processed_at": fact["processed_at"],
         "segment_id": fact["segment_id"], "segment_name": fact["segment_name"],
         "corridor_id": fact["corridor_id"], "corridor_name": fact["corridor_name"],
@@ -301,13 +405,7 @@ def serialize_history(row, now: datetime | None = None) -> dict:
         "volume_per_hour": volume,
         "total_vehicles_per_hour": sum(volume.values()) if volume else None,
         "units": fact["units"],
-        "detail": {
-            "calculation_version": fact["calculation_version"],
-            "calculation_mode": fact["calculation_mode"], "vkt_km_h": fact["vkt_km_h"],
-            "source_cameras": fact["source_cameras"], "source_streams": fact["source_streams"],
-            "source_observation_count": fact["source_observation_count"],
-            "observation_duration_seconds": fact["observation_duration_seconds"],
-        },
+        "detail": detail,
     }
 
 

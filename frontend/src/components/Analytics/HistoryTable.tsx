@@ -65,7 +65,7 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
 
 export default function HistoryTable() {
     const { query, filter, setFilter, refresh } = useEmissionAnalytics();
-    const [tab, setTab] = useState<Tab>("observed");
+    const [tab, setTab] = useState<Tab>("estimated");
     const [searchInput, setSearchInput] = useState("");
     const [search, setSearch] = useState("");
     const [sourceMode, setSourceMode] = useState<string | null>(null);
@@ -166,7 +166,7 @@ export default function HistoryTable() {
     }
 
     return <section className={`${PAGE_CARD_CLASS} ${ANIMATE_IN_CLASS}`} aria-label="Riwayat emisi segmen" aria-busy={loading}>
-        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; data perkiraan dikecualikan, jam perkiraan ditandai.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
+        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; profil historis segmen dirender per jam pada hari terpilih, jam terisi ditandai.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
 
         <div className="mt-3.5 mb-1 flex flex-wrap items-center gap-3">
             <div className="inline-flex gap-0.75 rounded-full border border-(--border) bg-(--card-2) p-0.75" role="tablist" aria-label="Status mutu data">

@@ -270,3 +270,45 @@ async def test_replay_rows_are_included_and_flagged(api):
     replay_row = next(row for row in rows if row["source_mode"] == "REPLAY")
     assert replay_row["is_interpolated"] == "True"
     assert replay_row["interpolation_method"] == "linear"
+
+
+async def test_profile_lens_repeats_daily_and_keeps_real_observed_at(api):
+    client, _params, engine = api
+    async with engine.begin() as conn:
+        segment = (await conn.execute(text("SELECT id FROM road_segments WHERE road_segment_id = 'A'"))).first()[0]
+        start = BASE + timedelta(minutes=10)
+        await conn.execute(insert(SegmentEmission).values(
+            id=uuid.uuid4(), road_segment_id=segment, period_start=start, period_end=start + timedelta(hours=1),
+            calculated_at=start + timedelta(hours=1), calculation_version=3,
+            observation_duration_seconds=3600, aggregation_policy="sum_independent_streams",
+            source_cameras=[], source_streams=[], source_observation_count=1,
+            vehicle_count_semantics="snapshot_occupancy", raw_counts={c: 1 for c in VEHICLE_CATEGORIES},
+            volume_per_hour={c: 60 for c in VEHICLE_CATEGORIES}, vkt_km_h={c: 30 for c in VEHICLE_CATEGORIES},
+            pollutant_totals_g_h={p: 1000 for p in POLLUTANTS}, category_pollutant_breakdown_g_h={},
+            raw_criteria={}, ahp_metadata={
+                "source_mode": "REPLAY", "calculation_mode": "replay_hourly_mean",
+                "observed_at": start.isoformat(),
+                "calculation_metadata": {"is_interpolated": False},
+            },
+        ))
+    day = BASE + timedelta(days=10)  # a day with no stored profile rows
+    one = (await client.get("/api/analytics/emissions/history", params={
+        "from": day.isoformat(), "to": (day + timedelta(hours=1)).isoformat(),
+    })).json()
+    assert one["total"] == 1
+    row = one["data"][0]
+    assert row["source_mode"] == "REPLAY"
+    assert row["period_start"].startswith("2026-09-20T00:00")
+    # The effective day is shown, the original collection time stays in provenance.
+    assert row["detail"]["profile_observed_at"].startswith("2026-09-10T00:10")
+    two = (await client.get("/api/analytics/emissions/history", params={
+        "from": day.isoformat(), "to": (day + timedelta(days=2)).isoformat(),
+    })).json()
+    assert two["total"] == 2  # the same profile hour is served once per day
+    window = {"from": day.isoformat(), "to": (day + timedelta(hours=1)).isoformat()}
+    trend = (await client.get("/api/analytics/emissions/trend", params={**window, "bucket": "1h"})).json()
+    assert len(trend["data"]) == 1
+    assert trend["data"][0]["co2_kg_h"] == 1  # 1000 g/hour -> 1 kg/hour
+    assert trend["data"][0]["segment_count"] == 1
+    vehicles = (await client.get("/api/analytics/emissions/vehicles", params=window)).json()
+    assert vehicles["total_vehicles_per_hour"] == 240  # 60 per category, four categories
