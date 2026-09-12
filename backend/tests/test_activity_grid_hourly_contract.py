@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -70,10 +70,32 @@ def _patch_volumes(monkeypatch, value):
     monkeypatch.setattr(activity_grid, "hourly_hex_volumes", fake)
 
 
+def _patch_profile_hour(monkeypatch, moment):
+    async def fake(db, requested):
+        return moment
+
+    monkeypatch.setattr(activity_grid, "_profile_hour", fake)
+
+
+def _patch_available_hours(monkeypatch, moments):
+    async def fake(db):
+        return moments
+
+    monkeypatch.setattr(activity_grid, "_available_hours", fake)
+
+
+def test_canonical_hour_maps_any_day_to_same_hour_of_day():
+    anchor = datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc)
+    assert activity_grid._canonical_hour(anchor, datetime(2026, 9, 5, 7, 0, tzinfo=timezone.utc)) == datetime(2026, 9, 10, 7, 0, tzinfo=timezone.utc)
+    assert activity_grid._canonical_hour(anchor, datetime(2026, 9, 5, 20, 0, tzinfo=timezone.utc)) == datetime(2026, 9, 9, 20, 0, tzinfo=timezone.utc)
+    assert activity_grid._canonical_hour(anchor, None) == anchor
+
+
 def test_live_hour_returns_recomputed_features(monkeypatch):
     _patch_volumes(monkeypatch, {1: 10.0, 2: 20.0})
+    _patch_profile_hour(monkeypatch, datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc))
     db = _DB([
-        _Result(rows=[_cell(1, 1), _cell(2, 2)]),
+        _Result(rows=[(_cell(1, 1), 110.37, -7.79), (_cell(2, 2), 110.38, -7.80)]),
         _Result(rows=[(1, {"type": "Polygon", "coordinates": []}), (2, {"type": "Polygon", "coordinates": []})]),
     ])
     response = _client(db).get("/api/spatial/activity-grid?hour=2026-09-10T13:00:00Z")
@@ -86,8 +108,9 @@ def test_live_hour_returns_recomputed_features(monkeypatch):
 
 def test_hour_without_coverage_is_200_with_no_data_hexes(monkeypatch):
     _patch_volumes(monkeypatch, {})
+    _patch_profile_hour(monkeypatch, datetime(2020, 1, 1, 0, 0, tzinfo=timezone.utc))
     db = _DB([
-        _Result(rows=[_cell(1, 1)]),
+        _Result(rows=[(_cell(1, 1), 110.37, -7.79)]),
         _Result(rows=[(1, {"type": "Polygon", "coordinates": []})]),
     ])
     response = _client(db).get("/api/spatial/activity-grid?hour=2020-01-01T00:00:00Z")
@@ -151,9 +174,9 @@ def test_aggregated_lod_bbox_limits_viewport_and_breaks():
 def test_hex_hourly_series_returns_one_point_per_available_hour(monkeypatch):
     _patch_volumes(monkeypatch, {1: 10.0, 2: 20.0})
     hours = [datetime(2026, 9, 10, h, 0, tzinfo=timezone.utc) for h in (11, 12)]
+    _patch_available_hours(monkeypatch, hours)
     db = _DB([
-        _Result(rows=[_cell(1, 1), _cell(2, 2)]),
-        _Result(rows=hours),
+        _Result(rows=[(_cell(1, 1), 110.37, -7.79), (_cell(2, 2), 110.38, -7.80)]),
     ])
     response = _client(db).get("/api/spatial/activity-grid/1/hourly")
     assert response.status_code == 200
@@ -163,12 +186,17 @@ def test_hex_hourly_series_returns_one_point_per_available_hour(monkeypatch):
     assert [point["data_status"] for point in body["series"]] == ["live", "live"]
 
 
-def test_available_hours_returns_sorted_bounds():
-    hours = [datetime(2026, 9, 10, h, 0, tzinfo=timezone.utc) for h in (11, 12, 13)]
-    db = _DB([_Result(rows=hours)])
-    response = _client(db).get("/api/spatial/activity-grid/available-hours")
+def test_available_hours_returns_static_24h_profile(monkeypatch):
+    anchor = datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc)
+
+    async def fake_anchor(db):
+        return anchor
+
+    monkeypatch.setattr(activity_grid, "_profile_anchor", fake_anchor)
+    response = _client(_DB([])).get("/api/spatial/activity-grid/available-hours")
     assert response.status_code == 200
     body = response.json()
-    assert body["earliest"] == "2026-09-10T11:00:00+00:00"
-    assert body["latest"] == "2026-09-10T13:00:00+00:00"
-    assert body["hours"] == [moment.isoformat() for moment in hours]
+    assert body["mode"] == "daily-profile"
+    assert len(body["hours"]) == 24
+    assert body["latest"] == anchor.isoformat()
+    assert body["earliest"] == (anchor - timedelta(hours=23)).isoformat()

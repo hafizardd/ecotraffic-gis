@@ -15,12 +15,14 @@ export interface HistoryFilters {
 }
 export const EMPTY_HISTORY_FILTERS: HistoryFilters = { corridorId: null, segmentId: null, sourceMode: null, from: null, to: null };
 
-// SYNTHETIC/REPLAY are excluded server-side, so they are intentionally absent.
+// SYNTHETIC is excluded server-side (dev seed only), so it is intentionally absent.
+// REPLAY is the precomputed 54-camera dataset and is selectable.
 const SOURCE_OPTIONS = [
     { value: "", label: "Semua sumber" },
     { value: "LIVE", label: "Langsung" },
     { value: "HISTORICAL", label: "Historis" },
     { value: "SNAPSHOT_REAL", label: "Snapshot" },
+    { value: "REPLAY", label: "Replay" },
 ];
 
 function toLocalInput(value: string | null): string {

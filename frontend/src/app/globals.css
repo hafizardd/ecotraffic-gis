@@ -558,6 +558,32 @@ button {
   color: #9fc3e0;
   font-variant-numeric: tabular-nums;
 }
+.map-hour-day {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #9fc3e0;
+}
+.map-hour-day input[type="date"] {
+  padding: 2px 4px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  color: #dce7f3;
+  background: rgba(15, 34, 52, 0.9);
+  font-size: 10px;
+  color-scheme: dark;
+}
+.data-source-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: #cbd8e6;
+  font-size: 11px;
+}
+.data-source-list strong {
+  color: #eaf2fb;
+}
 .map-coarse-note {
   position: absolute;
   top: 58px;

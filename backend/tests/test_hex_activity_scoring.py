@@ -10,6 +10,7 @@ from app.services.hex_activity_scoring import (
     label_potential,
     minmax_normalize,
     recompute_hour_scores,
+    score_band_label,
 )
 
 HOUR = datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc)
@@ -29,6 +30,15 @@ def test_minmax_degenerate_spread_is_the_observed_maximum():
     assert minmax_normalize(7, 7, 7) == 100.0
 
 
+def test_score_band_label_matches_the_fixed_ramp():
+    assert score_band_label(10) == "Sangat Rendah"
+    assert score_band_label(40) == "Rendah"
+    assert score_band_label(60) == "Sedang"
+    assert score_band_label(90) == "Tinggi"
+    assert score_band_label(100) == "Sangat Tinggi"
+    assert score_band_label(None) is None
+
+
 def test_recompute_uses_static_poi_population_with_live_volume():
     hexes = [_hex(1, 100.0, 100.0), _hex(2, 0.0, 0.0)]
     result = recompute_hour_scores(hexes, {1: 10.0, 2: 20.0})
@@ -43,7 +53,8 @@ def test_recompute_uses_static_poi_population_with_live_volume():
 def test_recompute_missing_volume_is_null_not_zero():
     result = recompute_hour_scores([_hex(1, 50.0, 50.0), _hex(2, 50.0, 50.0)], {1: 5.0})
     assert result[2] == {"norm_volume": None, "skor_total_ahp": None, "ranking": None,
-                         "klasifikasi_potensi": None, "data_status": "no_data"}
+                         "klasifikasi_potensi": None, "data_status": "no_data",
+                         "no_data_reason": "no_mapped_segment"}
     assert result[1]["data_status"] == "live"
 
 
@@ -68,6 +79,9 @@ class _Result:
     def mappings(self):
         return _Mappings(self._rows)
 
+    def scalars(self):
+        return self
+
     def all(self):
         return self._rows
 
@@ -90,25 +104,43 @@ async def test_hourly_hex_volumes_sums_vehicle_types_and_maps_hexes():
     db = _DB([
         [_means_row("SEG-1", car=10.0, motorcycle=5.0), _means_row("SEG-2", car=3.0)],
         [("SEG-1", 7), ("SEG-2", 7)],  # both map to hex 7
+        [],  # no interpolated REPLAY rows
     ])
-    volumes = await hourly_hex_volumes(db, HOUR)
-    assert volumes == {7: 18.0}
+    data = await hourly_hex_volumes(db, HOUR)
+    assert data.volumes[7].volume == 18.0
+    assert data.volumes[7].segment_ids == ("SEG-1", "SEG-2")
+    assert data.volumes[7].interpolated is False
+    assert data.mapped_hex_ids == frozenset({7})
+
+
+@pytest.mark.asyncio
+async def test_hourly_hex_volumes_flags_interpolated_hours():
+    db = _DB([
+        [_means_row("SEG-1", car=10.0)],
+        [("SEG-1", 7)],
+        ["SEG-1"],  # REPLAY hour was gap-filled
+    ])
+    data = await hourly_hex_volumes(db, HOUR)
+    assert data.volumes[7].interpolated is True
 
 
 @pytest.mark.asyncio
 async def test_hourly_hex_volumes_skips_segments_without_usable_sample():
     db = _DB([
         [_means_row("SEG-1", car=4.0), _means_row("SEG-2")],
-        [("SEG-1", 2)],
+        [("SEG-1", 2), ("SEG-2", 2)],
+        [],
     ])
-    volumes = await hourly_hex_volumes(db, HOUR)
-    assert volumes == {2: 4.0}
+    data = await hourly_hex_volumes(db, HOUR)
+    assert data.volumes[2].volume == 4.0
+    # Hex 2 is reached by a mapped segment even though SEG-2 had no volume.
+    assert data.mapped_hex_ids == frozenset({2})
 
 
 @pytest.mark.asyncio
 async def test_hourly_hex_volumes_skips_segments_outside_grid():
-    db = _DB([[_means_row("SEG-1", car=4.0)], []])
-    assert await hourly_hex_volumes(db, HOUR) == {}
+    db = _DB([[_means_row("SEG-1", car=4.0)], [], []])
+    assert (await hourly_hex_volumes(db, HOUR)).volumes == {}
 
 
 def test_label_potential_matches_frontend_scale():

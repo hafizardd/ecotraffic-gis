@@ -9,11 +9,12 @@ interface MapLegendProps {
     segmentBuckets: { color: string; label: string }[];
     cameraFresh: number;
     cameraStale: number;
+    cameraHistorical?: number;
     cameraTotal: number;
     activityBreaks?: number[] | null;
 }
 
-export default function MapLegend({ mode, segmentBuckets, cameraFresh, cameraStale, cameraTotal, activityBreaks }: MapLegendProps) {
+export default function MapLegend({ mode, segmentBuckets, cameraFresh, cameraStale, cameraHistorical = 0, cameraTotal, activityBreaks }: MapLegendProps) {
     const [open, setOpen] = useState(true);
     const modeLabel = MAP_MODES.find((item) => item.key === mode)?.label ?? "";
     const activityLabels = breaksToLabels(activityBreaks);
@@ -40,8 +41,9 @@ export default function MapLegend({ mode, segmentBuckets, cameraFresh, cameraSta
                                     <li><i style={{ background: CAMERA_TIER_COLORS.medium }} />500–1.500</li>
                                     <li><i style={{ background: CAMERA_TIER_COLORS.high }} />&gt; 1.500</li>
                                     <li><i style={{ background: CAMERA_TIER_COLORS.unavailable }} />Tanpa data</li>
+                                    <li><i style={{ background: "#38bdf8" }} />Historis (REPLAY)</li>
                                 </ul>
-                                <p className="legend-note">{cameraFresh}/{cameraTotal} segar{cameraStale > 0 ? ` · ${cameraStale} basi` : ""}</p>
+                                <p className="legend-note">{cameraFresh}/{cameraTotal} segar{cameraStale > 0 ? ` · ${cameraStale} basi` : ""}{cameraHistorical > 0 ? ` · ${cameraHistorical} historis` : ""}</p>
                             </section>
                             <section className="map-legend-section">
                                 <h3>Kesegaran data</h3>

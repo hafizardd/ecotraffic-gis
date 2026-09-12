@@ -33,6 +33,8 @@ SYSTEM_PROMPT = (
     "coverage_gap=true -> tambah halte baru; weak_stop_count>0 -> perbaiki halte yang ada; "
     "activity_class 'Sangat Tinggi'/'Tinggi' dengan halte memadai -> tambah frekuensi layanan (armada). "
     "Sebut alasan dari field context, jangan mengarang. "
+    "Field hourly_series berisi jam REPLAY prakomputasi; jika is_interpolated=true, "
+    "sebut jam itu sebagai perkiraan/hasil interpolasi, bukan pengamatan pasti. "
     "Keluarkan HANYA objek JSON, tanpa pagar markdown dan tanpa penjelasan tambahan. "
     "Balas dengan JSON valid berbentuk: "
     '{"summary": str, "drivers": [str], "asi_category": str, "recommendation": str, "evidence": [str]}.'
@@ -316,6 +318,36 @@ async def _ask_llm(message: str, context: dict, history: list[HistoryTurn]) -> d
         return _fallback_answer(context, message, "llm_error")
 
 
+def _merge_hourly_series(contexts: list[dict]) -> list[dict]:
+    """Sum each chunk's REPLAY hours; an hour is interpolated if any chunk is."""
+    merged: dict[str, dict] = {}
+    for context in contexts:
+        for point in context.get("hourly_series") or []:
+            hour = point["hour"]
+            current = merged.get(hour)
+            if current is None:
+                merged[hour] = {
+                    "hour": hour,
+                    "emissions_kg_h": dict(point.get("emissions_kg_h") or {}),
+                    "volume_per_hour": dict(point.get("volume_per_hour") or {}),
+                    "is_interpolated": bool(point.get("is_interpolated")),
+                    "interpolation_method": point.get("interpolation_method"),
+                }
+                continue
+            emissions = current["emissions_kg_h"]
+            for pollutant, value in (point.get("emissions_kg_h") or {}).items():
+                if value is not None:
+                    emissions[pollutant] = (emissions.get(pollutant) or 0) + value
+            volume = current["volume_per_hour"]
+            for category, value in (point.get("volume_per_hour") or {}).items():
+                if value is not None:
+                    volume[category] = (volume.get(category) or 0) + value
+            current["is_interpolated"] = current["is_interpolated"] or bool(point.get("is_interpolated"))
+            if point.get("interpolation_method") and not current["interpolation_method"]:
+                current["interpolation_method"] = point["interpolation_method"]
+    return [merged[hour] for hour in sorted(merged)]
+
+
 def _merge_contexts(contexts: list[dict]) -> dict:
     """Aggregate same-name road chunks into one corridor context."""
     segments = [context["segment"] for context in contexts]
@@ -388,6 +420,7 @@ def _merge_contexts(contexts: list[dict]) -> dict:
         },
         "coverage_gap": any(context["coverage_gap"] for context in contexts),
         "intervention_hint": next((hint for hint in HINT_PRIORITY if hint in hints), None),
+        "hourly_series": _merge_hourly_series(contexts),
     }
 
 

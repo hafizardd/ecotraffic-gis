@@ -1,23 +1,49 @@
 "use client";
 
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Clock } from "lucide-react";
 import { sliderIndex } from "@/utils/activityGrid";
 import { fmtDateTimeId } from "@/utils/format";
 
-// Native range input over the available hour buckets; hidden entirely when the
-// backend reported no data in the last 24h. The track spans only available
-// hours, so gaps are unreachable rather than dragging into an empty hour.
-export default function ActivityHourSlider({ hours, value, onChange }: {
+// Native range input over the static 24h profile. Dragging updates the label
+// immediately but debounces the committed hour, so a scrub does not fire a
+// request/render per pixel. The date input reuses the same profile for any
+// calendar day (the backend maps hour-of-day onto the stored buckets).
+export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay }: {
     hours: string[];
     value: string | null;
     onChange: (hour: string) => void;
+    day: string | null;
+    onChangeDay: (day: string) => void;
 }) {
-    if (hours.length === 0) return null;
     const index = sliderIndex(hours, value);
-    // onInput fires on every drag tick. onChange is kept on the controlled input
-    // because React requires it, and it fires on the same native event; both
-    // resolve to the same hour so the state update stays idempotent.
-    const commit = (input: HTMLInputElement) => onChange(hours[Number(input.value)]);
+    // null = follow the committed value; a number = the in-progress drag.
+    const [preview, setPreview] = useState<number | null>(null);
+    // Reset the drag preview when the committed hour changes (React's
+    // "adjust state during render" pattern instead of an effect).
+    const [synced, setSynced] = useState(value);
+    if (synced !== value) {
+        setSynced(value);
+        setPreview(null);
+    }
+    const commitTimer = useRef<number | null>(null);
+
+    useEffect(() => () => { if (commitTimer.current !== null) window.clearTimeout(commitTimer.current); }, []);
+
+    if (hours.length === 0) return null;
+
+    const commit = (next: number) => {
+        if (commitTimer.current !== null) window.clearTimeout(commitTimer.current);
+        commitTimer.current = window.setTimeout(() => onChange(hours[next]), 90);
+    };
+    const handleRange = (event: FormEvent<HTMLInputElement>) => {
+        const next = Number(event.currentTarget.value);
+        setPreview(next);
+        commit(next);
+    };
+    const selected = Math.min(Math.max(preview ?? index, 0), hours.length - 1);
+    const maxDay = new Date().toISOString().slice(0, 10);
+
     return (
         <div className="map-hour-slider" aria-label="Potensi aktivitas per jam">
             <label htmlFor="activity-hour-slider"><Clock aria-hidden="true" /> Potensi per jam</label>
@@ -27,11 +53,15 @@ export default function ActivityHourSlider({ hours, value, onChange }: {
                 min={0}
                 max={hours.length - 1}
                 step={1}
-                value={index}
-                onInput={(event) => commit(event.currentTarget)}
-                onChange={(event) => commit(event.currentTarget)}
+                value={selected}
+                onInput={handleRange}
+                onChange={handleRange}
             />
-            <output htmlFor="activity-hour-slider">{fmtDateTimeId(hours[index])}</output>
+            <output htmlFor="activity-hour-slider">{fmtDateTimeId(hours[selected])}</output>
+            <label className="map-hour-day" htmlFor="activity-hour-day">Tanggal
+                <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
+                    onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
+            </label>
         </div>
     );
 }

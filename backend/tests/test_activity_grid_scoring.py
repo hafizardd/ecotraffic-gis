@@ -2,6 +2,35 @@ from types import SimpleNamespace
 
 from app.services.bus_stop_scoring import build_assessments
 from app.services.classification import quintile_classify
+from app.services.hex_activity_scoring import recompute_hour_scores
+
+
+def _hex(hex_id):
+    return SimpleNamespace(hex_id=hex_id, norm_poi=50.0, norm_penduduk=50.0)
+
+
+def test_recompute_flags_unmapped_hexes_with_nearest_neighbour_fallback():
+    scores = recompute_hour_scores(
+        [_hex(1), _hex(2), _hex(3)],
+        {1: 100.0},
+        {1: (0.0, 0.0), 2: (0.01, 0.0), 3: (1.0, 0.0)},
+    )
+    assert scores[1]["data_status"] == "live"
+    assert scores[2]["data_status"] == "fallback"
+    assert scores[2]["fallback_from"] == 1
+    assert scores[2]["skor_total_ahp"] is not None
+    assert scores[3]["data_status"] == "fallback"
+    assert scores[3]["fallback_from"] == 1
+    assert scores[3]["ranking"] is None
+    # A borrowed cell still carries a tier label (from its own score, not a rank).
+    assert scores[3]["klasifikasi_potensi"] is not None
+
+
+def test_recompute_without_centroids_keeps_unmapped_hexes_no_data():
+    scores = recompute_hour_scores([_hex(1), _hex(2)], {1: 50.0})
+    assert scores[1]["data_status"] == "live"
+    assert scores[2]["data_status"] == "no_data"
+    assert scores[2]["skor_total_ahp"] is None
 
 
 def test_quintile_matches_excel_choose_roundup():

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gridLod, nextGridLod, sliderIndex } from "../src/utils/activityGrid.ts";
+import { gridLod, nextGridLod, sliderIndex, withDay, hourKey, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel } from "../src/utils/activityGrid.ts";
 import { breaksToLabels, breaksToStops } from "../src/constants/mapColors.ts";
 
 test("lod steps coarse -> medium -> sub -> fine across the zoom breakpoints", () => {
@@ -44,4 +44,48 @@ test("slider is hidden with no hours and clamps to the available range", () => {
     assert.equal(sliderIndex(hours, null), 1);
     assert.equal(sliderIndex(hours, hours[0]), 0);
     assert.equal(sliderIndex(hours, "2026-09-09T00:00:00+00:00"), 1);
+});
+
+test("withDay reuses a profile hour on any calendar day", () => {
+    assert.equal(withDay("2026-09-10T07:00:00.000Z", "2026-09-05"), "2026-09-05T07:00:00.000Z");
+    assert.equal(withDay("2026-09-10T20:00:00.000Z", "2026-09-05"), "2026-09-05T20:00:00.000Z");
+    // No day selected keeps the canonical profile hour untouched.
+    assert.equal(withDay("2026-09-10T07:00:00.000Z", null), "2026-09-10T07:00:00.000Z");
+});
+
+test("hourKey ignores the date so a day switch is a cache hit", () => {
+    assert.equal(hourKey("2026-09-10T07:00:00.000Z"), "07:00");
+    assert.equal(hourKey("2026-09-05T07:00:00.000Z"), "07:00");
+    assert.equal(hourKey(null), "");
+});
+
+test("aggregated tiers are region-wide, native fine is viewport-scoped", () => {
+    assert.equal(isWholeRegionLod("coarse"), true);
+    assert.equal(isWholeRegionLod("medium"), true);
+    assert.equal(isWholeRegionLod("sub"), true);
+    assert.equal(isWholeRegionLod("fine"), false);
+});
+
+test("adjacent tier prefetch only warms the far side of a nearby boundary", () => {
+    assert.equal(adjacentTierToPrefetch(10.4, "coarse"), "medium");
+    assert.equal(adjacentTierToPrefetch(10.4, "medium"), "coarse");
+    assert.equal(adjacentTierToPrefetch(13.6, "sub"), "fine");
+    assert.equal(adjacentTierToPrefetch(11.0, "medium"), null);
+    assert.equal(adjacentTierToPrefetch(16.0, "fine"), null);
+});
+
+test("featureInBbox tests polygon vertices against the viewport", () => {
+    const polygon = { geometry: { coordinates: [[[110.0, -7.0], [110.1, -7.0], [110.1, -7.1]]] } };
+    assert.equal(featureInBbox(polygon, "109.9,-7.2,110.2,-6.9"), true);
+    assert.equal(featureInBbox(polygon, "0,0,1,1"), false);
+    assert.equal(featureInBbox(polygon, null), true);
+});
+
+test("data status and no-data reasons carry user-facing labels", () => {
+    assert.equal(dataStatusLabel("live"), "Terukur");
+    assert.equal(dataStatusLabel("fallback"), "Perkiraan sel terdekat");
+    assert.equal(dataStatusLabel(null), "Tidak tersedia");
+    assert.equal(noDataReasonLabel("no_mapped_segment"), "Tidak ada segmen jalan yang memotong sel ini.");
+    assert.equal(noDataReasonLabel("mapped_but_no_volume"), "Ada segmen jalan, tetapi tidak ada sampel volume pada jam ini.");
+    assert.equal(noDataReasonLabel(null), null);
 });

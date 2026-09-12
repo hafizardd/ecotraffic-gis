@@ -24,8 +24,9 @@ const VEHICLES: { key: keyof VehicleRates; label: string }[] = [
 const SOURCE_LABELS: Record<string, string> = { LIVE: "Langsung", HISTORICAL: "Historis", SYNTHETIC: "Sintetis", REPLAY: "Replay", SNAPSHOT_REAL: "Snapshot" };
 
 function StatusBadge({ record }: { record: EmissionHistoryRecord }) {
+    const label = record.is_interpolated ? "Interpolasi" : record.quality_status === "estimated" ? "Estimasi" : "Terukur";
     return <div className="history-status">
-        <span className={`history-badge quality-${record.quality_status}`}>{record.quality_status === "estimated" ? "Estimasi" : "Terukur"}</span>
+        <span className={`history-badge quality-${record.is_interpolated ? "interpolated" : record.quality_status}`}>{label}</span>
         <small>{SOURCE_LABELS[record.source_mode] ?? record.source_mode} · {record.freshness_status === "fresh" ? "segar" : "basi"}</small>
     </div>;
 }
@@ -150,7 +151,7 @@ export default function HistoryTable() {
     }
 
     return <section className="page-card history-card animate-in" aria-label="Riwayat emisi segmen" aria-busy={loading}>
-        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; hasil sintetis dan replay dikecualikan.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
+        <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; hasil sintetis dikecualikan, jam replay hasil interpolasi ditandai.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
 
         <div className="history-toolbar">
             <div className="history-tabs" role="tablist" aria-label="Status mutu data">

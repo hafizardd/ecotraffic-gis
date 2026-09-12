@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchActivityGrid, fetchActivityGridAvailableHours, fetchActivityGridHexHourly } from "@/services/api";
 import { ActivityGridFeatureCollection, ActivityGridHourPoint } from "@/types";
-import type { GridLod } from "@/utils/activityGrid";
+import { hourKey, isWholeRegionLod, type GridLod } from "@/utils/activityGrid";
 
 const empty: ActivityGridFeatureCollection = { type: "FeatureCollection", features: [] };
 
@@ -13,7 +13,8 @@ const BBOX_DECIMALS = 4; // ~11 m, so sub-block pans reuse the cached snapshot
 
 function cacheKey(bbox: string | null, hour: string | null, lod: GridLod): string {
     const rounded = bbox ? bbox.split(",").map((v) => Number(v).toFixed(BBOX_DECIMALS)).join(",") : "all";
-    return `${lod}|${hour ?? ""}|${rounded}`;
+    // Keyed by hour-of-day: the static profile is the same for any calendar day.
+    return `${lod}|${hourKey(hour)}|${rounded}`;
 }
 
 // Settles fire once per gesture (see MapView onMoveEnd), so a short debounce is
@@ -21,15 +22,19 @@ function cacheKey(bbox: string | null, hour: string | null, lod: GridLod): strin
 // bbox/hour/lod returns instantly on revisits, and the previous frame stays on
 // screen (dimmed via `stale`) until the new one arrives, so zooming never
 // blanks the grid. The in-flight request is still aborted on the next change.
-export default function useActivityGrid(bbox: string | null, hour: string | null, enabled: boolean, lod: GridLod = "fine") {
+export default function useActivityGrid(bbox: string | null, hour: string | null, enabled: boolean,
+                                        lod: GridLod = "fine", hours: string[] = [], prefetchTier: GridLod | null = null) {
     const [activityGrid, setActivityGrid] = useState<ActivityGridFeatureCollection>(empty);
     const [error, setError] = useState<Error | null>(null);
     const [stale, setStale] = useState(false);
     const cache = useRef(new Map<string, ActivityGridFeatureCollection>());
+    // Aggregated tiers are region-wide, so they ignore the viewport and stay
+    // cached across pans (only `fine` keeps a viewport-scoped key).
+    const scopeBbox = useMemo(() => (isWholeRegionLod(lod) ? null : bbox), [lod, bbox]);
 
     useEffect(() => {
         if (!enabled) return;
-        const key = cacheKey(bbox, hour, lod);
+        const key = cacheKey(scopeBbox, hour, lod);
         const cached = cache.current.get(key);
         if (cached) {
             setActivityGrid(cached);
@@ -40,7 +45,7 @@ export default function useActivityGrid(bbox: string | null, hour: string | null
         const controller = new AbortController();
         const timer = setTimeout(() => {
             setStale(true);
-            fetchActivityGrid(bbox ?? undefined, hour, lod, controller.signal)
+            fetchActivityGrid(scopeBbox ?? undefined, hour, lod, controller.signal)
                 .then((value) => {
                     if (cache.current.size >= CACHE_LIMIT) cache.current.clear();
                     cache.current.set(key, value);
@@ -51,7 +56,49 @@ export default function useActivityGrid(bbox: string | null, hour: string | null
                 .catch((e) => { if (!controller.signal.aborted) setError(e instanceof Error ? e : new Error(String(e))); });
         }, 120);
         return () => { clearTimeout(timer); controller.abort(); };
-    }, [bbox, hour, enabled, lod]);
+    }, [scopeBbox, hour, enabled, lod]);
+
+    // Prefetch the whole 24h profile for the current viewport once, so scrubbing
+    // the slider is a cache hit (instant, no per-tick network round-trip).
+    useEffect(() => {
+        if (!enabled || hours.length === 0) return;
+        const controller = new AbortController();
+        let cancelled = false;
+        (async () => {
+            for (const candidate of hours) {
+                if (cancelled) return;
+                const key = cacheKey(scopeBbox, candidate, lod);
+                if (cache.current.has(key)) continue;
+                try {
+                    const value = await fetchActivityGrid(scopeBbox ?? undefined, candidate, lod, controller.signal);
+                    if (cancelled) return;
+                    if (cache.current.size >= CACHE_LIMIT) cache.current.clear();
+                    cache.current.set(key, value);
+                } catch {
+                    return;
+                }
+            }
+        })();
+        return () => { cancelled = true; controller.abort(); };
+    }, [scopeBbox, enabled, lod, hours]);
+
+    // Near a tier boundary, warm the adjacent tier for the current hour so a
+    // mid-zoom size swap is a cache hit instead of a wait.
+    useEffect(() => {
+        if (!enabled || !prefetchTier || prefetchTier === lod || !hour) return;
+        const targetScope = isWholeRegionLod(prefetchTier) ? null : bbox;
+        const key = cacheKey(targetScope, hour, prefetchTier);
+        if (cache.current.has(key)) return;
+        const controller = new AbortController();
+        fetchActivityGrid(targetScope ?? undefined, hour, prefetchTier, controller.signal)
+            .then((value) => {
+                if (controller.signal.aborted) return;
+                if (cache.current.size >= CACHE_LIMIT) cache.current.clear();
+                cache.current.set(key, value);
+            })
+            .catch(() => {});
+        return () => controller.abort();
+    }, [prefetchTier, lod, bbox, hour, enabled]);
 
     return { activityGrid, error, stale };
 }

@@ -82,7 +82,7 @@ def fact_query(filters: AnalyticsFilter, *, latest: bool = False):
         corridor_id.label("corridor_id"), corridor_name.label("corridor_name"),
         source_mode_expression().label("source_mode"),
     ).join(RoadSegment, SegmentEmission.road_segment_id == RoadSegment.id)
-    stmt = stmt.where(source_mode_expression().notin_(["SYNTHETIC", "REPLAY"]))
+    stmt = stmt.where(source_mode_expression().notin_(["SYNTHETIC"]))
     if filters.segment_id:
         stmt = stmt.where(RoadSegment.road_segment_id == filters.segment_id)
     if filters.corridor_id:
@@ -242,6 +242,7 @@ def serialize_fact(row, now: datetime | None = None) -> dict:
     """One serializer for REST, exports, Redis and WebSocket segment facts."""
     now = now or datetime.now(timezone.utc)
     metadata = row["ahp_metadata"] or {}
+    calc_meta = metadata.get("calculation_metadata") or {}
     observed = metadata.get("observed_at") or row["period_end"]
     if isinstance(observed, str):
         observed = datetime.fromisoformat(observed.replace("Z", "+00:00"))
@@ -270,7 +271,9 @@ def serialize_fact(row, now: datetime | None = None) -> dict:
         "observation_duration_seconds": row["observation_duration_seconds"],
         "aggregation_policy": row["aggregation_policy"],
         "category_pollutant_breakdown_g_h": row["category_pollutant_breakdown_g_h"],
-        "calculation_metadata": metadata.get("calculation_metadata", {}), "units": UNITS,
+        "is_interpolated": bool(calc_meta.get("is_interpolated")),
+        "interpolation_method": calc_meta.get("interpolation_method"),
+        "calculation_metadata": calc_meta, "units": UNITS,
     }
 
 
@@ -289,6 +292,7 @@ def serialize_history(row, now: datetime | None = None) -> dict:
         "source_mode": fact["source_mode"], "quality_status": fact["quality_status"],
         "freshness_status": fact["freshness_status"],
         "vehicle_count_semantics": fact["vehicle_count_semantics"],
+        "is_interpolated": fact["is_interpolated"], "interpolation_method": fact["interpolation_method"],
         "emissions_kg_h": emissions, "total_emissions_kg_h": total_emissions,
         "volume_per_hour": volume,
         "total_vehicles_per_hour": sum(volume.values()) if volume else None,
@@ -316,6 +320,7 @@ def serialize_model(segment, emission):
 
 EXPORT_FIELDS = ["segment_id", "segment_name", "corridor_id", "corridor_name", "period_start", "period_end",
     "source_mode", "vehicle_count_semantics", "calculation_mode", "quality_status",
+    "is_interpolated", "interpolation_method",
     *[f"{p.lower()}_kg_h" for p in POLLUTANTS],
     *[f"{c}_vehicles_h" for c in VEHICLE_CATEGORIES], *[f"{c}_vkt_km_h" for c in VEHICLE_CATEGORIES],
     "observed_at", "processed_at", "calculation_version", "source_cameras", "source_streams",

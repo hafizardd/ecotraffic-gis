@@ -8,6 +8,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { MISSING_LABEL, fmtFloatId, fmtIntId } from "@/utils/format";
 import { useActivityGridHexHourly } from "@/hooks/useActivityGrid";
+import { withDay, dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
 
 export default function ActivityGridPanel({ hexId, hour, onSelectHour, onClose }: {
@@ -29,16 +30,18 @@ function ActivityGridSeries({ hexId, hour, onSelectHour, onClose }: {
     onClose: () => void;
 }) {
     const series = useActivityGridHexHourly(hexId);
-    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} series={series} onSelectHour={onSelectHour} onClose={onClose} />;
+    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} series={series}
+        referenceDay={hour ? hour.slice(0, 10) : null} onSelectHour={onSelectHour} onClose={onClose} />;
 }
 
 function hourLabel(hour: string): string {
     return new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit" });
 }
 
-function HourPatternChart({ series, activeHour, onSelectHour }: {
+function HourPatternChart({ series, activeHour, referenceDay, onSelectHour }: {
     series: ActivityGridHourPoint[];
     activeHour: string | null;
+    referenceDay: string | null;
     onSelectHour?: (hour: string) => void;
 }) {
     if (series.length < 2) return null;
@@ -48,7 +51,10 @@ function HourPatternChart({ series, activeHour, onSelectHour }: {
             <SectionTitle title="Pola 24 jam" meta={`${series.length} jam tersedia`} />
             <div className="activity-hour-chart">
                 {series.map((point) => {
-                    const active = point.hour === activeHour;
+                    // The series is the canonical profile; rewrite to the day the
+                    // panel is showing so selection/highlight stay in sync.
+                    const displayHour = withDay(point.hour, referenceDay);
+                    const active = displayHour === activeHour;
                     const score = point.skor_total_ahp;
                     const height = score == null ? 4 : Math.max(4, Math.round((score / max) * 100));
                     const label = hourLabel(point.hour);
@@ -57,7 +63,7 @@ function HourPatternChart({ series, activeHour, onSelectHour }: {
                             type="button"
                             key={point.hour}
                             className={active ? "active" : ""}
-                            onClick={() => onSelectHour?.(point.hour)}
+                            onClick={() => onSelectHour?.(displayHour)}
                             title={`Pukul ${label} · ${score == null ? "tanpa data" : fmtFloatId(score, 1)}`}
                             aria-label={`Pukul ${label}${score == null ? ", tanpa data" : `, skor ${fmtFloatId(score, 1)}`}`}
                         >
@@ -73,10 +79,11 @@ function HourPatternChart({ series, activeHour, onSelectHour }: {
     );
 }
 
-function ActivityGridDetail({ hexId, hour, series, onSelectHour, onClose }: {
+function ActivityGridDetail({ hexId, hour, series, referenceDay, onSelectHour, onClose }: {
     hexId: number;
     hour: string | null;
     series: ActivityGridHourPoint[];
+    referenceDay: string | null;
     onSelectHour?: (hour: string) => void;
     onClose: () => void;
 }) {
@@ -97,7 +104,9 @@ function ActivityGridDetail({ hexId, hour, series, onSelectHour, onClose }: {
     const currentHourLabel = hour ? new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null;
     const sourceMeta = !hour
         ? "Sumber: model offline"
-        : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data` : `Skor pukul ${currentHourLabel} · live`;
+        : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data`
+            : props?.data_status === "fallback" ? `Pukul ${currentHourLabel} · perkiraan (sel terdekat)`
+                : `Skor pukul ${currentHourLabel} · live`;
 
     return (
         <aside className="monitoring-panel segment-panel">
@@ -115,7 +124,20 @@ function ActivityGridDetail({ hexId, hour, series, onSelectHour, onClose }: {
                 {props && (
                     <>
                         <ActivityPotentialCard properties={props} />
-                        <HourPatternChart series={series} activeHour={hour} onSelectHour={onSelectHour} />
+                        <section className="panel-section">
+                            <SectionTitle title="Sumber data" meta={hour ? currentHourLabel ?? undefined : "model offline"} />
+                            <ul className="data-source-list">
+                                <li>Status: <strong>{dataStatusLabel(props.data_status)}</strong></li>
+                                {props.is_interpolated && <li>Jam ini hasil <strong>interpolasi</strong> 24 jam, bukan pengamatan langsung.</li>}
+                                {props.data_status === "fallback" && props.fallback_from != null && (
+                                    <li>Volume dipinjam dari hex <strong>{props.fallback_from}</strong> (tetangga terdekat).</li>
+                                )}
+                                {noDataReasonLabel(props.no_data_reason) && <li>{noDataReasonLabel(props.no_data_reason)}</li>}
+                                <li>Segmen: {props.source_segments?.length ? props.source_segments.join(", ") : "tidak tercatat"}</li>
+                                <li>Kamera: {props.source_cameras?.length ? props.source_cameras.join(", ") : "tidak tercatat"}</li>
+                            </ul>
+                        </section>
+                        <HourPatternChart series={series} activeHour={hour} referenceDay={referenceDay} onSelectHour={onSelectHour} />
                         <section className="panel-section">
                             <SectionTitle title="Data mentah" meta={sourceMeta} />
                             <div className="criteria-grid">
