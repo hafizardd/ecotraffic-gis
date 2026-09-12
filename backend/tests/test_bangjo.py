@@ -1,4 +1,5 @@
 import copy
+import uuid
 import warnings
 from types import SimpleNamespace
 
@@ -139,7 +140,7 @@ class _FakeDB:
 
 @pytest.mark.asyncio
 async def test_build_context_bus_stops_have_no_cartesian_product_warning():
-    segment = SimpleNamespace(road_segment_id="SEG-0001", name="Jalan Kenari", length_km=1.0)
+    segment = SimpleNamespace(id=uuid.uuid4(), road_segment_id="SEG-0001", name="Jalan Kenari", length_km=1.0)
     stop = SimpleNamespace(source_id="STOP-1", title="Halte", intervention_class="Shift",
                            intervention_rank=1, accessibility_score=0.5, facility_score=0.5,
                            environment_score=0.5)
@@ -148,6 +149,7 @@ async def test_build_context_bus_stops_have_no_cartesian_product_warning():
         _FakeResult(rows=[]),
         _FakeResult(rows=[(stop, 123.456)]),
         _FakeResult(value=0),
+        _FakeResult(rows=[]),
     ])
 
     context = await build_context(db, "SEG-0001")
@@ -225,6 +227,31 @@ def test_merge_contexts_aggregates_chunks():
     assert merged["activity_potential"]["avg_skor_total_ahp"] == 2.5
     assert merged["activity_potential"]["dominant_poi_categories"] == [{"category": "kantor", "count": 6}]
     assert merged["coverage_gap"] is True
+
+
+def test_merge_contexts_sums_hourly_series_and_flags_interpolation():
+    point = {"hour": "2026-01-01T00:00:00+00:00", "emissions_kg_h": {"co2": 1.0},
+             "volume_per_hour": {"car": 10.0}, "is_interpolated": False, "interpolation_method": None}
+    base = {
+        "generated_at": "2026-01-01T00:00:00+00:00",
+        "segment": {"road_segment_id": "SEG-0001", "name": "Jalan Kenari", "length_km": 0.5,
+                    "activity_class": None, "activity_score": None, "pollutant_totals": None,
+                    "data_source": None, "observed_at": None},
+        "activity_potential": {"hex_count": 0, "hex_ids": [], "avg_skor_total_ahp": None,
+                               "max_skor_total_ahp": None, "klasifikasi_potensi": None,
+                               "dominant_poi_categories": []},
+        "bus_stops": [], "coverage_gap": False, "hourly_series": [dict(point)],
+    }
+    other = copy.deepcopy(base)
+    other["segment"].update(road_segment_id="SEG-0002")
+    other["hourly_series"] = [{**point, "emissions_kg_h": {"co2": 2.0}, "volume_per_hour": {"car": 5.0},
+                               "is_interpolated": True, "interpolation_method": "linear"}]
+
+    merged = bangjo._merge_contexts([base, other])
+
+    assert merged["hourly_series"][0]["emissions_kg_h"]["co2"] == 3.0
+    assert merged["hourly_series"][0]["volume_per_hour"]["car"] == 15.0
+    assert merged["hourly_series"][0]["is_interpolated"] is True
 
 
 def test_merge_contexts_rolls_up_stop_assessment_and_intervention_priority():

@@ -4,7 +4,7 @@ Runs outside the snapshot inference path: one thread per camera holds its own
 YOLO tracker state (persist=True) so IDs survive across frames. Publishes
 lightweight track payloads on ``tracks:{camera_id}`` (Redis/analytics) and
 stores the latest annotated JPEG (filled ROI + dimmed outside boxes) under
-``tracks:snapshot:{camera_id}`` — the single source for the browser MJPEG
+``tracks:snapshot:{camera_id}`` - the single source for the browser MJPEG
 display stream at ``GET /api/cameras/{id}/tracked.mjpg``.
 
 Run: ``python -m app.workers.tracking_worker`` (separate process/container).

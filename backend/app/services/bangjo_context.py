@@ -1,11 +1,11 @@
 """Assemble the real, evidence-grounded context object Bang Jo narrates.
 
-Every field is a real query. Missing pieces stay ``None``/empty — nothing is
-fabricated — matching the existing ``_empty_result()``/``"status": "pending"``
+Every field is a real query. Missing pieces stay ``None``/empty - nothing is
+fabricated - matching the existing ``_empty_result()``/``"status": "pending"``
 convention.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from collections import Counter
 
 from geoalchemy2 import Geography
@@ -17,11 +17,30 @@ from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
 from app.models.spatial_sources import SurveyStopObservation
 from app.services.spatial_integration import K4_BUFFER_M
+from cv.proposal_emission_factors import POLLUTANTS
 
 _geog = Geography(srid=4326)
 HIGH_POTENTIAL = ("Sangat Tinggi", "Tinggi")
 WEAK_CLASSES = ("Rendah", "Sangat Rendah")
 DOMINANT_POI_LIMIT = 5
+REPLAY_WINDOW_HOURS = 24
+
+
+def _hourly_point(emission: SegmentEmission) -> dict:
+    """One precomputed REPLAY hour, interpolation flags included."""
+    metadata = emission.ahp_metadata or {}
+    calc_meta = metadata.get("calculation_metadata") or {}
+    totals = emission.pollutant_totals_g_h or {}
+    return {
+        "hour": emission.period_start.isoformat(),
+        "emissions_kg_h": {
+            pollutant.lower(): (totals[pollutant] / 1000 if totals.get(pollutant) is not None else None)
+            for pollutant in POLLUTANTS
+        },
+        "volume_per_hour": emission.volume_per_hour,
+        "is_interpolated": bool(calc_meta.get("is_interpolated")),
+        "interpolation_method": calc_meta.get("interpolation_method"),
+    }
 
 
 async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
@@ -114,6 +133,19 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
         "avg_ahp_total_score": round(sum(stop_scores) / len(stop_scores), 4) if stop_scores else None,
     }
 
+    replay_rows = (
+        await db.execute(
+            select(SegmentEmission)
+            .where(
+                SegmentEmission.road_segment_id == segment.id,
+                SegmentEmission.ahp_metadata["source_mode"].astext == "REPLAY",
+                SegmentEmission.period_start >= datetime.now(timezone.utc) - timedelta(hours=REPLAY_WINDOW_HOURS),
+            )
+            .order_by(SegmentEmission.period_start)
+        )
+    ).scalars().all()
+    hourly_series = [_hourly_point(emission) for emission in replay_rows]
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "segment": {
@@ -124,6 +156,7 @@ async def build_context(db: AsyncSession, road_segment_id: str) -> dict | None:
             "data_source": emission.vehicle_count_semantics if emission else None,
             "observed_at": emission.period_end.isoformat() if emission else None,
         },
+        "hourly_series": hourly_series,
         "activity_potential": activity_potential,
         "bus_stops": [
             {

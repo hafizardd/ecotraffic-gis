@@ -1,4 +1,4 @@
-"""DEPRECATED — dev-seed only. 24h synthetic HISTORICAL backfill.
+"""DEPRECATED - dev-seed only. 24h synthetic HISTORICAL backfill.
 
 Superseded by the real historical snapshot sampler
 (`app.workers.snapshot_worker`, source_mode=SNAPSHOT_REAL). Kept for local
@@ -6,7 +6,7 @@ development on an empty database.
 
 Never run on a non-empty table without `--only-missing` (non-idempotent
 otherwise: reruns duplicate 24 rows per segment), and never run over
-SNAPSHOT_REAL rows at all — the upsert key `uq_segment_emission_period_version`
+SNAPSHOT_REAL rows at all - the upsert key `uq_segment_emission_period_version`
 would silently overwrite real observations.
 """
 

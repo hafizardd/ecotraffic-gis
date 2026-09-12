@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routes.spatial_layers import _feature, _parse_bbox
 from app.core.database import get_db
 from app.models.activity_grid import ActivityGridHex
+from app.models.camera import Camera
+from app.models.camera_road_segment import CameraRoadSegment
 from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
 from app.services.emission_analytics import source_mode_expression
@@ -26,8 +28,6 @@ from app.services.hex_h3 import (
 from app.services.spatial_integration import resolve_primary_hex
 
 router = APIRouter(prefix="/api/spatial", tags=["spatial"])
-
-_DAY = timedelta(hours=24)
 
 # GeoJSON coordinate precision. Native cells are ~±100 m, so 5 decimals (~1 m)
 # is already below the geometry's own accuracy and trims ~30% off the payload.
@@ -77,10 +77,41 @@ async def _geometry_rows(db, bounds):
     return await db.execute(query, _bbox_params(bounds))
 
 
+async def _all_cells_with_centroids(db):
+    """All native cells plus their centroid lon/lat, for the fallback distance test."""
+    rows = (await db.execute(
+        select(
+            ActivityGridHex,
+            text("ST_X(ST_Centroid(activity_grid_hexes.geometry))::float"),
+            text("ST_Y(ST_Centroid(activity_grid_hexes.geometry))::float"),
+        )
+    )).all()
+    cells = [row[0] for row in rows]
+    centroids = {row[0].hex_id: (row[1], row[2]) for row in rows}
+    return cells, centroids
+
+
+async def _camera_ids_by_segment(db, segment_ids: list[str]) -> dict[str, list[str]]:
+    """Active camera slugs per road segment, so a hex can show who feeds it."""
+    if not segment_ids:
+        return {}
+    rows = (await db.execute(
+        select(RoadSegment.road_segment_id, Camera.camera_id)
+        .join(CameraRoadSegment, CameraRoadSegment.road_segment_id == RoadSegment.id)
+        .join(Camera, Camera.id == CameraRoadSegment.camera_id)
+        .where(RoadSegment.road_segment_id.in_(segment_ids), CameraRoadSegment.is_active.is_(True))
+        .distinct()
+    )).all()
+    mapping: dict[str, list[str]] = {}
+    for segment_id, camera_id in rows:
+        mapping.setdefault(segment_id, []).append(camera_id)
+    return mapping
+
+
 async def _hour_scores(db, hour: datetime):
     """Global (whole-grid) live scores for one hour, so map and panel agree."""
-    cells = (await db.execute(select(ActivityGridHex))).scalars().all()
-    scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, hour))
+    cells, centroids = await _all_cells_with_centroids(db)
+    scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, hour), centroids)
     return cells, scores
 
 
@@ -91,6 +122,9 @@ async def _live_grid(db, hour: datetime, bounds):
     features = []
     for hex_id, geometry in await _geometry_rows(db, bounds):
         properties = _hex_properties(cells_by_id[hex_id])
+        # The hourly map payload carries only what the fill/legend/hover need;
+        # the heavy POI breakdown is fetched on demand by the detail panel.
+        properties.pop("poi_breakdown", None)
         properties.update(scores.get(hex_id, dict(NO_DATA)))
         features.append(_feature(geometry, properties))
     return _envelope(features, quantile_breaks([feature["properties"].get("skor_total_ahp") for feature in features]), "fine")
@@ -99,7 +133,7 @@ async def _live_grid(db, hour: datetime, bounds):
 async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, lod: str):
     """Zoomed-out LOD: native cells rolled up into H3 cells at ``resolution``.
 
-    Native cells stay the unit of scoring — the H3 geometry and its metrics are
+    Native cells stay the unit of scoring - the H3 geometry and its metrics are
     an area-weighted render approximation, not an independently scored cell, so
     ``hex_id`` is null to block drill-down. ``breaks`` are the viewport's own
     quantiles so the ramp rescales with whatever is on screen.
@@ -111,7 +145,11 @@ async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, l
             text("ST_Y(ST_Centroid(activity_grid_hexes.geometry))::float"),
         )
     )).all()
-    scores = recompute_hour_scores([row[0] for row in rows], await hourly_hex_volumes(db, hour)) if hour else None
+    scores = recompute_hour_scores(
+        [row[0] for row in rows],
+        await hourly_hex_volumes(db, hour),
+        {row[0].hex_id: (row[1], row[2]) for row in rows},
+    ) if hour else None
 
     groups: dict[str, list] = {}
     included: list = []
@@ -127,13 +165,19 @@ async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, l
     features = []
     for cell_id, members in groups.items():
         aggregate = aggregate_cells(members, scores)
+        if scores is not None:
+            statuses = [scores.get(cell.hex_id, {}).get("data_status", "no_data") for cell, _, _ in members]
+            data_status = "live" if "live" in statuses else "fallback" if "fallback" in statuses else "no_data"
+            interpolated = any(scores.get(cell.hex_id, {}).get("is_interpolated") for cell, _, _ in members)
+        else:
+            data_status, interpolated = "static", False
         features.append(_feature({"type": "Polygon", "coordinates": [h3_boundary_geojson(cell_id)]}, {
             "hex_id": None, "h3_index": cell_id, "luas_km2": aggregate["luas_km2"],
             "poi_total": aggregate["poi_total"], "poi_breakdown": {}, "penduduk": aggregate["penduduk"],
             "volume_mean": 0.0, "norm_volume": None, "norm_poi": 0.0, "norm_penduduk": 0.0,
             "skor_total_ahp": aggregate["skor_total_ahp"], "ranking": None,
             "klasifikasi_potensi": aggregate["klasifikasi_potensi"], "ahp_weight_version": "h3-aggregated",
-            "source": "aggregated", "data_status": "live" if hour else "static",
+            "source": "aggregated", "data_status": data_status, "is_interpolated": interpolated,
             "aggregated_count": len(members), "resolution": resolution,
         }))
     breaks = quantile_breaks([
@@ -153,10 +197,14 @@ async def get_activity_grid(response: Response, bbox: str | None = None, hour: s
     bounds = _parse_bbox(bbox)
     resolution = LOD_RESOLUTIONS.get(lod or "")
     if resolution is not None:
-        return await _aggregated_grid(db, _parse_hour(hour) if hour else None, resolution, bounds, lod)
+        # Aggregated tiers use the same daily-profile lens as the native grid.
+        moment = await _profile_hour(db, _parse_hour(hour)) if hour else None
+        return await _aggregated_grid(db, moment, resolution, bounds, lod)
     if hour:
-        return await _live_grid(db, _parse_hour(hour), bounds)
-    # Bare request: the static offline snapshot, byte-for-byte unchanged.
+        moment = await _profile_hour(db, _parse_hour(hour))
+        if moment is not None:
+            return await _live_grid(db, moment, bounds)
+    # Bare request (or no profile data yet): the static offline snapshot, unchanged.
     query = select(ActivityGridHex, text(f"ST_AsGeoJSON(activity_grid_hexes.geometry, {_GEOJSON_PRECISION})::json")).order_by(ActivityGridHex.ranking)
     if bounds:
         query = query.where(text("ST_Intersects(activity_grid_hexes.geometry, ST_MakeEnvelope(:min_lon, :min_lat, :max_lon, :max_lat, 4326))"))
@@ -165,28 +213,71 @@ async def get_activity_grid(response: Response, bbox: str | None = None, hour: s
     return _envelope(features, quantile_breaks([feature["properties"].get("skor_total_ahp") for feature in features]), "fine")
 
 
+def _canonical_hour(anchor: datetime, requested: datetime | None) -> datetime:
+    """Map a requested instant onto the anchor day's bucket with the same UTC hour-of-day.
+
+    The precomputed REPLAY facts are one static 24h profile, so any calendar day
+    resolves to the same underlying buckets ("view lens") without duplicating rows.
+    """
+    hour_of_day = requested.hour if requested is not None else anchor.hour
+    return anchor - timedelta(hours=(anchor.hour - hour_of_day) % 24)
+
+
+async def _max_bucket(db, where) -> datetime | None:
+    bucket = func.to_timestamp(func.floor(func.extract("epoch", SegmentEmission.period_start) / 3600) * 3600)
+    value = (await db.execute(select(func.max(bucket)).where(where))).scalar_one_or_none()
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+
+async def _profile_anchor(db) -> datetime | None:
+    """Anchor of the static 24h profile.
+
+    Prefers the precomputed REPLAY dataset so its buckets stay addressable on
+    any requested day; falls back to the newest observed sample when no REPLAY
+    rows exist yet (e.g. a live-only dev database).
+    """
+    replay = await _max_bucket(db, source_mode_expression() == "REPLAY")
+    if replay is not None:
+        return replay
+    return await _max_bucket(db, source_mode_expression().notin_(["SYNTHETIC"]))
+
+
+async def _profile_hour(db, requested: datetime | None) -> datetime | None:
+    anchor = await _profile_anchor(db)
+    return _canonical_hour(anchor, requested) if anchor is not None else None
+
+
 async def _available_hours(db) -> list[datetime]:
-    """Hour buckets with at least one observed segment sample in the last 24h."""
-    bucket = func.to_timestamp(func.floor(func.extract("epoch", SegmentEmission.period_start) / 3600) * 3600).label("hour")
-    statement = (
-        select(bucket)
-        .where(SegmentEmission.period_start >= datetime.now(timezone.utc) - _DAY,
-               source_mode_expression().notin_(["SYNTHETIC", "REPLAY"]))
-        .distinct()
-        .order_by(bucket)
-    )
-    return [moment.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
-            for moment in (await db.execute(statement)).scalars().all()]
+    """The static profile's 24 hourly buckets (oldest first).
+
+    Anchored on the latest non-SYNTHETIC sample rather than ``now()`` so the
+    precomputed REPLAY day stays selectable indefinitely and every requested day
+    resolves to the same profile.
+    """
+    anchor = await _profile_anchor(db)
+    if anchor is None:
+        return []
+    return [anchor - timedelta(hours=23 - index) for index in range(24)]
 
 
 @router.get("/activity-grid/available-hours")
 async def get_activity_grid_available_hours(db: AsyncSession = Depends(get_db)):
-    """Hour buckets with at least one observed segment sample in the last 24h.
+    """The static 24h profile the time slider scrubs.
 
-    Sizes the time slider; the frontend must not probe for availability.
+    ``hour`` on the other grid endpoints accepts any ISO instant and maps it onto
+    this profile by UTC hour-of-day, so the same day is available for every
+    calendar date the client builds the slider with.
     """
     hours = [moment.isoformat() for moment in await _available_hours(db)]
-    return {"hours": hours, "earliest": hours[0] if hours else None, "latest": hours[-1] if hours else None}
+    return {
+        "hours": hours,
+        "earliest": hours[0] if hours else None,
+        "latest": hours[-1] if hours else None,
+        "mode": "daily-profile",
+        "profile_latest": hours[-1] if hours else None,
+    }
 
 
 @router.get("/activity-grid/{hex_id}/hourly")
@@ -196,12 +287,12 @@ async def get_activity_grid_hex_hourly(hex_id: int, db: AsyncSession = Depends(g
     The whole grid is re-scored per hour so min/max normalization matches the
     map; the response is just the selected hex's slice.
     """
-    cells = (await db.execute(select(ActivityGridHex))).scalars().all()
+    cells, centroids = await _all_cells_with_centroids(db)
     if not any(cell.hex_id == hex_id for cell in cells):
         raise HTTPException(status_code=404, detail="Activity grid hex not found")
     series = []
     for moment in await _available_hours(db):
-        scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, moment))
+        scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, moment), centroids)
         entry = scores.get(hex_id, dict(NO_DATA))
         series.append({
             "hour": moment.isoformat(),
@@ -209,6 +300,9 @@ async def get_activity_grid_hex_hourly(hex_id: int, db: AsyncSession = Depends(g
             "norm_volume": entry.get("norm_volume"),
             "klasifikasi_potensi": entry.get("klasifikasi_potensi"),
             "data_status": entry.get("data_status"),
+            "is_interpolated": bool(entry.get("is_interpolated")),
+            "fallback_from": entry.get("fallback_from"),
+            "no_data_reason": entry.get("no_data_reason"),
         })
     return {"hex_id": hex_id, "series": series}
 
@@ -225,8 +319,16 @@ async def get_activity_grid_hex(hex_id: int, hour: str | None = None, db: AsyncS
         raise HTTPException(status_code=404, detail="Activity grid hex not found")
     properties = _hex_properties(cell)
     if hour:
-        _, scores = await _hour_scores(db, _parse_hour(hour))
-        properties.update(scores.get(hex_id, dict(NO_DATA)))
+        moment = await _profile_hour(db, _parse_hour(hour))
+        if moment is not None:
+            _, scores = await _hour_scores(db, moment)
+            entry = scores.get(hex_id, dict(NO_DATA))
+            properties.update(entry)
+            # Fallback cells borrow from a source hex; report that hex's feeders.
+            segments = entry.get("source_segments") or scores.get(entry.get("fallback_from") or -1, {}).get("source_segments") or []
+            if segments:
+                cameras = await _camera_ids_by_segment(db, segments)
+                properties["source_cameras"] = sorted({camera for ids in cameras.values() for camera in ids})
     return _feature(geometry, properties)
 
 

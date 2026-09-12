@@ -51,7 +51,7 @@ manager = ConnectionManager()
 
 
 # ------------------------------------------------------------------
-# Initial state — send latest emission per camera to new client only
+# Initial state - send latest emission per camera to new client only
 # ------------------------------------------------------------------
 
 async def send_initial_state(websocket: WebSocket) -> None:
@@ -180,7 +180,7 @@ async def websocket_emissions(websocket: WebSocket):
 
 
 # ------------------------------------------------------------------
-# Redis subscriber — fans out compact latest-state payloads from the worker.
+# Redis subscriber - fans out compact latest-state payloads from the worker.
 # emissions:* carries no frames; tracks:* carries lightweight track + ROI
 # payloads (normalized boxes) for the verification overlay only.
 # ------------------------------------------------------------------

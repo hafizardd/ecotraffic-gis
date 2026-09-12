@@ -1,14 +1,22 @@
-"""Batched one-frame YOLO snapshot sampler for HISTORICAL cameras.
+"""DEPRECATED - the 54-camera real-data collection is complete.
 
-Claim-lease scheduling on the existing ``cameras.next_sample_at`` column: each
-cycle claims due non-LIVE cameras, grabs one frame per camera, runs one shared
-batched YOLO inference per chunk, and stores a SNAPSHOT_OCCUPANCY observation.
-Each observation is then scored immediately with ``calculate_segment_emission``
-and persisted with ``source_mode = "SNAPSHOT_REAL"``.
+Superseded by the precomputed REPLAY dataset built with
+``scripts/build_replay_dataset.py``. This sampler is no longer registered with
+Celery beat or ``task_routes`` (and is absent from ``celery_app.include``); it is
+kept only so the historical collection code and its tests remain runnable for
+reference. Do not re-schedule it: the non-LIVE cameras are now labeled
+``data_source = "REPLAY"`` and are served from precomputed hourly facts.
+
+Batched one-frame YOLO snapshot sampler for HISTORICAL cameras. Claim-lease
+scheduling on the existing ``cameras.next_sample_at`` column: each cycle claims
+due non-LIVE cameras, grabs one frame per camera, runs one shared batched YOLO
+inference per chunk, and stores a SNAPSHOT_OCCUPANCY observation. Each
+observation is then scored immediately with ``calculate_segment_emission`` and
+persisted with ``source_mode = "SNAPSHOT_REAL"``.
 
 The LIVE tracking path and the LIVE-only reconciler are untouched. Heavy CV
 imports stay lazy so the backend/beat/segment-worker images (no PyTorch) can
-still import this module to register the task.
+still import this module.
 """
 
 from __future__ import annotations

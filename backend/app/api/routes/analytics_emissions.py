@@ -15,6 +15,8 @@ from starlette.background import BackgroundTask
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.camera import Camera
+from app.models.camera_road_segment import CameraRoadSegment
 from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
 from app.services.emission_analytics import (
@@ -66,8 +68,8 @@ def envelope(filters: AnalyticsFilter):
         "corridor_id": filters.corridor_id, "search": filters.search,
         "quality_status": filters.quality_status, "source_mode": filters.source_mode, "units": UNITS,
         "aggregation": "mean_per_segment_then_sum_independent_segments",
-        # SNAPSHOT_REAL is intentionally NOT excluded: it is real sampled data.
-        "excluded_source_modes": ["SYNTHETIC", "REPLAY"]}
+        # SNAPSHOT_REAL and the precomputed REPLAY dataset are real/derived data.
+        "excluded_source_modes": ["SYNTHETIC"]}
 
 
 @router.get("/options")
@@ -99,6 +101,48 @@ async def latest(filters: AnalyticsFilter = Depends(get_filters), db=Depends(ana
             "processed_at": max((s["processed_at"] for s in segments), default=None),
             "source_mode": "LIVE" if segments and all(s["source_mode"] == "LIVE" for s in segments) else "HISTORICAL",
         }}
+
+
+@router.get("/historical-cameras")
+async def historical_cameras(filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    """Latest non-LIVE fact per mapped camera, for coloring historical CCTV points.
+
+    A camera is attributed through its active road-segment mapping; the segment's
+    latest ``REPLAY``/``SNAPSHOT_REAL`` fact is shown at each mapped camera as a
+    display-only borrow (never summed). Live cameras are served by the tracking
+    path, so ``LIVE`` facts are excluded here.
+    """
+    now = datetime.now(timezone.utc)
+    facts = fact_query(filters, latest=True).cte("latest_facts")
+    rows = (await db.execute(select(facts))).mappings().all()
+    cases = [serialize_fact(row, now) for row in rows if row["source_mode"] != "LIVE"]
+    segment_ids = [case["segment_id"] for case in cases]
+    camera_rows = (await db.execute(
+        select(RoadSegment.road_segment_id, Camera.camera_id)
+        .join(CameraRoadSegment, CameraRoadSegment.road_segment_id == RoadSegment.id)
+        .join(Camera, Camera.id == CameraRoadSegment.camera_id)
+        .where(RoadSegment.road_segment_id.in_(segment_ids), CameraRoadSegment.is_active.is_(True))
+        .distinct()
+    )).all() if segment_ids else []
+    cameras_by_segment: dict[str, list[str]] = {}
+    for segment_id, camera_id in camera_rows:
+        cameras_by_segment.setdefault(segment_id, []).append(camera_id)
+
+    cameras = []
+    for case in cases:
+        emissions_kg_h = case["emissions_kg_h"]
+        emissions_g_per_min = {
+            pollutant: (value * 1000 / 60 if value is not None else None)
+            for pollutant, value in emissions_kg_h.items()
+        }
+        for camera_id in cameras_by_segment.get(case["segment_id"], []):
+            cameras.append({
+                "camera_id": camera_id, "segment_id": case["segment_id"], "segment_name": case["segment_name"],
+                "source_mode": case["source_mode"], "observed_at": case["observed_at"],
+                "is_interpolated": case["is_interpolated"], "quality_status": case["quality_status"],
+                "emissions_g_per_min": emissions_g_per_min, "volume_per_hour": case["volume_per_hour"],
+            })
+    return {"timestamp": now, "units": {"emissions": "g/min", "volume_per_hour": "vehicles/hour"}, "cameras": cameras}
 
 
 @router.get("/trend")

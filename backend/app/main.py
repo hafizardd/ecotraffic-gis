@@ -16,7 +16,7 @@ app = FastAPI(
 )
 
 # ------------------------------------------------------------------
-# CORS — allow the React frontend (localhost:3000) to call the API
+# CORS - allow the React frontend (localhost:3000) to call the API
 # ------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -50,5 +50,5 @@ async def startup_event():
 
 @app.get("/health")
 async def health():
-    """Quick health check — used by Docker and monitoring."""
+    """Quick health check - used by Docker and monitoring."""
     return {"status": "ok", "debug": settings.DEBUG}

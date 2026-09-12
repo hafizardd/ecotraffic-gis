@@ -12,7 +12,7 @@ export interface CameraProperties {
     freshness_status: "fresh" | "aging" | "stale" | "unknown";
     data_age_seconds: number | null;
     created_at: string;
-    data_source?: "LIVE" | "HISTORICAL";
+    data_source?: "LIVE" | "HISTORICAL" | "REPLAY";
 }
 
 export interface CameraFeature {
@@ -231,6 +231,8 @@ export interface EmissionHistoryRecord {
     quality_status: "observed" | "estimated";
     freshness_status: "fresh" | "stale";
     vehicle_count_semantics: string;
+    is_interpolated: boolean;
+    interpolation_method: "linear" | "forward_fill" | "backward_fill" | null;
     emissions_kg_h: PollutantRates;
     total_emissions_kg_h: number | null;
     volume_per_hour: VehicleRates | null;
@@ -251,6 +253,24 @@ export interface LatestSegmentEmissionsResponse {    timestamp: string; segments
         freshness_seconds: number | null; stale_after_seconds: number; observed_at: string | null;
         processed_at: string | null; source_mode: "LIVE" | "HISTORICAL";
     };
+}
+// Historical CCTV point value borrowed from the camera's mapped segment fact
+// (display-only; never summed across cameras).
+export interface HistoricalCameraEmission {
+    camera_id: string;
+    segment_id: string;
+    segment_name: string;
+    source_mode: string;
+    observed_at: string;
+    is_interpolated: boolean;
+    quality_status: string;
+    emissions_g_per_min: Partial<PollutantRates>;
+    volume_per_hour: VehicleRates | null;
+}
+export interface HistoricalCameraResponse {
+    timestamp: string;
+    units: { emissions: string; volume_per_hour: string };
+    cameras: HistoricalCameraEmission[];
 }
 export interface AnalyticsSegmentOption { segment_id: string; segment_name: string; corridor_id: string; corridor_name: string; }
 export type VehicleKey = "car" | "motorcycle" | "bus" | "truck";
@@ -344,10 +364,19 @@ export interface ActivityGridProperties {
     klasifikasi_potensi: string | null;
     ahp_weight_version: string;
     source: string;
-    data_status?: "live" | "static" | "no_data";
+    data_status?: "live" | "static" | "no_data" | "fallback";
     // Live ranking is over the observed hex set, so the denominator can differ
     // from the static 378.
     ranking_total?: number | null;
+    // Set on fallback cells: the nearest observed hex whose volume was reused.
+    fallback_from?: number | null;
+    // Provenance: segments that fed this hex, and their active cameras (detail only).
+    source_segments?: string[] | null;
+    source_cameras?: string[] | null;
+    // True when the hour came from REPLAY temporal interpolation.
+    is_interpolated?: boolean;
+    // Why a hex has no live volume (so grey/borrowed cells explain themselves).
+    no_data_reason?: "no_mapped_segment" | "mapped_but_no_volume" | string | null;
     // Client-only render fields: `potential` is the 0-5 tier driving the fill
     // expression; coarse LOD sets `aggregated_count` and clears `hex_id`.
     potential?: number;
@@ -375,7 +404,10 @@ export interface ActivityGridHourPoint {
     skor_total_ahp: number | null;
     norm_volume: number | null;
     klasifikasi_potensi: string | null;
-    data_status: "live" | "static" | "no_data";
+    data_status: "live" | "static" | "no_data" | "fallback";
+    is_interpolated?: boolean;
+    fallback_from?: number | null;
+    no_data_reason?: string | null;
 }
 
 export interface ActivityGridHourSeries {

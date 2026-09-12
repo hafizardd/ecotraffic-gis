@@ -87,7 +87,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         <div className="segment-overview">
                             <strong>{detail.intervention_class ?? "Belum dinilai"}</strong>
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>
-                            <b className="priority-badge" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "—"}</b>
+                            <b className="priority-badge" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
                         </div>
                         <section className="panel-section">
                             <SectionTitle title="Skor komponen" meta={`Skor intervensi ${detail.intervention_score == null ? MISSING_LABEL : fmtFloatId(detail.intervention_score, 3)}`} />
@@ -105,7 +105,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         </section>
                         {detail.facility_checklist && (
                             <section className="panel-section">
-                                <SectionTitle title="Checklist fasilitas (survei)" meta={detail.ahp_weight_version ?? undefined} />
+                                <SectionTitle title="Checklist fasilitas (survei)" />
                                 <div className="criteria-grid">
                                     {Object.entries(detail.facility_checklist).map(([key, present]) => (
                                         <div className="criteria-item" key={key}>

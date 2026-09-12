@@ -231,9 +231,42 @@ async def test_history_source_mode_filter_and_page_size_bounds(api):
     client, params, _ = api
     live = (await client.get("/api/analytics/emissions/history", params={**params, "source_mode": "LIVE"})).json()
     assert live["total"] == 3
-    # SYNTHETIC/REPLAY are excluded upstream by design, so a source_mode filter on them is empty.
+    # SYNTHETIC is excluded upstream by design; REPLAY is a real precomputed dataset.
     synthetic = (await client.get("/api/analytics/emissions/history", params={**params, "source_mode": "SYNTHETIC"})).json()
     assert synthetic["total"] == 0
     assert (await client.get("/api/analytics/emissions/history", params={**params, "page_size": 1})).status_code == 200
     assert (await client.get("/api/analytics/emissions/history", params={**params, "page_size": 200})).status_code == 200
     assert (await client.get("/api/analytics/emissions/history", params={**params, "page_size": 201})).status_code == 422
+
+
+async def test_replay_rows_are_included_and_flagged(api):
+    client, params, engine = api
+    async with engine.begin() as conn:
+        segment = (await conn.execute(text("SELECT id FROM road_segments WHERE road_segment_id = 'A'"))).first()[0]
+        start = BASE + timedelta(minutes=10)
+        await conn.execute(insert(SegmentEmission).values(
+            id=uuid.uuid4(), road_segment_id=segment, period_start=start, period_end=start + timedelta(hours=1),
+            calculated_at=start + timedelta(hours=1), calculation_version=3,
+            observation_duration_seconds=3600, aggregation_policy="sum_independent_streams",
+            source_cameras=[], source_streams=[], source_observation_count=1,
+            vehicle_count_semantics="snapshot_occupancy", raw_counts={c: 1 for c in VEHICLE_CATEGORIES},
+            volume_per_hour={c: 60 for c in VEHICLE_CATEGORIES}, vkt_km_h={c: 30 for c in VEHICLE_CATEGORIES},
+            pollutant_totals_g_h={p: 1000 for p in POLLUTANTS}, category_pollutant_breakdown_g_h={},
+            raw_criteria={}, ahp_metadata={
+                "source_mode": "REPLAY", "calculation_mode": "replay_hourly_mean",
+                "calculation_metadata": {"is_interpolated": True, "interpolation_method": "linear"},
+            },
+        ))
+    history = (await client.get("/api/analytics/emissions/history", params=params)).json()
+    assert history["total"] == 4
+    replay = (await client.get("/api/analytics/emissions/history", params={**params, "source_mode": "REPLAY"})).json()
+    assert replay["total"] == 1
+    assert replay["data"][0]["source_mode"] == "REPLAY"
+    assert replay["data"][0]["is_interpolated"] is True
+    assert replay["data"][0]["interpolation_method"] == "linear"
+    exported = await client.get("/api/analytics/emissions/export", params={**params, "format": "csv"})
+    assert exported.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\ufeff"))))
+    replay_row = next(row for row in rows if row["source_mode"] == "REPLAY")
+    assert replay_row["is_interpolated"] == "True"
+    assert replay_row["interpolation_method"] == "linear"

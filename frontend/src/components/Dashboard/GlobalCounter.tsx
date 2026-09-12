@@ -3,6 +3,7 @@
 import { useEmissionsContext } from "@/context/EmissionsContext"
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import Skeleton from "@/components/ui/Skeleton";
+import { formatNumber } from "@/utils/format";
 
 export default function GlobalCounter() {
     const { emissionMap } = useEmissionsContext();
@@ -26,8 +27,8 @@ export default function GlobalCounter() {
                     EMISSION_DEFINITIONS.map(({ key, label }) => (
                         <div key={key} className={`emission-total pollutant-${key}`}>
                             <span className="summary-label"><span className="pollutant-dot" />{label}</span>
-                            <span className="summary-value"><strong>{totals[key].toFixed(1)}</strong><span className="unit">g/min</span></span>
-                            <span className="hourly">{totalsKgHr[key].toFixed(1)} kg/hr</span>
+                            <span className="summary-value"><strong>{formatNumber(totals[key])}</strong><span className="unit">g/min</span></span>
+                            <span className="hourly">{formatNumber(totalsKgHr[key])} kg/hr</span>
                         </div>
                     ))
                 ) : (

@@ -3,14 +3,18 @@
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
 import Skeleton from "@/components/ui/Skeleton";
+import { EmissionUpdate } from "@/types";
+import { formatNumber } from "@/utils/format";
 
 interface EmissionStatsProps {
     cameraId: string;
+    // Neighbor estimate override; when absent the camera's own live value wins.
+    emission?: EmissionUpdate | null;
 }
 
-export default function EmissionStats({ cameraId }: EmissionStatsProps) {
+export default function EmissionStats({ cameraId, emission }: EmissionStatsProps) {
     const { emissionMap } = useEmissionsContext();
-    const liveEmission = emissionMap.get(cameraId) ?? null;
+    const liveEmission = emission ?? emissionMap.get(cameraId) ?? null;
     
     if(!liveEmission) {
         return <div className="stat-grid">{EMISSION_DEFINITIONS.map(({ key }) => (
@@ -27,7 +31,7 @@ export default function EmissionStats({ cameraId }: EmissionStatsProps) {
             {EMISSION_DEFINITIONS.map(({ key, field, label }) => (
                 <div key={key} className={`stat-card pollutant-${key}`}>
                     <div className="stat-label"><span className="pollutant-dot" />{label}</div>
-                <div className="stat-value">{emissions[field] == null ? "N/A" : Number(emissions[field]).toFixed(2)}<small>g/min</small></div>
+                <div className="stat-value">{emissions[field] == null ? "N/A" : formatNumber(Number(emissions[field]))}<small>g/min</small></div>
                 </div>
             ))}
         </div>

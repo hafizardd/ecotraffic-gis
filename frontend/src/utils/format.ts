@@ -5,6 +5,43 @@ function isMissing(v: unknown): v is null | undefined {
     return typeof v === "number" && !Number.isFinite(v);
 }
 
+// Canonical number display: Indonesian notation, at most two decimals, no
+// forced trailing zeros (57 stays "57", 8.214 -> "8,21").
+export function formatNumber(v: number | null | undefined, maxFractionDigits = 2): string {
+    if (isMissing(v)) return MISSING_LABEL;
+    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: maxFractionDigits }).format(v as number);
+}
+
+// Raw backend identifiers (camera slugs, method keys) leak snake_case into the
+// UI. One humanizer so every panel renders the same form.
+const DISPLAY_ACRONYMS = new Set([
+    "atcs", "ptz", "fm", "pku", "bpk", "smpn", "dprd", "jl", "km", "rs", "sma", "smk",
+]);
+
+export function toDisplayName(value: string | null | undefined): string {
+    if (!value) return MISSING_LABEL;
+    const words = value.split("_").filter(Boolean).map((token) => (
+        DISPLAY_ACRONYMS.has(token.toLowerCase())
+            ? token.toUpperCase()
+            : token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()
+    ));
+    return words.length > 0 ? words.join(" ") : MISSING_LABEL;
+}
+
+export const formatCameraName = toDisplayName;
+
+// Population "method" keys from the backend are technical identifiers.
+export const METHOD_LABELS: Record<string, string> = {
+    segment_centroid_within: "Titik pusat segmen di dalam wilayah",
+    kernel_density_estimation: "Estimasi kepadatan kernel",
+    dasymetric_areal_weighting: "Pembobotan area dasimetrik",
+};
+
+export function formatMethodLabel(method: string | null | undefined): string {
+    if (!method) return MISSING_LABEL;
+    return METHOD_LABELS[method] ?? toDisplayName(method);
+}
+
 export function fmtIntId(v: number | null | undefined): string {
     if (isMissing(v)) return MISSING_LABEL;
     return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(v as number);

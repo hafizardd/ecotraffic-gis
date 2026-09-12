@@ -66,7 +66,7 @@ export default function RealtimePollutants() {
                 const value = summary?.emissions_kg_h[pollutant];
                 return <div key={pollutant} className={`page-card summary-metric pollutant-${pollutant}`}>
                     <span><i className="pollutant-dot" />{label}</span>
-                    <strong>{value == null ? "—" : fmtFloatId(value, value < 0.01 ? 6 : 3)}</strong>
+                    <strong>{value == null ? "-" : fmtFloatId(value, value < 0.01 ? 6 : 3)}</strong>
                     <small>kg/hour · {summary?.segment_count ? state : "Tidak ada data"}</small>
                 </div>;
             })}</div>

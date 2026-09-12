@@ -3,9 +3,9 @@ export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
 import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityGridHourSeries, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, EmissionSummary, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 import type { GridLod } from "@/utils/activityGrid";
-import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
+import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, HistoricalCameraResponse, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
-export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL"): Promise<CameraFeatureCollection> {
+export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL" | "REPLAY"): Promise<CameraFeatureCollection> {
     const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
 
     if(!response.ok) {
@@ -85,6 +85,9 @@ export interface ActivityGridAvailableHours {
     hours: string[];
     earliest: string | null;
     latest: string | null;
+    // "daily-profile": the same 24h profile is served for any calendar day.
+    mode?: "daily-profile";
+    profile_latest?: string | null;
 }
 
 export async function fetchActivityGridAvailableHours(): Promise<ActivityGridAvailableHours> {
@@ -159,6 +162,8 @@ export const fetchPollutantComposition = (query: AnalyticsQuery, signal?: AbortS
     analyticsFetch<AnalyticsResponse<PollutantComposition> & { sample_count: number }>("composition", query, signal);
 export const fetchLatestSegmentEmissions = (query: Partial<AnalyticsQuery> = {}, signal?: AbortSignal) =>
     analyticsFetch<LatestSegmentEmissionsResponse>("latest", query, signal);
+export const fetchHistoricalCameraEmissions = (signal?: AbortSignal) =>
+    analyticsFetch<HistoricalCameraResponse>("historical-cameras", {}, signal);
 export interface EmissionHistoryOptions {
     page?: number; pageSize?: number; sort?: string; order?: "asc" | "desc"; signal?: AbortSignal;
 }

@@ -207,7 +207,7 @@ async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db))
 
     The tracking worker (one per camera, independent of viewers) writes the
     latest annotated JPEG to ``tracks:snapshot:{camera_id}``. This endpoint
-    only polls that key — it never runs YOLO. Multiple clients share the
+    only polls that key - it never runs YOLO. Multiple clients share the
     same tracker.
     """
     result = await db.execute(select(Camera).where(Camera.camera_id == camera_id))

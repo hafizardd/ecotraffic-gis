@@ -52,12 +52,6 @@ export function breaksToStops(breaks: number[] | null | undefined): (number | st
     return breaks.flatMap((value, index) => [value, colors[Math.min(index, colors.length - 1)]]);
 }
 
-// Human-readable quantile boundaries for the legend.
-export function breaksToLabels(breaks: number[] | null | undefined): string[] | null {
-    if (!breaks || breaks.length < 2) return null;
-    return breaks.map((value) => (Math.abs(value) >= 10 ? value.toFixed(0) : value.toFixed(1)));
-}
-
 export function activityGradientCss(): string {
     return `linear-gradient(90deg, ${ACTIVITY_SCORE_RAMP.map(([score, color]) => `${color} ${score}%`).join(", ")})`;
 }

@@ -15,7 +15,7 @@ const MAX_BACKOFF = 30000;
 type StreamStatus = "loading" | "streaming" | "error";
 
 // Annotated MJPEG display: the tracker bakes boxes + track IDs into each
-// frame, so this component is just an <img> — no canvas, no HLS, no WebSocket.
+// frame, so this component is just an <img>: no canvas, no HLS, no WebSocket.
 export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) {
     const [status, setStatus] = useState<StreamStatus>("loading");
     const [reloadKey, setReloadKey] = useState(0);
