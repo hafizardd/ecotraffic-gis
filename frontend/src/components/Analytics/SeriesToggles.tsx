@@ -29,7 +29,7 @@ export default function SeriesToggles({
                         onClick={() => onToggle(item.key)}
                         className={`inline-flex cursor-pointer items-center gap-1.5 rounded-(--radius-badge) border px-2.5 font-semibold transition-[border-color,background,color,opacity] duration-150 ${compact ? "min-h-7 text-[10px]" : "min-h-8 text-[11px]"} ${selected ? "border-(--contour-strong) bg-(--surface-raised) text-(--text)" : "border-transparent bg-(--surface-sunken) text-(--muted) opacity-55 hover:opacity-85"}`}
                     >
-                        <span className={`h-[3px] w-3 ${selected ? "opacity-100" : "opacity-45"}`} style={{ backgroundColor: item.color }} aria-hidden="true" />
+                        <span className={`h-0.75 w-3 ${selected ? "opacity-100" : "opacity-45"}`} style={{ backgroundColor: item.color }} aria-hidden="true" />
                         {item.label}
                     </button>
                 );

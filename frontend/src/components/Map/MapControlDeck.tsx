@@ -126,7 +126,7 @@ export default function MapControlDeck({
                 </button>
 
                 {layersOpen && (
-                    <div ref={layerMenuRef} id="map-layer-menu" className="absolute top-[calc(100%+10px)] right-0 w-[260px] rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.97)] p-2 shadow-(--shadow-float) backdrop-blur-[12px] animate-[select-in_0.14s_ease-out] motion-reduce:animate-none" role="group" aria-label="Layer pada mode aktif">
+                    <div ref={layerMenuRef} id="map-layer-menu" className="absolute top-[calc(100%+10px)] right-0 w-65 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.97)] p-2 shadow-(--shadow-float) backdrop-blur-[12px] animate-[select-in_0.14s_ease-out] motion-reduce:animate-none" role="group" aria-label="Layer pada mode aktif">
                         <div className="border-b border-(--border) px-2 pt-1 pb-2">
                             <strong className="block text-[11px] font-semibold">Layer · {MAP_MODES.find((item) => item.key === mode)?.label}</strong>
                             <span className="mt-0.5 block text-[10px] text-(--muted)">Tampilkan hanya informasi yang dibutuhkan.</span>
@@ -143,7 +143,7 @@ export default function MapControlDeck({
                                         className="flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-sm border border-transparent bg-transparent px-2 text-left text-[12px] text-(--secondary) transition-colors hover:border-(--border) hover:bg-(--surface) hover:text-(--text)"
                                         onClick={() => onLayerVisibilityChange(key, !checked)}
                                     >
-                                        <span className={`grid h-[18px] w-[18px] flex-[0_0_18px] place-items-center rounded-(--radius-badge) border transition-colors [&>svg]:h-3 [&>svg]:w-3 ${checked ? "border-(--selection) bg-(--selection) text-[#06202b]" : "border-(--contour-strong) bg-(--surface-raised) text-transparent"}`} aria-hidden="true"><Check /></span>
+                                        <span className={`grid h-4.5 w-4.5 flex-[0_0_18px] place-items-center rounded-(--radius-badge) border transition-colors [&>svg]:h-3 [&>svg]:w-3 ${checked ? "border-(--selection) bg-(--selection) text-[#06202b]" : "border-(--contour-strong) bg-(--surface-raised) text-transparent"}`} aria-hidden="true"><Check /></span>
                                         <span className="flex-1">{LAYER_LABELS[key]}</span>
                                         <span className={`text-[10px] ${checked ? "text-[#8edcff]" : "text-(--muted)"}`}>{checked ? "Aktif" : "Nonaktif"}</span>
                                     </button>

@@ -34,10 +34,10 @@ function toLocalInput(value: string | null): string {
 }
 
 function Category({ title, onReset, children }: { title: string; onReset: () => void; children: ReactNode }) {
-    return <div className="grid gap-[9px]">
+    return <div className="grid gap-2.25">
         <div className="flex items-center justify-between text-[11px] font-bold tracking-[0.08em] text-(--secondary) uppercase">
             <span>{title}</span>
-            <button type="button" className="grid h-9 w-9 cursor-pointer place-items-center rounded-sm border-0 bg-transparent text-(--muted) hover:bg-[#102238] hover:text-(--text) max-[760px]:h-11 max-[760px]:w-11 [&>svg]:h-[13px] [&>svg]:w-[13px]" aria-label={`Reset ${title}`} onClick={onReset}><RotateCcw aria-hidden="true" /></button>
+            <button type="button" className="grid h-9 w-9 cursor-pointer place-items-center rounded-sm border-0 bg-transparent text-(--muted) hover:bg-[#102238] hover:text-(--text) max-[760px]:h-11 max-[760px]:w-11 [&>svg]:h-3.25 [&>svg]:w-3.25" aria-label={`Reset ${title}`} onClick={onReset}><RotateCcw aria-hidden="true" /></button>
         </div>
         {children}
     </div>;

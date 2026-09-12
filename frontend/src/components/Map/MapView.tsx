@@ -472,7 +472,7 @@ export default function MapView() {
                      <Marker key={String(properties.source_id)} longitude={lon} latitude={lat} anchor="center">
                          <button
                              type="button"
-                             className={`grid h-[26px] w-[26px] cursor-pointer place-items-center rounded-full border-2 border-white p-0 shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-120 hover:scale-112 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8] [&>svg]:h-3.5 [&>svg]:w-3.5 ${selected ? "scale-120 shadow-[0_0_0_3px_rgba(56,189,248,0.55),0_2px_10px_rgba(0,0,0,0.4)]" : ""}`}
+                             className={`grid h-6.5 w-6.5 cursor-pointer place-items-center rounded-full border-2 border-white p-0 shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-120 hover:scale-112 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8] [&>svg]:h-3.5 [&>svg]:w-3.5 ${selected ? "scale-120 shadow-[0_0_0_3px_rgba(56,189,248,0.55),0_2px_10px_rgba(0,0,0,0.4)]" : ""}`}
                              style={{ background: color, color: readableTextOn(color) }}
                              title={`${properties.title ?? "Halte"}, ${score == null ? label ?? "Belum dinilai" : `skor ${formatNumber(score)}`}`}
                              aria-label={`Halte ${properties.title ?? ""}, ${score == null ? label ?? "belum dinilai" : `skor ${formatNumber(score)}`}`}
@@ -489,7 +489,7 @@ export default function MapView() {
              })}
               {hoveredCamera && hoveredPoint && effectiveVisible.cameras && (
                 <Popup longitude={hoveredPoint[0]} latitude={hoveredPoint[1]} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
-                    <div className="grid min-w-[190px] grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 px-3 py-[11px] [&>small]:col-span-full [&>small]:text-[10px] [&>small]:leading-4 [&>small]:text-(--muted) [&>strong]:text-[12px]">
+                    <div className="grid min-w-47.5 grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 px-3 py-2.75 [&>small]:col-span-full [&>small]:text-[10px] [&>small]:leading-4 [&>small]:text-(--muted) [&>strong]:text-[12px]">
                         <strong>{hoveredCamera.properties.name}</strong>
                         {hoveredCamera.properties.data_source === "LIVE" && <span className="flex items-center gap-1.5 text-[10px] font-bold text-(--brand-strong) uppercase"><i className="h-1.5 w-1.5 rounded-full bg-(--green) shadow-[0_0_0_3px_rgba(34,197,94,0.12)]" /> Live</span>}
                         {(() => {
@@ -508,7 +508,7 @@ export default function MapView() {
               )}
               {(hoveredHex?.id != null || hoveredHex?.count != null) && (
                 <Popup longitude={hoveredHex.lon} latitude={hoveredHex.lat} closeButton={false} closeOnClick={false} offset={12} className="popup-dark">
-                    <div className="grid min-w-[190px] grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 px-3 py-[11px] [&>small]:col-span-full [&>small]:text-[10px] [&>small]:leading-4 [&>small]:text-(--muted) [&>strong]:text-[12px]">
+                    <div className="grid min-w-47.5 grid-cols-[1fr_auto] gap-x-3 gap-y-1.5 px-3 py-2.75 [&>small]:col-span-full [&>small]:text-[10px] [&>small]:leading-4 [&>small]:text-(--muted) [&>strong]:text-[12px]">
                         {hoveredHex.count != null ? (
                             <>
                                 <strong>Agregat {hoveredHex.count} sel</strong>
@@ -533,8 +533,8 @@ export default function MapView() {
                 layerVisibility={layerVisibility}
             />
               {hoveredSegmentId && (
-                  <div className="absolute right-3 bottom-3 z-[18] flex min-w-[190px] flex-col gap-1 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[10px] text-(--secondary) shadow-(--shadow-float) backdrop-blur-[10px]">
-                      <span className="text-[9px] font-bold tracking-[0.1em] text-(--selection) uppercase">Segmen jalan</span>
+                  <div className="absolute right-3 bottom-3 z-18 flex min-w-47.5 flex-col gap-1 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[10px] text-(--secondary) shadow-(--shadow-float) backdrop-blur-[10px]">
+                      <span className="text-[9px] font-bold tracking-widest text-(--selection) uppercase">Segmen jalan</span>
                       <strong className="text-[12px] text-(--text)">{segments.find((segment) => segment.properties.segment_id === hoveredSegmentId)?.properties.name ?? hoveredSegmentId}</strong>
                   </div>
               )}
@@ -553,9 +553,9 @@ export default function MapView() {
 
 function MapLoadingState({ error }: { error: string | null }) {
     return (
-        <div className="pointer-events-none absolute inset-0 z-[15] grid place-items-center overflow-hidden bg-(--surface-sunken)" role={error ? "alert" : "status"} aria-live="polite">
+        <div className="pointer-events-none absolute inset-0 z-15 grid place-items-center overflow-hidden bg-(--surface-sunken)" role={error ? "alert" : "status"} aria-live="polite">
             <div className="map-loading-grid absolute inset-0 opacity-55" aria-hidden="true" />
-            <div className="relative flex max-w-[300px] flex-col items-center gap-2 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-5 py-4 text-center shadow-(--shadow-float) backdrop-blur-[10px]">
+            <div className="relative flex max-w-75 flex-col items-center gap-2 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-5 py-4 text-center shadow-(--shadow-float) backdrop-blur-[10px]">
                 {error
                     ? <TriangleAlert className="h-5 w-5 text-(--danger)" aria-hidden="true" />
                     : <LoaderCircle className="h-5 w-5 animate-spin text-(--selection) motion-reduce:animate-none" aria-hidden="true" />}
@@ -570,7 +570,7 @@ function MapNotice({ tone, title, detail }: { tone: "info" | "loading" | "warnin
     const Icon = tone === "loading" ? LoaderCircle : tone === "error" || tone === "warning" ? TriangleAlert : MapPinned;
     const toneClass = tone === "error" ? "text-(--danger)" : tone === "warning" ? "text-(--accent)" : "text-(--selection)";
     return (
-        <div className="absolute top-[62px] left-3 z-[18] flex max-w-[340px] items-start gap-2 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] shadow-(--shadow-float) backdrop-blur-[10px] max-[760px]:right-[58px] max-[760px]:left-2 max-[760px]:max-w-none" role={tone === "error" ? "alert" : "status"} aria-live="polite">
+        <div className="absolute top-15.5 left-3 z-18 flex max-w-85 items-start gap-2 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] shadow-(--shadow-float) backdrop-blur-[10px] max-[760px]:right-14.5 max-[760px]:left-2 max-[760px]:max-w-none" role={tone === "error" ? "alert" : "status"} aria-live="polite">
             <Icon className={`mt-px h-4 w-4 flex-[0_0_16px] ${toneClass} ${tone === "loading" ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
             <span className="min-w-0"><strong className="block font-semibold text-(--text)">{title}</strong>{detail && <span className="mt-0.5 block truncate text-[10px] text-(--muted)" title={detail}>{detail}</span>}</span>
         </div>

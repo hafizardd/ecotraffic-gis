@@ -6,7 +6,7 @@ import { fmtIntId } from "@/utils/format";
 import type { AnalyticsQuery } from "@/types";
 import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS } from "@/styles/tailwind";
 
-const PAGINATION_PAGE_CLASS = "min-w-7 cursor-pointer rounded-sm border border-[#1d3a5c] bg-[#0b1a2b] px-[10px] py-1.5 text-xs font-semibold text-(--secondary) tabular-nums enabled:hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--green)";
+const PAGINATION_PAGE_CLASS = "min-w-7 cursor-pointer rounded-sm border border-[#1d3a5c] bg-[#0b1a2b] px-2.5 py-1.5 text-xs font-semibold text-(--secondary) tabular-nums enabled:hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--green)";
 
 type Scope = "beyond" | "page";
 
@@ -64,7 +64,7 @@ export default function EmissionBulkDelete({ query: queryOverride, page, pageSiz
         finally { setBusy(false); }
     }
 
-    return <div className="my-[14px] flex flex-wrap items-center gap-[10px] text-xs text-[#94a3b8]">
+    return <div className="my-3.5 flex flex-wrap items-center gap-2.5 text-xs text-[#94a3b8]">
         <label className="inline-flex items-center gap-1.5">Jangkauan
             <select className="rounded-sm border border-[#1d3a5c] bg-[#0b1a2b] px-2 py-1.5 text-xs text-(--text)" value={scope} disabled={busy} onChange={(event) => { setScope(event.target.value as Scope); setMatched(null); setResult(null); }}>
                 <option value="beyond">Hapus setelah halaman</option>

@@ -111,9 +111,9 @@ export default function Select({ value, options, onChange, ariaLabel, placeholde
                 <ChevronDown className="h-4 w-4 flex-[0_0_16px] text-(--secondary) transition-transform duration-180 group-aria-expanded:rotate-180" aria-hidden="true" />
             </button>
             {open && (
-                <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-[280px] overflow-y-auto rounded-sm border border-(--contour-strong) bg-(--surface) p-(--space-1) shadow-(--shadow-float) animate-[select-in_0.14s_ease-out] motion-reduce:animate-none">
+                <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-70 overflow-y-auto rounded-sm border border-(--contour-strong) bg-(--surface) p-(--space-1) shadow-(--shadow-float) animate-[select-in_0.14s_ease-out] motion-reduce:animate-none">
                     {searchable && (
-                        <input ref={searchRef} className="sticky top-0 z-[1] mb-(--space-1) min-h-10 w-full rounded-sm border border-(--border) bg-(--surface-sunken) px-(--space-3) py-2 text-xs text-(--text) placeholder:text-(--muted) focus:border-(--selection) focus:outline-none" type="text" value={search}
+                        <input ref={searchRef} className="sticky top-0 z-1 mb-(--space-1) min-h-10 w-full rounded-sm border border-(--border) bg-(--surface-sunken) px-(--space-3) py-2 text-xs text-(--text) placeholder:text-(--muted) focus:border-(--selection) focus:outline-none" type="text" value={search}
                             role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls={listId}
                             aria-activedescendant={visible[active] ? `${listId}-option-${active}` : undefined}
                             placeholder={searchPlaceholder} aria-label={`Cari ${ariaLabel}`}
@@ -131,7 +131,7 @@ export default function Select({ value, options, onChange, ariaLabel, placeholde
                                 </button>
                             </li>
                         ))}
-                        {!visible.length && <li role="status" className="px-(--space-3) py-[9px] text-xs text-(--muted)">Tidak ada hasil</li>}
+                        {!visible.length && <li role="status" className="px-(--space-3) py-2.25 text-xs text-(--muted)">Tidak ada hasil</li>}
                     </ul>
                 </div>
             )}

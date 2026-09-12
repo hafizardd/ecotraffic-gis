@@ -48,7 +48,7 @@ export default function BangJoPanel({ messages, isTyping, minimized, onSend, onM
             role="dialog"
             aria-modal={!minimized}
             aria-label="Bang Jo"
-            className={`bangjo-panel fixed top-[84px] right-[var(--bangjo-offset-right,22px)] bottom-[22px] z-41 flex w-[min(396px,calc(100vw-32px))] flex-col overflow-hidden rounded-md border border-(--contour-strong) bg-(--surface) shadow-(--shadow-float) outline-none animate-[panel-in_0.24s_ease-out] motion-reduce:animate-none max-[760px]:inset-0 max-[760px]:z-50 max-[760px]:w-auto max-[760px]:rounded-none max-[760px]:border-0 ${minimized ? "top-auto h-auto max-[760px]:inset-x-0 max-[760px]:top-auto max-[760px]:bottom-0 max-[760px]:rounded-t-md" : ""}`}
+            className={`bangjo-panel fixed top-21 right-[var(--bangjo-offset-right,22px)] bottom-5.5 z-41 flex w-[min(396px,calc(100vw-32px))] flex-col overflow-hidden rounded-md border border-(--contour-strong) bg-(--surface) shadow-(--shadow-float) outline-none animate-[panel-in_0.24s_ease-out] motion-reduce:animate-none max-[760px]:inset-0 max-[760px]:z-50 max-[760px]:w-auto max-[760px]:rounded-none max-[760px]:border-0 ${minimized ? "top-auto h-auto max-[760px]:inset-x-0 max-[760px]:top-auto max-[760px]:bottom-0 max-[760px]:rounded-t-md" : ""}`}
         >
             <div className={PANEL_HEADER_CLASS}>
                 <div className={PANEL_ICON_CLASS}><Bot aria-hidden="true" /></div>
@@ -74,7 +74,7 @@ export default function BangJoPanel({ messages, isTyping, minimized, onSend, onM
                 <>
                     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-color:var(--contour-strong)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin]">
                         {!started && <div className="rounded-md border border-(--border) bg-[rgba(9,26,34,0.46)] p-3">
-                            <span className="mb-1 block text-[9px] font-bold tracking-[0.1em] text-(--selection) uppercase">Konteks spasial</span>
+                            <span className="mb-1 block text-[9px] font-bold tracking-widest text-(--selection) uppercase">Konteks spasial</span>
                             <p className="m-0 text-[11px] leading-[1.65] text-(--secondary)">Pilih objek di peta atau tanyakan tentang data lalu lintas, emisi, dan prioritas intervensi.</p>
                         </div>}
                         {!started && <BangJoQuickQuestions onSelect={onSend} />}

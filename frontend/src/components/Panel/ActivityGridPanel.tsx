@@ -83,8 +83,8 @@ function ActivityGridDetail({ hexId, hour, onClose }: {
                                 <div><span>Volume (mean)</span><strong>{fmtFloatId(props.volume_mean, 1)}</strong></div>
                                 <div><span>Luas</span><strong>{fmtFloatId(props.luas_km2, 3)} km²</strong></div>
                             </div>
-                            <div className="mt-[15px] border-t border-[rgba(148,163,184,0.09)] pt-[14px]">
-                                <span className="mx-px mt-0 mb-[9px] block text-[9px] font-extrabold leading-[1.2] tracking-[0.09em] text-[#718198]">RINCIAN POI</span>
+                            <div className="mt-3.75 border-t border-[rgba(148,163,184,0.09)] pt-3.5">
+                                <span className="mx-px mt-0 mb-2.25 block text-[9px] font-extrabold leading-[1.2] tracking-[0.09em] text-[#718198]">RINCIAN POI</span>
                                 <div className={CRITERIA_GRID_CLASS}>
                                     {Object.entries(props.poi_breakdown ?? {}).map(([category, count]) => (
                                         <div key={category}><span>{category}</span><strong>{count === null ? MISSING_LABEL : fmtIntId(count)}</strong></div>

@@ -79,8 +79,8 @@ export default function KendaraanPage() {
                 { label: "Titik seri", value: data?.series.length ?? 0 },
             ]} />
             <AnalyticsMetricLedger label="Ringkasan volume kendaraan" items={flowMetrics} />
-            <div className="mb-[14px] flex flex-wrap items-center gap-x-3 border-y border-(--border) bg-(--surface-sunken) px-3 py-1.5">
-                <span className="text-[9px] font-bold tracking-[0.1em] text-(--muted) uppercase">Seri ditampilkan</span>
+            <div className="mb-3.5 flex flex-wrap items-center gap-x-3 border-y border-(--border) bg-(--surface-sunken) px-3 py-1.5">
+                <span className="text-[9px] font-bold tracking-widest text-(--muted) uppercase">Seri ditampilkan</span>
                 <SeriesToggles items={VEHICLES} active={activeVehicles} onToggle={(key) => toggle(key as VehicleKey)} label="Jenis kendaraan yang ditampilkan" compact />
             </div>
             <div className={ANALYTICS_CHART_GRID_CLASS}>
@@ -110,16 +110,16 @@ export default function KendaraanPage() {
             <section className={`${PAGE_CARD_CLASS} ${ANIMATE_IN_CLASS}`} aria-label="Peringkat segmen" aria-busy={loading}>
                 <SectionTitle title="Peringkat segmen" meta="Klik Saring untuk memfokuskan analitik pada satu segmen." aside={`${data?.ranking.length ?? 0} segmen`} />
                 <div className={TABLE_WRAP_CLASS}><table className={PRIORITY_TABLE_CLASS}><thead><tr>
-                    <th className="w-[46px] text-right text-(--secondary) tabular-nums">#</th><th>Segmen</th>
+                    <th className="w-11.5 text-right text-(--secondary) tabular-nums">#</th><th>Segmen</th>
                     {VEHICLES.map((vehicle) => <th key={vehicle.key} className="text-right tabular-nums">{vehicle.label}</th>)}
                     <th className="text-right tabular-nums">Total</th>
                 </tr></thead><tbody>{(data?.ranking ?? []).map((row) => <tr key={row.segment_id}>
-                    <td className="w-[46px] text-right text-(--secondary) tabular-nums">{row.rank}</td>
+                    <td className="w-11.5 text-right text-(--secondary) tabular-nums">{row.rank}</td>
                     <td><strong>{row.segment_name}</strong><br /><small>{row.corridor_name}</small><br />
-                        <button type="button" className={`mt-1 cursor-pointer rounded-full border px-2 py-[3px] text-[10px] font-bold transition-colors duration-160 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--green) ${filter.segmentId === row.segment_id ? "border-(--green) bg-(--green) text-[#062018]" : "border-(--border) bg-transparent text-(--green) hover:border-(--green) hover:text-[#86efac]"}`}
+                        <button type="button" className={`mt-1 cursor-pointer rounded-full border px-2 py-0.75 text-[10px] font-bold transition-colors duration-160 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--green) ${filter.segmentId === row.segment_id ? "border-(--green) bg-(--green) text-[#062018]" : "border-(--border) bg-transparent text-(--green) hover:border-(--green) hover:text-[#86efac]"}`}
                             aria-pressed={filter.segmentId === row.segment_id} onClick={() => filterSegment(row.segment_id)}>Saring</button></td>
                     {VEHICLES.map((vehicle) => <td key={vehicle.key} className="text-right tabular-nums">{fmtIntId(row[vehicle.rateKey])}</td>)}
-                    <td className="text-right tabular-nums"><div className="relative min-w-[104px] overflow-hidden rounded-(--radius-badge) bg-(--surface-sunken) px-2 py-1"><span className="absolute inset-y-0 left-0 bg-(--selection) opacity-[0.18]" style={{ width: `${maxRankingTotal > 0 ? ((row.total_veh_h ?? 0) / maxRankingTotal) * 100 : 0}%` }} aria-hidden="true" /><strong className="relative">{fmtIntId(row.total_veh_h)}</strong></div></td>
+                    <td className="text-right tabular-nums"><div className="relative min-w-26 overflow-hidden rounded-(--radius-badge) bg-(--surface-sunken) px-2 py-1"><span className="absolute inset-y-0 left-0 bg-(--selection) opacity-[0.18]" style={{ width: `${maxRankingTotal > 0 ? ((row.total_veh_h ?? 0) / maxRankingTotal) * 100 : 0}%` }} aria-hidden="true" /><strong className="relative">{fmtIntId(row.total_veh_h)}</strong></div></td>
                 </tr>)}</tbody></table></div>
             </section>
             <section className={`${PAGE_CARD_CLASS} ${ANIMATE_IN_CLASS}`} aria-label="Tren volume kendaraan" aria-busy={loading}>

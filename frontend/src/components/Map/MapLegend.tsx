@@ -22,14 +22,14 @@ export default function MapLegend({ mode, segmentBuckets, cameraHistorical = 0, 
         : null;
 
     return (
-        <aside className={`absolute left-3 z-[19] flex max-h-[calc(100%-156px)] flex-col overflow-hidden rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] text-[11px] text-(--text) shadow-(--shadow-float) backdrop-blur-[10px] max-[760px]:left-2 max-[760px]:max-h-[48vh] ${mode === "potential" ? "bottom-3 max-[760px]:bottom-[112px]" : "bottom-3 max-[760px]:bottom-2"} ${open ? "w-[248px] max-[760px]:right-2 max-[760px]:w-auto" : "w-auto max-w-[220px]"}`} aria-label="Legenda peta">
+        <aside className={`absolute left-3 z-19 flex max-h-[calc(100%-156px)] flex-col overflow-hidden rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] text-[11px] text-(--text) shadow-(--shadow-float) backdrop-blur-[10px] max-[760px]:left-2 max-[760px]:max-h-[48vh] ${mode === "potential" ? "bottom-3 max-[760px]:bottom-28" : "bottom-3 max-[760px]:bottom-2"} ${open ? "w-62 max-[760px]:right-2 max-[760px]:w-auto" : "w-auto max-w-55"}`} aria-label="Legenda peta">
             <button type="button" className="flex min-h-10 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 text-left text-[11px] font-semibold text-(--text) transition-colors hover:bg-(--surface) max-[760px]:min-h-11 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:flex-[0_0_16px] [&>span]:flex-1" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="map-legend-content">
                 <Info className="text-(--selection)" aria-hidden="true" />
                 <span>Legenda · {modeLabel}</span>
                 {open ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
             </button>
             {open && (
-                <div id="map-legend-content" className="flex flex-col gap-3 overflow-y-auto border-t border-(--border) px-3 pt-2 pb-3 [&_h3]:my-[5px_0_7px] [&_h3]:text-[10px] [&_h3]:font-bold [&_h3]:tracking-[0.1em] [&_h3]:text-(--muted) [&_h3]:uppercase">
+                <div id="map-legend-content" className="flex flex-col gap-3 overflow-y-auto border-t border-(--border) px-3 pt-2 pb-3 [&_h3]:my-[5px_0_7px] [&_h3]:text-[10px] [&_h3]:font-bold [&_h3]:tracking-widest [&_h3]:text-(--muted) [&_h3]:uppercase">
                     {mode === "traffic" && (
                         <>
                             {layerVisibility.segments && <section>

@@ -102,8 +102,8 @@ function SegmentDetailPanel({
                     <div className={SEGMENT_OVERVIEW_CLASS}><Skeleton height={16} width="62%" /><Skeleton height={14} width="28%" /></div>
                     <section className={SEGMENT_SECTION_CLASS}>
                         <Skeleton height={12} width="42%" />
-                        <div className={`${STAT_GRID_CLASS} mt-[14px] gap-[9px]`}>{Array.from({ length: 8 }, (_, index) => (
-                            <div className={`${STAT_CARD_CLASS} flex min-h-[84px] min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={index}><Skeleton height={10} width="56%" /><Skeleton height={18} width="72%" /></div>
+                        <div className={`${STAT_GRID_CLASS} mt-3.5 gap-2.25`}>{Array.from({ length: 8 }, (_, index) => (
+                            <div className={`${STAT_CARD_CLASS} flex min-h-21 min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={index}><Skeleton height={10} width="56%" /><Skeleton height={18} width="72%" /></div>
                         ))}</div>
                     </section>
                 </div>}
@@ -174,11 +174,11 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
             <section className={SEGMENT_SECTION_CLASS}>
                 <SectionTitle title="Emisi segmen" meta={`Nilai agregat dalam g/jam · ${sourceBadge}`} />
                 {hasAny && shown ? (
-                    <div className={`${STAT_GRID_CLASS} gap-[9px]`}>
+                    <div className={`${STAT_GRID_CLASS} gap-2.25`}>
                         {EMISSION_DEFINITIONS.map(({ key, label }) => (
-                            <div className={`${STAT_CARD_CLASS} flex min-h-[84px] min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3 ${POLLUTANT_TEXT_CLASS[key]}`} key={key}>
+                            <div className={`${STAT_CARD_CLASS} flex min-h-21 min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3 ${POLLUTANT_TEXT_CLASS[key]}`} key={key}>
                                 <span className="flex items-center gap-1.5 text-[10px] font-extrabold leading-[1.2] tracking-[0.04em]"><i className={POLLUTANT_DOT_CLASS} />{label}</span>
-                                <strong className={`mt-[10px] block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${shown[key] == null ? DATA_MISSING_CLASS : ""}`}>{fmtEmissionId(shown[key])}</strong>
+                                <strong className={`mt-2.5 block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${shown[key] == null ? DATA_MISSING_CLASS : ""}`}>{fmtEmissionId(shown[key])}</strong>
                             </div>
                         ))}
                     </div>
@@ -186,7 +186,7 @@ function SegmentDetails({ detail, fallback }: { detail: SegmentEmissionDetail; f
                     <p className={SEGMENT_EMPTY_CLASS}>Belum ada perhitungan emisi. Data CCTV belum teragregasi.</p>
                 )}
                 {fallback && !hasEmission && (
-                    <p className="mt-[10px] mb-0 rounded-[0_6px_6px_0] border-l-2 border-[rgba(245,165,36,0.42)] bg-[rgba(245,165,36,0.055)] px-[10px] py-[9px] text-[10px] leading-[1.5] text-[#8292a8]">Perkiraan dari CCTV {formatCameraName(fallback.camId)}, bukan volume per jam terukur{fallback.at ? `, ${fmtDateTimeId(fallback.at)}` : ""}.</p>
+                    <p className="mt-2.5 mb-0 rounded-[0_6px_6px_0] border-l-2 border-[rgba(245,165,36,0.42)] bg-[rgba(245,165,36,0.055)] px-2.5 py-2.25 text-[10px] leading-normal text-[#8292a8]">Perkiraan dari CCTV {formatCameraName(fallback.camId)}, bukan volume per jam terukur{fallback.at ? `, ${fmtDateTimeId(fallback.at)}` : ""}.</p>
                 )}
             </section>
             <PopulationSection context={detail.population_context} />
@@ -206,7 +206,7 @@ function PopulationSection({ context }: { context: SegmentEmissionDetail["popula
             <SectionTitle title="Populasi wilayah" meta="Konteks administratif segmen" />
             {!primary && intersecting.length === 0 && <p className={SEGMENT_EMPTY_CLASS}>{MISSING_LABEL}</p>}
             {primary && (
-                <dl className="m-0 grid grid-cols-2 gap-[9px] max-[420px]:grid-cols-1 [&>div]:min-w-0 [&>div]:rounded-[7px] [&>div]:border [&>div]:border-[rgba(148,163,184,0.1)] [&>div]:bg-[rgba(14,29,46,0.75)] [&>div]:px-3 [&>div]:py-[11px] [&_dt]:text-[9px] [&_dt]:font-bold [&_dt]:leading-[1.2] [&_dt]:tracking-[0.05em] [&_dt]:text-[#718198] [&_dt]:uppercase [&_dd]:mt-1.5 [&_dd]:mb-0 [&_dd]:text-[13px] [&_dd]:font-[650] [&_dd]:leading-[1.35] [&_dd]:text-[#dbeafe] [&_dd]:[overflow-wrap:anywhere]">
+                <dl className="m-0 grid grid-cols-2 gap-2.25 max-[420px]:grid-cols-1 [&>div]:min-w-0 [&>div]:rounded-[7px] [&>div]:border [&>div]:border-[rgba(148,163,184,0.1)] [&>div]:bg-[rgba(14,29,46,0.75)] [&>div]:px-3 [&>div]:py-2.75 [&_dt]:text-[9px] [&_dt]:font-bold [&_dt]:leading-[1.2] [&_dt]:tracking-[0.05em] [&_dt]:text-[#718198] [&_dt]:uppercase [&_dd]:mt-1.5 [&_dd]:mb-0 [&_dd]:text-[13px] [&_dd]:font-[650] [&_dd]:leading-[1.35] [&_dd]:text-[#dbeafe] [&_dd]:[overflow-wrap:anywhere]">
                     <div>
                         <dt>Kecamatan</dt>
                         <dd className={primary.district_name == null ? DATA_MISSING_CLASS : undefined}>{primary.district_name ?? MISSING_LABEL}</dd>
@@ -222,10 +222,10 @@ function PopulationSection({ context }: { context: SegmentEmissionDetail["popula
                 </dl>
             )}
             {intersecting.length > 0 && (
-                <details className="mt-[14px] border-t border-[rgba(148,163,184,0.09)] pt-[13px] text-[10px] leading-[1.45] text-[#8292a8] marker:text-[#64748b]">
+                <details className="mt-3.5 border-t border-[rgba(148,163,184,0.09)] pt-3.25 text-[10px] leading-[1.45] text-[#8292a8] marker:text-[#64748b]">
                     <summary className="cursor-pointer text-[10px] font-bold text-[#aab8ca]">Wilayah berbatasan ({fmtIntId(intersecting.length)})</summary>
                     {intersecting.map((zone, index) => (
-                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] items-start gap-[10px] border-b border-[rgba(148,163,184,0.07)] px-px py-[9px] last:border-b-0 last:pb-0 max-[420px]:grid-cols-1 max-[420px]:gap-[3px] [&>strong]:text-[10px] [&>strong]:leading-[1.4] [&>strong]:text-[#cbd5e1] [&>strong]:[overflow-wrap:anywhere] [&>span]:text-right [&>span]:text-[10px] [&>span]:leading-[1.45] [&>span]:text-[#718198] [&>span]:tabular-nums [&>span]:[overflow-wrap:anywhere] max-[420px]:[&>span]:text-left" key={index}>
+                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] items-start gap-2.5 border-b border-[rgba(148,163,184,0.07)] px-px py-2.25 last:border-b-0 last:pb-0 max-[420px]:grid-cols-1 max-[420px]:gap-0.75 [&>strong]:text-[10px] [&>strong]:leading-[1.4] [&>strong]:text-[#cbd5e1] [&>strong]:[overflow-wrap:anywhere] [&>span]:text-right [&>span]:text-[10px] [&>span]:leading-[1.45] [&>span]:text-[#718198] [&>span]:tabular-nums [&>span]:[overflow-wrap:anywhere] max-[420px]:[&>span]:text-left" key={index}>
                             <strong>{zone.district_name}</strong>
                             <span>{formatPopulation(zone.population)} · {zone.overlap_share == null ? MISSING_LABEL : `${fmtPercentId(zone.overlap_share, 0)}`} tumpang tindih</span>
                         </div>

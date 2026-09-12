@@ -90,7 +90,7 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
             <div className="flex min-w-0 items-center gap-2">
                 <label className="flex items-center gap-1.5 font-semibold text-(--text)" htmlFor="activity-hour-slider"><Clock className="h-4 w-4 text-(--selection)" aria-hidden="true" /> Waktu aktivitas</label>
                 {last >= 1 && (
-                    <button type="button" className="grid h-6 w-6 cursor-pointer place-items-center rounded-[6px] border border-[color:rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] text-[#dce7f3] hover:border-(--selection) [&>svg]:h-[13px] [&>svg]:w-[13px]" onClick={togglePlay}
+                    <button type="button" className="grid h-6 w-6 cursor-pointer place-items-center rounded-[6px] border border-[color:rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] text-[#dce7f3] hover:border-(--selection) [&>svg]:h-3.25 [&>svg]:w-3.25" onClick={togglePlay}
                         aria-label={playing ? "Jeda" : "Putar"} title={playing ? "Jeda" : "Putar"}>
                         {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                     </button>

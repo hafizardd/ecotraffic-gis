@@ -89,18 +89,18 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         <div className={SEGMENT_OVERVIEW_CLASS}>
                             <strong>{detail.intervention_class ?? "Belum dinilai"}</strong>
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>
-                            <b className="col-span-full mt-[3px] inline-flex w-max items-center rounded-[5px] px-[7px] py-1 text-[8px] font-extrabold tracking-[0.06em] uppercase" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
+                            <b className="col-span-full mt-0.75 inline-flex w-max items-center rounded-[5px] px-1.75 py-1 text-[8px] font-extrabold tracking-[0.06em] uppercase" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
                         </div>
                         <AutoInsightCard entity={{ type: "stop", id: sourceId }} label={detail.title ?? sourceId} />
                         <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Skor komponen" meta={`Skor intervensi ${detail.intervention_score == null ? MISSING_LABEL : fmtFloatId(detail.intervention_score, 3)}`} />
-                            <div className={`${STAT_GRID_CLASS} gap-[9px]`}>
+                            <div className={`${STAT_GRID_CLASS} gap-2.25`}>
                                 {COMPONENTS.map(({ keys, label }) => {
                                     const value = pickNumber(detail, keys);
                                     return (
-                                        <div className={`${STAT_CARD_CLASS} flex min-h-[84px] min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={label}>
+                                        <div className={`${STAT_CARD_CLASS} flex min-h-21 min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={label}>
                                             <span className="text-[10px] font-extrabold leading-[1.2] tracking-[0.04em]">{label}</span>
-                                            <strong className={`mt-[10px] block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${value == null ? DATA_MISSING_CLASS : ""}`}>{value == null ? MISSING_LABEL : fmtFloatId(value, 2)}</strong>
+                                            <strong className={`mt-2.5 block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${value == null ? DATA_MISSING_CLASS : ""}`}>{value == null ? MISSING_LABEL : fmtFloatId(value, 2)}</strong>
                                         </div>
                                     );
                                 })}
