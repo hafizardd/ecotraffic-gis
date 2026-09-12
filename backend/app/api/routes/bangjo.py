@@ -379,95 +379,127 @@ def _history_turns(history) -> list[dict]:
     return turns
 
 
+_RETRYABLE_LLM_STATUS = (429, 500, 502, 503, 504)
+
+
+def _llm_attempts() -> list[dict]:
+    """Primary attempt, plus an optional fallback model/provider."""
+    attempts = [{
+        "model": settings.BANGJO_MODEL,
+        "base_url": settings.BANGJO_BASE_URL,
+        "api_key": settings.OPENROUTER_API_KEY,
+    }]
+    if settings.BANGJO_FALLBACK_MODEL and settings.BANGJO_FALLBACK_MODEL != settings.BANGJO_MODEL:
+        attempts.append({
+            "model": settings.BANGJO_FALLBACK_MODEL,
+            "base_url": settings.BANGJO_FALLBACK_BASE_URL or settings.BANGJO_BASE_URL,
+            "api_key": settings.BANGJO_FALLBACK_API_KEY or settings.OPENROUTER_API_KEY,
+        })
+    return attempts
+
+
 async def _ask_llm(message: str, context: dict, history, timings: dict | None = None) -> dict:
     if not settings.OPENROUTER_API_KEY:
         return _fallback_answer(context, message, "no_api_key")
     turns = _history_turns(history)
     turns.append({"role": "user", "content": f"Konteks:\n{json.dumps(context, ensure_ascii=False)}\n\nPertanyaan: {message}"})
-    base = {"model": settings.BANGJO_MODEL, "max_tokens": settings.BANGJO_MAX_TOKENS}
-    url = settings.BANGJO_BASE_URL
-    headers = {"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+    conversation = [{"role": "system", "content": SYSTEM_PROMPT}, *turns]
     started = time.monotonic()
+    reason = "llm_error"
 
-    async def call(client: httpx.AsyncClient, messages: list[dict], structured: bool) -> dict | None:
-        global _STRUCTURED_UNSUPPORTED
-        body = {**base, "messages": messages, **({"response_format": {"type": "json_object"}} if structured else {})}
-        response = await client.post(url, headers=headers, json=body)
-        if structured and response.status_code in (400, 404, 422):
-            _STRUCTURED_UNSUPPORTED = True
-            return None
-        response.raise_for_status()
-        data = response.json()
-        choice = (data.get("choices") or [{}])[0]
-        return {
-            "raw": choice.get("message", {}).get("content") or "",
-            "finish_reason": choice.get("finish_reason"),
-            "usage": data.get("usage") or {},
-            "structured": structured,
-        }
+    for attempt in _llm_attempts():
+        base = {"model": attempt["model"], "max_tokens": settings.BANGJO_MAX_TOKENS}
+        url = attempt["base_url"]
+        headers = {"Authorization": f"Bearer {attempt['api_key']}", "Content-Type": "application/json"}
+        result: dict | None = None
+        llm_ms: float | None = None
+        parse_ms: float | None = None
 
-    def diagnostics(result: dict | None, reason: str | None = None) -> dict:
-        extra = {
-            "model": settings.BANGJO_MODEL,
-            "structured": result.get("structured") if result else None,
-            "finish_reason": result.get("finish_reason") if result else None,
-            "usage": result.get("usage") if result else None,
-            "raw_length": len(result["raw"]) if result else 0,
-            "raw_preview": result["raw"][:500] if result else "",
-        }
-        if reason:
-            extra["fallback_reason"] = reason
-        if settings.BANGJO_DEBUG_RAW and result:
-            extra["raw_text"] = result["raw"]
-        return extra
+        async def call(client: httpx.AsyncClient, messages: list[dict], structured: bool) -> dict | None:
+            global _STRUCTURED_UNSUPPORTED
+            body = {**base, "messages": messages, **({"response_format": {"type": "json_object"}} if structured else {})}
+            response = await client.post(url, headers=headers, json=body)
+            if structured and response.status_code in (400, 404, 422):
+                _STRUCTURED_UNSUPPORTED = True
+                return None
+            response.raise_for_status()
+            data = response.json()
+            choice = (data.get("choices") or [{}])[0]
+            return {
+                "raw": choice.get("message", {}).get("content") or "",
+                "finish_reason": choice.get("finish_reason"),
+                "usage": data.get("usage") or {},
+                "structured": structured,
+            }
 
-    result: dict | None = None
-    parse_started = started
-    llm_ms: float | None = None
-    parse_ms: float | None = None
-    try:
-        async with httpx.AsyncClient(timeout=settings.BANGJO_TIMEOUT_SECONDS) as client:
-            conversation = [{"role": "system", "content": SYSTEM_PROMPT}, *turns]
-            if not _STRUCTURED_UNSUPPORTED:
-                result = await call(client, conversation, structured=True)
-            if result is None:
-                result = await call(client, conversation, structured=False)
-            llm_ms = round((time.monotonic() - started) * 1000, 2)
-            parse_started = time.monotonic()
-            try:
-                parsed = _parse_answer(result["raw"])
-            except ValueError:
-                logger.warning("bangjo_llm_parse_failed", extra=diagnostics(result))
-                retry = [*conversation, {"role": "assistant", "content": result["raw"]},
-                         {"role": "user", "content": CORRECTIVE_PROMPT}]
-                result = await call(client, retry, structured=False)
-                parsed = _parse_answer(result["raw"])
-            parse_ms = round((time.monotonic() - parse_started) * 1000, 2)
-        logger.info("bangjo_llm_call", extra={
-            "source": "llm",
-            "latency_s": round(time.monotonic() - started, 3),
-            "input_tokens": result["usage"].get("prompt_tokens"),
-            "output_tokens": result["usage"].get("completion_tokens"),
-            "finish_reason": result["finish_reason"],
-            "structured": result["structured"],
-            "model": settings.BANGJO_MODEL,
-            "llm_ms": llm_ms,
-            "parse_ms": parse_ms,
-            **(timings or {}),
-        })
-        return {**parsed, "source": "llm", "citations": parsed.get("citations", [])}
-    except httpx.TimeoutException:
-        logger.exception("bangjo_llm_failed", extra=diagnostics(result, "timeout"))
-        return _fallback_answer(context, message, "timeout")
-    except httpx.HTTPStatusError:
-        logger.exception("bangjo_llm_failed", extra=diagnostics(result, "http_error"))
-        return _fallback_answer(context, message, "http_error")
-    except ValueError:
-        logger.warning("bangjo_llm_failed", extra=diagnostics(result, "parse_error"))
-        return _fallback_answer(context, message, "parse_error")
-    except Exception:
-        logger.exception("bangjo_llm_failed", extra=diagnostics(result, "llm_error"))
-        return _fallback_answer(context, message, "llm_error")
+        def diagnostics(reason: str | None = None) -> dict:
+            extra = {
+                "model": attempt["model"],
+                "structured": result.get("structured") if result else None,
+                "finish_reason": result.get("finish_reason") if result else None,
+                "usage": result.get("usage") if result else None,
+                "raw_length": len(result["raw"]) if result else 0,
+                "raw_preview": result["raw"][:500] if result else "",
+            }
+            if reason:
+                extra["fallback_reason"] = reason
+            if settings.BANGJO_DEBUG_RAW and result:
+                extra["raw_text"] = result["raw"]
+            return extra
+
+        try:
+            async with httpx.AsyncClient(timeout=settings.BANGJO_TIMEOUT_SECONDS) as client:
+                if not _STRUCTURED_UNSUPPORTED:
+                    result = await call(client, conversation, structured=True)
+                if result is None:
+                    result = await call(client, conversation, structured=False)
+                llm_ms = round((time.monotonic() - started) * 1000, 2)
+                parse_started = time.monotonic()
+                try:
+                    parsed = _parse_answer(result["raw"])
+                except ValueError:
+                    logger.warning("bangjo_llm_parse_failed", extra=diagnostics())
+                    retry = [*conversation, {"role": "assistant", "content": result["raw"]},
+                             {"role": "user", "content": CORRECTIVE_PROMPT}]
+                    result = await call(client, retry, structured=False)
+                    parsed = _parse_answer(result["raw"])
+                parse_ms = round((time.monotonic() - parse_started) * 1000, 2)
+            logger.info("bangjo_llm_call", extra={
+                "source": "llm",
+                "latency_s": round(time.monotonic() - started, 3),
+                "input_tokens": result["usage"].get("prompt_tokens"),
+                "output_tokens": result["usage"].get("completion_tokens"),
+                "finish_reason": result["finish_reason"],
+                "structured": result["structured"],
+                "model": attempt["model"],
+                "model_served": attempt["model"],
+                "llm_ms": llm_ms,
+                "parse_ms": parse_ms,
+                **(timings or {}),
+            })
+            return {**parsed, "source": "llm", "citations": parsed.get("citations", [])}
+        except httpx.TimeoutException:
+            reason = "timeout"
+            logger.exception("bangjo_llm_attempt_failed", extra=diagnostics(reason))
+            continue
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            reason = "http_error"
+            logger.exception("bangjo_llm_attempt_failed", extra={**diagnostics(reason), "status": status})
+            if status not in _RETRYABLE_LLM_STATUS:
+                break
+            continue
+        except ValueError:
+            reason = "parse_error"
+            logger.warning("bangjo_llm_attempt_failed", extra=diagnostics(reason))
+            break
+        except Exception:
+            reason = "llm_error"
+            logger.exception("bangjo_llm_attempt_failed", extra=diagnostics(reason))
+            break
+
+    logger.warning("bangjo_llm_failed", extra={"fallback_reason": reason, **(timings or {})})
+    return _fallback_answer(context, message, reason)
 
 
 def _merge_hourly_series(contexts: list[dict]) -> list[dict]:

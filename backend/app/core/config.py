@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     BANGJO_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
     BANGJO_DEBUG_RAW: bool = False
 
+    # Optional secondary model/provider. When set, a single retryable failure
+    # (429/5xx/timeout) on the primary is retried once here before degrading to
+    # the deterministic answer. Base URL/key default to the primary provider.
+    BANGJO_FALLBACK_MODEL: str | None = None
+    BANGJO_FALLBACK_BASE_URL: str | None = None
+    BANGJO_FALLBACK_API_KEY: str | None = None
+
     # Entity-resolution embeddings (OpenRouter-compatible /embeddings). Reuses
     # OPENROUTER_API_KEY + httpx; every failure falls back to string matching.
     BANGJO_EMBEDDINGS_ENABLED: bool = True

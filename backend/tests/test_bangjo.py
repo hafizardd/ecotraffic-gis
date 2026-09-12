@@ -465,6 +465,80 @@ async def test_ask_llm_skips_structured_probe_after_unsupported(monkeypatch):
     monkeypatch.setattr(bangjo, "_STRUCTURED_UNSUPPORTED", False)
 
 
+class _StatusFakeClient:
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.calls.append(json)
+        status, content = self._responses.pop(0)
+        return _FakeResponse(status, content)
+
+
+def _base_context():
+    return {"segment": {"name": "Jalan", "road_segment_id": "SEG-1"},
+            "activity_potential": {}, "bus_stops": [], "coverage_gap": False}
+
+
+@pytest.mark.asyncio
+async def test_ask_llm_retries_fallback_model_on_retryable_status(monkeypatch):
+    monkeypatch.setattr(bangjo, "_STRUCTURED_UNSUPPORTED", False)
+    monkeypatch.setattr(bangjo.settings, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.settings, "BANGJO_MODEL", "primary/model")
+    monkeypatch.setattr(bangjo.settings, "BANGJO_FALLBACK_MODEL", "fallback/model")
+    client = _StatusFakeClient([(429, ""), (200, '{"summary": "ok"}')])
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: client)
+
+    answer = await bangjo._ask_llm("halo", _base_context(), [])
+
+    assert answer["source"] == "llm"
+    assert answer["summary"] == "ok"
+    assert len(client.calls) == 2
+    assert client.calls[0]["model"] == "primary/model"
+    assert client.calls[1]["model"] == "fallback/model"
+
+    monkeypatch.setattr(bangjo.settings, "BANGJO_FALLBACK_MODEL", None)
+    monkeypatch.setattr(bangjo, "_STRUCTURED_UNSUPPORTED", False)
+
+
+@pytest.mark.asyncio
+async def test_ask_llm_falls_back_deterministically_when_all_models_fail(monkeypatch):
+    monkeypatch.setattr(bangjo, "_STRUCTURED_UNSUPPORTED", False)
+    monkeypatch.setattr(bangjo.settings, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.settings, "BANGJO_FALLBACK_MODEL", "fallback/model")
+    client = _StatusFakeClient([(429, ""), (503, "")])
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: client)
+
+    answer = await bangjo._ask_llm("halo", _base_context(), [])
+
+    assert answer["source"] == "fallback"
+    assert answer["fallback_reason"] == "http_error"
+    assert len(client.calls) == 2
+
+    monkeypatch.setattr(bangjo.settings, "BANGJO_FALLBACK_MODEL", None)
+
+
+@pytest.mark.asyncio
+async def test_ask_llm_without_fallback_config_only_tries_primary(monkeypatch):
+    monkeypatch.setattr(bangjo, "_STRUCTURED_UNSUPPORTED", False)
+    monkeypatch.setattr(bangjo.settings, "OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.settings, "BANGJO_FALLBACK_MODEL", None)
+    client = _StatusFakeClient([(500, "")])
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: client)
+
+    answer = await bangjo._ask_llm("halo", _base_context(), [])
+
+    assert answer["source"] == "fallback"
+    assert len(client.calls) == 1
+
+
 # --- auto-insight ---------------------------------------------------------
 
 @pytest.mark.asyncio
