@@ -173,33 +173,6 @@ for an empty database.
 # Open new terminal and go to root dir
 docker compose exec backend alembic upgrade head        # migrate data + add extension
 docker compose exec backend python -m app.core.seed     # seed cameras + road segments + mappings (idempotent)
-
-# Import spatial source layers (idempotent — safe to re-run)
-docker compose exec backend python -m scripts.import_pois                # points_of_interest  (data/poi.geojson)
-docker compose exec backend python -m scripts.import_population          # population_zones     (data/populations.geojson)
-docker compose exec backend python -m scripts.import_survey_activities   # survey_stop_observations (data/output/activities.csv)
-docker compose exec backend python -m scripts.import_survey_ahp_scores   # AHP scores (data/Perhitungan Data Survei.xlsx) — needs activities imported first
-docker compose exec backend python -m scripts.import_activity_grid --verify  # activity_grid_hexes (data/activity_grid.geojson)
-docker compose exec backend python -m scripts.score_bus_stops            # bus stop accessibility + intervention class
-docker compose exec backend python -m scripts.backfill_spatial_context   # segment spatial_metadata + population
-
-# Generate 24h synthetic historical fallback (NOT idempotent — skip if data already exists)
-docker compose exec backend python -m scripts.generate_historical_segment_data
-
-# Restart docker
-Ctrl + C
-docker compose up
-```
-
-#### 3. Update an Existing Checkout (git pull)
-
-When pulling new code that added migrations, seed data, or scripts, bring a
-database that already has cameras/segments up to date without resetting it:
-
-```bash
-git pull origin <branch>                       # e.g. dev
-docker compose up -d postgres redis backend
-
 # Verify there is a single migration head; then apply it
 docker compose exec backend alembic heads      # expect a single head
 docker compose exec backend alembic upgrade head   # → 9d2c6f1a4b8e (adds survey/poi/population layers;
@@ -215,16 +188,18 @@ docker compose exec backend python -m scripts.import_activity_grid --verify
 docker compose exec backend python -m scripts.score_bus_stops
 docker compose exec backend python -m scripts.backfill_spatial_context
 
+# (RUN ONCE) Only if historical fallback is missing or stale — this appends and is NOT idempotent:
+docker compose exec backend python -m scripts.generate_historical_segment_data
+
 # Optional data scripts (only when the data layer needs them)
 docker compose exec backend python -m scripts.seed_snapshot_schedule            # M4 snapshot sampler schedule
 docker compose exec backend python -m scripts.build_replay_dataset              # REPLAY profile (needs snapshot facts)
 docker compose exec backend python -m scripts.report_spatial_coverage           # coverage report (after build_replay_dataset)
 docker compose exec backend python -m scripts.backfill_segment_name_embeddings  # Bang Jo RAG — needs OPENROUTER_API_KEY
 
-# Only if historical fallback is missing or stale — this appends and is NOT idempotent:
-docker compose exec backend python -m scripts.generate_historical_segment_data
-
-docker compose up --build
+# Restart docker
+docker compose down
+docker compose up -d --build
 ```
 
 Notes:
