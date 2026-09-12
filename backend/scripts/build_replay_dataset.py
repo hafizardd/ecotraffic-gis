@@ -1,18 +1,24 @@
-"""Build the precomputed hourly REPLAY dataset from real SNAPSHOT_REAL facts.
+"""Build the precomputed hourly REPLAY dataset from the durable snapshot facts.
 
-One-off (idempotent) job: for every road segment with real ``SNAPSHOT_REAL``
-segment_emissions in the last 24 UTC hour buckets (ending with the current
-hour), average those facts into one ``REPLAY`` SegmentEmission row per hour
-bucket. Gaps are filled from the nearest real hours (linear between two real
-hours; forward/backward fill at the day edges) and every filled hour is flagged
-with ``calculation_metadata.is_interpolated`` so it can never be mistaken for an
-observed hour.
+One-off (idempotent) job: for every road segment with real snapshot-derived
+``segment_emissions`` facts over the last 24 UTC hour buckets (ending with the
+latest collected hour), average those facts into one ``REPLAY`` SegmentEmission
+row per hour bucket. Gaps are filled from the nearest real hours (linear between
+two real hours; forward/backward fill at the day edges) and every filled hour is
+flagged with ``calculation_metadata.is_interpolated`` so it can never be mistaken
+for an observed hour.
 
-The aggregation is the same mean-per-segment-per-bucket semantics
-``emission_analytics.segment_means()`` uses, scoped to ``source_mode = "SNAPSHOT_REAL"``
-via ``fact_query``. Only ever aggregates from SNAPSHOT_REAL, never from REPLAY,
-and upserts on ``uq_segment_emission_period_version`` with a dedicated
-``calculation_version`` (3) that cannot collide with LIVE/SNAPSHOT_REAL rows (2).
+The source is the version-2 ``segment_emissions`` written by the snapshot
+reconciler from the non-LIVE cameras' ``snapshot_occupancy`` observations. Those
+rows used to be overwritten when the LIVE reconciler shared calculation_version
+2; the snapshot writer now versions its facts separately, so this builder can
+always re-derive the static profile from what was actually collected. It never
+aggregates its own REPLAY outputs.
+
+The profile is anchored to the latest collected source fact rather than
+``now()``: the 54 non-LIVE cameras are a completed, static 24-hour collection, so
+the same profile stays addressable on any calendar day (the activity-grid and
+history lenses map a requested day onto these buckets).
 
 Timezone: ``period_start`` is stored in UTC and every read path buckets hours on
 UTC (``activity_grid._available_hours`` floors the UTC epoch). Buckets are
@@ -30,21 +36,17 @@ from sqlalchemy import Float, cast, func, select
 from app.core.database import get_sync_db
 from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
-from app.services.emission_analytics import (
-    BUCKETS,
-    POLLUTANTS,
-    VEHICLE_KEYS,
-    AnalyticsFilter,
-    fact_query,
-    rate,
-)
+from app.services.emission_analytics import BUCKETS, POLLUTANTS, VEHICLE_KEYS
 from app.services.segment_emission_store import persist_segment_emission_sync
 
 logger = logging.getLogger(__name__)
 
-SOURCE_MODE = "SNAPSHOT_REAL"
+# Snapshot facts come from the reconciler (version 2) tagged snapshot_occupancy.
+SOURCE_CALCULATION_VERSION = 2
+SOURCE_SEMANTICS = "snapshot_occupancy"
 REPLAY_MODE = "REPLAY"
-# LIVE/SNAPSHOT_REAL facts use calculation_version 2 (segment_emission_pipeline).
+# The precomputed static profile gets its own version so it can never collide
+# with LIVE (2) or a future SNAPSHOT_REAL (4) fact on the same period.
 REPLAY_CALCULATION_VERSION = 3
 HOUR = timedelta(seconds=BUCKETS["1h"])
 WINDOW_HOURS = 24
@@ -63,31 +65,32 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _window(now: datetime | None = None) -> tuple[datetime, datetime]:
-    """24 UTC hour buckets ending with the current hour: ``[start, end)``.
+def _window(db) -> tuple[datetime, datetime]:
+    """24 UTC hour buckets ending with the latest collected source hour.
 
-    Ending on the current (possibly partial) hour keeps all 24 buckets within
-    ``_available_hours``' ``period_start >= now - 24h`` cutoff, so the map time
-    slider exposes a full day.
+    ``[start, end)`` is anchored to the newest snapshot fact, not ``now()``, so a
+    finished collection stays addressable no matter when this runs.
     """
-    end = _as_utc(now or datetime.now(timezone.utc)).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    latest = db.execute(
+        select(func.max(SegmentEmission.period_start)).where(
+            SegmentEmission.calculation_version == SOURCE_CALCULATION_VERSION,
+            SegmentEmission.vehicle_count_semantics == SOURCE_SEMANTICS,
+        )
+    ).scalar_one_or_none()
+    anchor = _as_utc(latest) if latest is not None else _as_utc(datetime.now(timezone.utc))
+    end = anchor.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     return end - timedelta(hours=WINDOW_HOURS), end
 
 
-def _segment_filter(segment_id: str, start: datetime, end: datetime) -> AnalyticsFilter:
-    # Restricting source_mode is the guard that REPLAY is always derived from
-    # SNAPSHOT_REAL only: REPLAY rows can never enter this aggregation.
-    return AnalyticsFilter(start, end, segment_id=segment_id, source_mode=SOURCE_MODE)
-
-
-def _segments_with_snapshot(db, start: datetime, end: datetime) -> list[tuple[str, object]]:
+def _segments_with_source(db, start: datetime, end: datetime) -> list[tuple[str, object]]:
     stmt = (
         select(RoadSegment.road_segment_id, RoadSegment.id)
         .join(SegmentEmission, SegmentEmission.road_segment_id == RoadSegment.id)
         .where(
             SegmentEmission.period_start >= start,
             SegmentEmission.period_start < end,
-            SegmentEmission.ahp_metadata["source_mode"].astext == SOURCE_MODE,
+            SegmentEmission.calculation_version == SOURCE_CALCULATION_VERSION,
+            SegmentEmission.vehicle_count_semantics == SOURCE_SEMANTICS,
         )
         .distinct()
     )
@@ -108,19 +111,42 @@ def _replay_keys(db, start: datetime, end: datetime) -> set[tuple[str, datetime]
     return {(segment_id, _as_utc(period_start)) for segment_id, period_start in db.execute(stmt).all()}
 
 
-def _hourly_means(db, segment_id: str, start: datetime, end: datetime) -> dict[datetime, dict]:
-    """Mean rate/volume/VKT per UTC hour for one segment's SNAPSHOT_REAL facts.
+def _source_facts(db, segment_database_id, start: datetime, end: datetime):
+    """The durable snapshot facts feeding one segment's hourly means."""
+    return (
+        select(
+            SegmentEmission.period_start,
+            SegmentEmission.period_end,
+            SegmentEmission.pollutant_totals_g_h,
+            SegmentEmission.volume_per_hour,
+            SegmentEmission.vkt_km_h,
+            SegmentEmission.raw_counts,
+            SegmentEmission.ahp_metadata,
+        )
+        .where(
+            SegmentEmission.road_segment_id == segment_database_id,
+            SegmentEmission.period_start >= start,
+            SegmentEmission.period_start < end,
+            SegmentEmission.calculation_version == SOURCE_CALCULATION_VERSION,
+            SegmentEmission.vehicle_count_semantics == SOURCE_SEMANTICS,
+        )
+        .cte("facts")
+    )
+
+
+def _hourly_means(db, segment_database_id, start: datetime, end: datetime) -> dict[datetime, dict]:
+    """Mean rate/volume/VKT per UTC hour for one segment's snapshot facts.
 
     Mirrors ``emission_analytics.segment_means`` / ``vehicle_segment_means``
     (mean per segment per bucket) but returns every field the store needs in one
     pass, including the raw snapshot counts.
     """
-    facts = fact_query(_segment_filter(segment_id, start, end)).cte("facts")
+    facts = _source_facts(db, segment_database_id, start, end)
     hour = func.to_timestamp(
         func.floor(func.extract("epoch", facts.c.period_start) / BUCKETS["1h"]) * BUCKETS["1h"]
     ).label("hour")
     columns = [
-        func.avg(rate(facts.c.pollutant_totals_g_h, pollutant)).label(f"{pollutant.lower()}_kg_h")
+        func.avg(cast(facts.c.pollutant_totals_g_h[pollutant].astext, Float) / 1000.0).label(f"{pollutant.lower()}_kg_h")
         for pollutant in POLLUTANTS
     ]
     columns += [
@@ -226,7 +252,8 @@ def _replay_result(segment, bucket: datetime, values: dict, *, plan, sample_coun
             "is_interpolated": is_interpolated,
             "interpolation_method": method,
             "interpolated_from": interpolated_from or [],
-            "replay_source_mode": SOURCE_MODE,
+            "replay_source": "snapshot_occupancy",
+            "replay_source_version": SOURCE_CALCULATION_VERSION,
             "replay_bucket_seconds": BUCKETS["1h"],
             "replay_timezone": "UTC",
             "source_sample_count": sample_count,
@@ -241,17 +268,14 @@ def _replay_result(segment, bucket: datetime, values: dict, *, plan, sample_coun
 
 
 def build(only_missing: bool = False, now: datetime | None = None) -> int:
-    start, end = _window(now)
-    buckets = [start + index * HOUR for index in range(WINDOW_HOURS)]
     created = 0
     with get_sync_db() as db:
-        segments = _segments_with_snapshot(db, start, end)
+        start, end = _window(db) if now is None else _fixed_window(now)
+        buckets = [start + index * HOUR for index in range(WINDOW_HOURS)]
+        segments = _segments_with_source(db, start, end)
         existing = _replay_keys(db, start, end) if only_missing else set()
         for segment_id, segment_database_id in segments:
-            segment = db.execute(
-                select(RoadSegment).where(RoadSegment.id == segment_database_id)
-            ).scalar_one()
-            means = _hourly_means(db, segment_id, start, end)
+            means = _hourly_means(db, segment_database_id, start, end)
             if not means:
                 logger.info("replay_segment_skipped_no_real_samples", extra={"segment_id": segment_id})
                 continue
@@ -264,7 +288,7 @@ def build(only_missing: bool = False, now: datetime | None = None) -> int:
                 values = {field: series[field][index] for field in METRIC_FIELDS}
                 real = plan[index] is None
                 result = _replay_result(
-                    segment,
+                    segment_id,
                     bucket,
                     values,
                     plan=plan[index],
@@ -276,6 +300,11 @@ def build(only_missing: bool = False, now: datetime | None = None) -> int:
                 created += 1
             db.commit()
     return created
+
+
+def _fixed_window(now: datetime) -> tuple[datetime, datetime]:
+    end = _as_utc(now).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return end - timedelta(hours=WINDOW_HOURS), end
 
 
 if __name__ == "__main__":

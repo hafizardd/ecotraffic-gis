@@ -313,6 +313,9 @@ def _calculate_emissions(db, collected, stats: Counter, priorities: dict[str, st
             )
             result["data_source"] = "HISTORICAL"
             result["source_mode"] = "SNAPSHOT_REAL"
+            # Distinct from LIVE (version 2) so the beat reconciler can never
+            # upsert over a real snapshot sample for the same period.
+            result["calculation_version"] = 4
             result["calculation_metadata"]["roi_status"] = (
                 "calibrated" if all(has_roi for _, _, has_roi in items) else "uncalibrated"
             )

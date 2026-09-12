@@ -7,7 +7,7 @@ import Skeleton from "@/components/ui/Skeleton";
 
 const MapView = dynamic(() => import('@/components/Map/MapView'), {
   ssr: false,
-  loading: () => <div className="map-panel-layout"><div className="map-area"><Skeleton height="100%" width="100%" radius={12} /></div></div>
+  loading: () => <div className="flex h-full min-h-0 w-full gap-3"><div className="relative h-full min-w-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-[0_16px_40px_rgba(0,0,0,0.18)]"><Skeleton height="100%" width="100%" radius={12} /></div></div>
 })
 
 export default function Home() {

@@ -147,19 +147,23 @@ sampled; they ship precomputed `REPLAY` facts. The real-data collection is done:
 `celery_app.include`, `task_routes`, and `beat_schedule`) and the cameras are
 labeled `data_source = REPLAY`.
 
-Build or refresh the hourly dataset from the accumulated `SNAPSHOT_REAL` facts:
+Build or refresh the static hourly profile from the durable snapshot
+(`snapshot_occupancy`, version 2) facts the non-LIVE cameras already produced:
 
 ```bash
-docker compose exec backend python -m scripts.build_replay_dataset --only-missing
+docker compose exec backend python -m scripts.build_replay_dataset
 docker compose exec backend python -m scripts.report_spatial_coverage
 ```
 
-Each segment with real samples gets one `REPLAY` row per UTC hour. Gap hours are
-interpolated (linear between real hours; forward/backward fill at the day edges)
-and flagged with `calculation_metadata.is_interpolated`; segments with no real
-sample at all are skipped, never fabricated. Only `SYNTHETIC` stays excluded
-from analytics and exports — `REPLAY` is included and readable through the
-analytics and activity-grid APIs.
+The builder is anchored to the latest collected hour, so the completed collection
+stays addressable on any calendar day. Each segment with real samples gets one
+`REPLAY` row per UTC hour. Gap hours are interpolated (linear between real hours;
+forward/backward fill at the day edges) and flagged with
+`calculation_metadata.is_interpolated`; segments with no real sample at all are
+skipped, never fabricated. Only `SYNTHETIC` stays excluded from analytics and
+exports — `REPLAY` is included and readable through the analytics and
+activity-grid APIs. Segments without their own camera keep a clearly labeled
+estimate borrowed from the nearest observed segment (`data_status = estimated`).
 
 `scripts/generate_historical_segment_data.py` remains a **deprecated** dev seed
 for an empty database.

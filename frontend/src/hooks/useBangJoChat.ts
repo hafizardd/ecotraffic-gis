@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { fetchBangJoReply } from "@/services/api";
-import { getSelectedSegmentId } from "@/utils/selectionStore";
+import { getSelection } from "@/utils/selectionStore";
+import { fmtDateTimeId } from "@/utils/format";
 import { BangJoMessage } from "@/types";
 
 function newId() {
@@ -8,15 +9,11 @@ function newId() {
 }
 
 function formatAnswer(reply: Awaited<ReturnType<typeof fetchBangJoReply>>): string {
-    if (reply.answer) {
-        const answer = reply.answer;
-        return [
-            answer.summary,
-            answer.drivers.length ? `Pendorong: ${answer.drivers.join("; ")}` : "",
-            answer.asi_category ? `Kategori ASI: ${answer.asi_category}` : "",
-            answer.recommendation,
-            answer.evidence.length ? `Bukti: ${answer.evidence.join("; ")}` : "",
-        ].filter(Boolean).join("\n\n");
+    if (reply.blocked) {
+        return reply.message ?? "Maaf, pertanyaan ini di luar cakupan yang bisa saya bantu.";
+    }
+    if (reply.answer?.content) {
+        return reply.answer.content;
     }
     if (reply.detail) return reply.detail;
     if (reply.candidates?.length) {
@@ -42,19 +39,30 @@ export default function useBangJoChat() {
     const sendMessage = async (text: string) => {
         const content = text.trim();
         if (!content || isTyping) return;
-        const history = messagesRef.current.slice(-6).map((message) => ({ role: message.role, content: message.content }));
+        // Keep the history short; the backend budget trims further if needed.
+        const history = messagesRef.current.slice(-4).map((message) => ({ role: message.role, content: message.content }));
         setMessages((prev) => [...prev, { id: newId(), role: "user", content, timestamp: new Date().toISOString() }]);
         setIsTyping(true);
+        const selection = getSelection();
+        const hour = selection.activityHour;
         try {
-            const reply = await fetchBangJoReply(content, getSelectedSegmentId(), history);
+            const reply = await fetchBangJoReply(content, {
+                road_segment_id: selection.segmentId,
+                hex_id: selection.hexId,
+                stop_id: selection.stopId,
+                hour,
+                hour_label: hour ? fmtDateTimeId(hour) : null,
+            }, history);
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant", content: formatAnswer(reply),
-                contextLabel: reply.context_label ?? undefined, timestamp: new Date().toISOString(),
+                citations: reply.answer?.citations,
+                contextLabel: reply.context_label ?? undefined,
+                timestamp: new Date().toISOString(),
             }]);
         } catch (error) {
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant",
-                content: error instanceof Error ? `Maaf, terjadi kendala: ${error.message}` : "Maaf, layanan Bang Jo sedang tidak tersedia.",
+                content: error instanceof Error ? `Bang Jo tidak dapat memuat jawaban: ${error.message}` : "Layanan Bang Jo sedang tidak tersedia.",
                 timestamp: new Date().toISOString(),
             }]);
         } finally {

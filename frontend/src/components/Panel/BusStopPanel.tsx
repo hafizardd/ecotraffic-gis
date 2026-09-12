@@ -8,6 +8,8 @@ import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { interventionColor, readableTextOn } from "@/constants/mapColors";
 import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId } from "@/utils/format";
+import AutoInsightCard from "@/components/Panel/AutoInsightCard";
+import { CRITERIA_GRID_CLASS, DATA_MISSING_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, SEGMENT_EMPTY_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS, STAT_CARD_CLASS, STAT_GRID_CLASS } from "@/styles/tailwind";
 
 const COMPONENTS: { keys: (keyof BusStopDetail)[]; label: string }[] = [
     { keys: ["accessibility_score_100", "accessibility_score"], label: "Aksesibilitas (survei 0-100)" },
@@ -70,85 +72,88 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
         .map(([key]) => key);
 
     return (
-        <aside className="monitoring-panel segment-panel">
-            <div className="panel-header">
-                <div className="panel-location-icon"><Bus aria-hidden="true" /></div>
-                <div className="panel-title">
-                    <span>HALTE SURVEI</span>
+        <aside className={PANEL_CLASS} aria-label={`Detail halte ${detail?.title ?? sourceId}`}>
+            <div className={SEGMENT_PANEL_HEADER_CLASS}>
+                <div className={`${PANEL_ICON_CLASS} flex-[0_0_auto]`}><Bus aria-hidden="true" /></div>
+                <div className={SEGMENT_PANEL_TITLE_CLASS}>
+                    <span>Halte survei</span>
                     <h2>{detail?.title ?? sourceId}</h2>
                 </div>
-                <button onClick={onClose} className="panel-close" aria-label="Tutup panel halte"><X aria-hidden="true" /></button>
+                <button onClick={onClose} className={PANEL_CLOSE_CLASS} aria-label="Tutup panel halte"><X aria-hidden="true" /></button>
             </div>
-            <div className="panel-content">
-                {!detail && !error && <div className="segment-overview"><Skeleton height={16} width="62%" /><Skeleton height={14} width="28%" /></div>}
-                {error && <div className="segment-state error-state"><strong>Data halte tidak tersedia</strong><span>{error.message}</span></div>}
+            <div className={SEGMENT_PANEL_CONTENT_CLASS}>
+                {!detail && !error && <div className={SEGMENT_OVERVIEW_CLASS}><Skeleton height={16} width="62%" /><Skeleton height={14} width="28%" /></div>}
+                {error && <div className={`${SEGMENT_STATE_CLASS} [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data halte tidak tersedia</strong><span>{error.message}</span></div>}
                 {detail && (
                     <>
-                        <div className="segment-overview">
+                        <div className={SEGMENT_OVERVIEW_CLASS}>
                             <strong>{detail.intervention_class ?? "Belum dinilai"}</strong>
                             <span>{detail.intervention_rank == null ? "Peringkat belum tersedia" : `Peringkat intervensi ${fmtIntId(detail.intervention_rank)}`}</span>
-                            <b className="priority-badge" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
+                            <b className="col-span-full mt-[3px] inline-flex w-max items-center rounded-[5px] px-[7px] py-1 text-[8px] font-extrabold tracking-[0.06em] uppercase" style={{ background: badgeColor, color: badgeText }}>{detail.intervention_class ?? "-"}</b>
                         </div>
-                        <section className="panel-section">
+                        <AutoInsightCard entity={{ type: "stop", id: sourceId }} label={detail.title ?? sourceId} />
+                        <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Skor komponen" meta={`Skor intervensi ${detail.intervention_score == null ? MISSING_LABEL : fmtFloatId(detail.intervention_score, 3)}`} />
-                            <div className="stat-grid">
+                            <div className={`${STAT_GRID_CLASS} gap-[9px]`}>
                                 {COMPONENTS.map(({ keys, label }) => {
                                     const value = pickNumber(detail, keys);
                                     return (
-                                        <div className="stat-card" key={label}>
-                                            <span className="stat-label">{label}</span>
-                                            <strong className={`stat-value${value == null ? " data-missing" : ""}`}>{value == null ? MISSING_LABEL : fmtFloatId(value, 2)}</strong>
+                                        <div className={`${STAT_CARD_CLASS} flex min-h-[84px] min-w-0 flex-col justify-between border-[rgba(148,163,184,0.12)] bg-[rgba(14,29,46,0.82)] p-3`} key={label}>
+                                            <span className="text-[10px] font-extrabold leading-[1.2] tracking-[0.04em]">{label}</span>
+                                            <strong className={`mt-[10px] block w-full text-right text-[clamp(13px,1.15vw,17px)] leading-[1.3] tracking-[-0.02em] text-[#f1f5f9] tabular-nums [overflow-wrap:anywhere] ${value == null ? DATA_MISSING_CLASS : ""}`}>{value == null ? MISSING_LABEL : fmtFloatId(value, 2)}</strong>
                                         </div>
                                     );
                                 })}
                             </div>
                         </section>
                         {detail.facility_checklist && (
-                            <section className="panel-section">
+                            <section className={SEGMENT_SECTION_CLASS}>
                                 <SectionTitle title="Checklist fasilitas (survei)" />
-                                <div className="criteria-grid">
+                                <div className={CRITERIA_GRID_CLASS}>
                                     {Object.entries(detail.facility_checklist).map(([key, present]) => (
-                                        <div className="criteria-item" key={key}>
+                                        <div key={key}>
                                             <span>{FACILITY_LABELS[key] ?? key}</span>
-                                            <strong className={present ? "" : "data-missing"}>{present ? "Ada" : "Tidak"}</strong>
+                                            <strong className={present ? "" : DATA_MISSING_CLASS}>{present ? "Ada" : "Tidak"}</strong>
                                         </div>
                                     ))}
                                 </div>
                             </section>
                         )}
                         {detail.damage_indicators && (
-                            <section className="panel-section">
+                            <section className={SEGMENT_SECTION_CLASS}>
                                 <SectionTitle title="Indikator kerusakan" />
-                                {damageList.length === 0 && <p className="data-empty">Tidak ada indikator kerusakan terdeteksi</p>}
-                                {damageList.map((key) => (
-                                    <p className="segment-note" key={key}>- {DAMAGE_LABELS[key] ?? key}</p>
-                                ))}
+                                {damageList.length === 0 && <p className={SEGMENT_EMPTY_CLASS}>Tidak ada indikator kerusakan terdeteksi</p>}
+                                {damageList.length > 0 && <ul className="m-0 grid list-none gap-2 p-0">
+                                    {damageList.map((key) => (
+                                        <li className="rounded-[0_var(--radius-sm)_var(--radius-sm)_0] border-l-2 border-[var(--accent)] bg-[rgba(245,165,36,0.07)] px-3 py-2 text-[11px] leading-4 text-[var(--secondary)]" key={key}>{DAMAGE_LABELS[key] ?? key}</li>
+                                    ))}
+                                </ul>}
                             </section>
                         )}
-                        <section className="panel-section">
+                        <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="POI sekitar" meta={`Dalam ${fmtIntId(detail.accessibility_buffer_m)} m`} />
-                            {detail.accessibility_breakdown.length === 0 && <p className="data-empty">Tidak ada POI tercatat di sekitar halte</p>}
+                            {detail.accessibility_breakdown.length === 0 && <p className={SEGMENT_EMPTY_CLASS}>Tidak ada POI tercatat di sekitar halte</p>}
                             {detail.accessibility_breakdown.length > 0 && (
-                                <div className="criteria-grid">
+                                <div className={CRITERIA_GRID_CLASS}>
                                     {detail.accessibility_breakdown.map((item) => (
-                                        <div className="criteria-item" key={item.category}><span>{item.category ?? "Tidak diketahui"}</span><strong>{fmtIntId(item.count)}</strong></div>
+                                        <div key={item.category}><span>{item.category ?? "Tidak diketahui"}</span><strong>{fmtIntId(item.count)}</strong></div>
                                     ))}
                                 </div>
                             )}
                         </section>
-                        <section className="panel-section">
+                        <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Observasi" meta={detail.observed_at ? fmtDateTimeId(detail.observed_at) : MISSING_LABEL} />
-                            {detail.observer_name && <p className="segment-note">Pengamat: {detail.observer_name}</p>}
-                            {detail.description && <p className="segment-note">{detail.description}</p>}
-                            {!detail.description && !detail.observer_name && <p className="data-empty">{MISSING_LABEL}</p>}
+                            {detail.observer_name && <p className="mt-0 mb-2 text-[11px] text-[var(--muted)]">Pengamat: <strong className="font-semibold text-[var(--secondary)]">{detail.observer_name}</strong></p>}
+                            {detail.description && <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5 text-[11px] leading-[1.65] text-[var(--secondary)] [overflow-wrap:anywhere]">{detail.description}</p>}
+                            {!detail.description && !detail.observer_name && <p className={SEGMENT_EMPTY_CLASS}>{MISSING_LABEL}</p>}
                         </section>
                         {photos.length > 0 && (
-                            <section className="panel-section">
+                            <section className={SEGMENT_SECTION_CLASS}>
                                 <SectionTitle title="Foto" meta={`${photos.length} media`} />
-                                <div className="criteria-grid">
+                                <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
                                     {photos.map((item, index) => (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img key={index} src={item.url} alt={`${detail.title} ${index + 1}`} style={{ width: "100%", borderRadius: 8 }} />
+                                        <img className="aspect-[4/3] w-full rounded-[var(--radius-sm)] border border-[var(--border)] object-cover" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} loading="lazy" />
                                     ))}
                                 </div>
                             </section>

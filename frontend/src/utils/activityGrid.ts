@@ -118,8 +118,8 @@ export function featureInBbox(feature: { geometry: { coordinates: unknown } }, b
 export function dataStatusLabel(status: string | null | undefined): string {
     switch (status) {
         case "live": return "Terukur";
-        case "fallback": return "Perkiraan sel terdekat";
-        case "static": return "Model statis";
+        case "fallback": return "Perkiraan area terdekat";
+        case "static": return "Data statis";
         default: return "Tidak tersedia";
     }
 }

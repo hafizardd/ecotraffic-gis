@@ -4,12 +4,13 @@ from datetime import datetime, timedelta, timezone
 
 from scripts.build_replay_dataset import (
     METRIC_FIELDS,
+    SOURCE_CALCULATION_VERSION,
+    SOURCE_SEMANTICS,
     _fill_value,
     _filled_series,
+    _fixed_window,
     _gap_plan,
     _replay_result,
-    _segment_filter,
-    _window,
 )
 
 BASE = datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc)
@@ -20,14 +21,11 @@ def _metric_values(value: float) -> dict:
 
 
 def test_window_covers_24_utc_hours_available_to_the_time_slider():
-    start, end = _window(datetime(2026, 9, 10, 13, 37, tzinfo=timezone.utc))
+    start, end = _fixed_window(datetime(2026, 9, 10, 13, 37, tzinfo=timezone.utc))
     assert end == datetime(2026, 9, 10, 14, 0, tzinfo=timezone.utc)
     assert start == end - timedelta(hours=24)
     buckets = [start + index * timedelta(hours=1) for index in range(24)]
     assert len(buckets) == 24
-    # All buckets stay within `_available_hours`' period_start >= now - 24h cutoff.
-    cutoff = datetime(2026, 9, 10, 13, 37, tzinfo=timezone.utc) - timedelta(hours=24)
-    assert all(bucket >= cutoff for bucket in buckets)
 
 
 def test_gap_plan_backfills_start_forward_fills_end_and_linearly_fills_interior():
@@ -80,6 +78,8 @@ def test_replay_result_is_versioned_and_flags_interpolation():
     assert filled["calculation_metadata"]["source_sample_count"] == 0
 
 
-def test_replay_is_only_derived_from_snapshot_real():
-    analytics_filter = _segment_filter("SEG-0001", BASE, BASE + timedelta(hours=24))
-    assert analytics_filter.source_mode == "SNAPSHOT_REAL"
+def test_replay_is_only_derived_from_durable_snapshot_facts():
+    # The static profile is rebuilt from the reconciler's snapshot_occupancy
+    # facts (version 2), never from its own REPLAY outputs.
+    assert SOURCE_SEMANTICS == "snapshot_occupancy"
+    assert SOURCE_CALCULATION_VERSION == 2
