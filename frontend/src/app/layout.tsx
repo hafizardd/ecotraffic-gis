@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EcoTraffic GIS · Urban Flow Atlas",
+  title: "EcoTraffic GIS",
   description: "AI-Based Decision Support System for Sustainable Public Transport Development via Transport Emission Analysis in Yogyakarta City",
 };
 

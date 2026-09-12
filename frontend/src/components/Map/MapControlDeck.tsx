@@ -34,17 +34,25 @@ export default function MapControlDeck({
 }: MapControlDeckProps) {
     const [layersOpen, setLayersOpen] = useState(false);
     const layerRootRef = useRef<HTMLDivElement>(null);
+    const layerTriggerRef = useRef<HTMLButtonElement>(null);
+    const layerMenuRef = useRef<HTMLDivElement>(null);
+    const modeTabRefs = useRef<Partial<Record<MapMode, HTMLButtonElement | null>>>({});
     const modeLayers = LAYER_KEYS.filter((key) => MODE_VISIBILITY[mode][key]);
     const activeCount = modeLayers.filter((key) => layerVisibility[key]).length;
     const isDark = basemap === "dark";
 
     useEffect(() => {
         if (!layersOpen) return;
+        window.requestAnimationFrame(() => layerMenuRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus());
         const close = (event: PointerEvent) => {
             if (!layerRootRef.current?.contains(event.target as Node)) setLayersOpen(false);
         };
         const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setLayersOpen(false);
+            if (event.key === "Escape") {
+                event.preventDefault();
+                setLayersOpen(false);
+                layerTriggerRef.current?.focus();
+            }
         };
         document.addEventListener("pointerdown", close);
         document.addEventListener("keydown", closeOnEscape);
@@ -53,6 +61,20 @@ export default function MapControlDeck({
             document.removeEventListener("keydown", closeOnEscape);
         };
     }, [layersOpen]);
+
+    const selectModeFromKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>, key: MapMode) => {
+        const index = MAP_MODES.findIndex((item) => item.key === key);
+        let next = index;
+        if (event.key === "ArrowRight") next = (index + 1) % MAP_MODES.length;
+        else if (event.key === "ArrowLeft") next = (index - 1 + MAP_MODES.length) % MAP_MODES.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = MAP_MODES.length - 1;
+        else return;
+        event.preventDefault();
+        const nextMode = MAP_MODES[next].key;
+        onModeChange(nextMode);
+        modeTabRefs.current[nextMode]?.focus();
+    };
 
     return (
         <div className="absolute top-3 left-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] p-1.5 shadow-[var(--shadow-float)] backdrop-blur-[10px] max-[760px]:top-2 max-[760px]:right-2 max-[760px]:left-2 max-[760px]:max-w-none">
@@ -63,8 +85,11 @@ export default function MapControlDeck({
                         type="button"
                         role="tab"
                         aria-selected={mode === key}
-                        className={`relative min-h-9 cursor-pointer whitespace-nowrap rounded-[5px] border border-transparent px-3 text-[11px] font-semibold transition-[border-color,background,color] duration-150 max-[430px]:px-2.5 ${mode === key ? "border-[rgba(56,189,248,0.32)] bg-[var(--selection-soft)] text-[#8edcff]" : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]"}`}
+                        tabIndex={mode === key ? 0 : -1}
+                        ref={(node) => { modeTabRefs.current[key] = node; }}
+                        className={`relative min-h-9 cursor-pointer whitespace-nowrap rounded-[5px] border border-transparent px-3 text-[11px] font-semibold transition-[border-color,background,color] duration-150 max-[760px]:min-h-11 max-[430px]:px-2.5 ${mode === key ? "border-[rgba(56,189,248,0.32)] bg-[var(--selection-soft)] text-[#8edcff]" : "text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]"}`}
                         onClick={() => onModeChange(key)}
+                        onKeyDown={(event) => selectModeFromKeyboard(event, key)}
                     >
                         {label}
                     </button>
@@ -75,7 +100,7 @@ export default function MapControlDeck({
 
             <button
                 type="button"
-                className="flex min-h-9 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2.5 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)] max-[560px]:w-9 max-[560px]:justify-center max-[560px]:px-0 [&>svg]:h-4 [&>svg]:w-4"
+                className="flex min-h-9 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2.5 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)] max-[760px]:min-h-11 max-[560px]:w-11 max-[560px]:justify-center max-[560px]:px-0 [&>svg]:h-4 [&>svg]:w-4"
                 aria-label={isDark ? "Gunakan basemap jalan terang" : "Gunakan basemap jalan gelap"}
                 title={isDark ? "Basemap jalan terang" : "Basemap jalan gelap"}
                 onClick={() => onBasemapChange(isDark ? "street-2d-building" : "dark")}
@@ -86,8 +111,9 @@ export default function MapControlDeck({
 
             <div className="relative" ref={layerRootRef}>
                 <button
+                    ref={layerTriggerRef}
                     type="button"
-                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2.5 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)] max-[560px]:w-9 max-[560px]:justify-center max-[560px]:px-0 [&>svg]:h-4 [&>svg]:w-4"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2.5 text-[11px] font-semibold text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)] max-[760px]:min-h-11 max-[560px]:w-11 max-[560px]:justify-center max-[560px]:px-0 [&>svg]:h-4 [&>svg]:w-4"
                     aria-expanded={layersOpen}
                     aria-controls="map-layer-menu"
                     aria-label={`Atur layer peta, ${activeCount} dari ${modeLayers.length} aktif`}
@@ -100,7 +126,7 @@ export default function MapControlDeck({
                 </button>
 
                 {layersOpen && (
-                    <div id="map-layer-menu" className="absolute top-[calc(100%+10px)] right-0 w-[260px] rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.97)] p-2 shadow-[var(--shadow-float)] backdrop-blur-[12px] animate-[select-in_0.14s_ease-out] motion-reduce:animate-none" role="group" aria-label="Layer pada mode aktif">
+                    <div ref={layerMenuRef} id="map-layer-menu" className="absolute top-[calc(100%+10px)] right-0 w-[260px] rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.97)] p-2 shadow-[var(--shadow-float)] backdrop-blur-[12px] animate-[select-in_0.14s_ease-out] motion-reduce:animate-none" role="group" aria-label="Layer pada mode aktif">
                         <div className="border-b border-[var(--border)] px-2 pt-1 pb-2">
                             <strong className="block text-[11px] font-semibold">Layer · {MAP_MODES.find((item) => item.key === mode)?.label}</strong>
                             <span className="mt-0.5 block text-[10px] text-[var(--muted)]">Tampilkan hanya informasi yang dibutuhkan.</span>

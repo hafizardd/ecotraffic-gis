@@ -25,7 +25,7 @@ export default function MapLegend({ mode, segmentBuckets, cameraFresh, cameraSta
 
     return (
         <aside className={`absolute left-3 z-[19] flex max-h-[calc(100%-156px)] flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] text-[11px] text-[var(--text)] shadow-[var(--shadow-float)] backdrop-blur-[10px] max-[760px]:left-2 max-[760px]:max-h-[48vh] ${mode === "potential" ? "bottom-3 max-[760px]:bottom-[112px]" : "bottom-3 max-[760px]:bottom-2"} ${open ? "w-[248px] max-[760px]:right-2 max-[760px]:w-auto" : "w-auto max-w-[220px]"}`} aria-label="Legenda peta">
-            <button type="button" className="flex min-h-10 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 text-left text-[11px] font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface)] [&>svg]:h-4 [&>svg]:w-4 [&>svg]:flex-[0_0_16px] [&>span]:flex-1" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="map-legend-content">
+            <button type="button" className="flex min-h-10 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 text-left text-[11px] font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface)] max-[760px]:min-h-11 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:flex-[0_0_16px] [&>span]:flex-1" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="map-legend-content">
                 <Info className="text-[var(--selection)]" aria-hidden="true" />
                 <span>Legenda · {modeLabel}</span>
                 {open ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}

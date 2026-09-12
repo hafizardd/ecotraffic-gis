@@ -4,7 +4,7 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { fmtIntId } from "@/utils/format";
 import { clampPage } from "@/utils/emissionAnalytics";
 
-const PAGINATION_PAGE_CLASS = "grid min-w-7 cursor-pointer place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent p-1.5 text-xs font-semibold text-[var(--secondary)] tabular-nums enabled:hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] disabled:cursor-default disabled:opacity-50 [&>svg]:h-[15px] [&>svg]:w-[15px]";
+const PAGINATION_PAGE_CLASS = "grid min-h-10 min-w-10 cursor-pointer place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent p-1.5 text-xs font-semibold text-[var(--secondary)] tabular-nums enabled:hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] disabled:cursor-default disabled:opacity-50 [&>svg]:h-[15px] [&>svg]:w-[15px]";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -26,6 +26,7 @@ export default function HistoryPagination({ displayedCount, total, pageSize, onP
     const [pageText, setPageText] = useState(String(page));
     const [lastPage, setLastPage] = useState(page);
     const rootRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const listId = useId();
 
     if (page !== lastPage) { setLastPage(page); setPageText(String(page)); }
@@ -47,6 +48,7 @@ export default function HistoryPagination({ displayedCount, total, pageSize, onP
     function commitSize(size: number) {
         onPageSizeChange(size);
         setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
 
     function onTriggerKeyDown(event: React.KeyboardEvent) {
@@ -58,7 +60,7 @@ export default function HistoryPagination({ displayedCount, total, pageSize, onP
             event.preventDefault();
             setActive((current) => (current + (event.key === "ArrowDown" ? 1 : -1) + PAGE_SIZE_OPTIONS.length) % PAGE_SIZE_OPTIONS.length);
         } else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); commitSize(PAGE_SIZE_OPTIONS[active]); }
-        else if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+        else if (event.key === "Escape") { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
         else if (event.key === "Tab") { setOpen(false); }
     }
 
@@ -72,8 +74,8 @@ export default function HistoryPagination({ displayedCount, total, pageSize, onP
         <div className="relative flex min-w-0 flex-wrap items-center gap-[10px] max-[600px]:flex-nowrap max-[600px]:gap-2" ref={rootRef}>
             <span className="inline-flex items-center gap-[5px]">
                 Menampilkan
-                <button type="button" className="inline-flex cursor-pointer items-center gap-[3px] border-0 border-b border-dotted border-current bg-transparent px-px font-[inherit] text-[var(--text)] tabular-nums hover:text-[var(--green)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)]" aria-haspopup="listbox" aria-expanded={open}
-                    aria-controls={listId} aria-label="Jumlah baris per halaman"
+                <button ref={triggerRef} type="button" role="combobox" className="inline-flex min-h-10 cursor-pointer items-center gap-[3px] border-0 border-b border-dotted border-current bg-transparent px-1 font-[inherit] text-[var(--text)] tabular-nums hover:text-[var(--green)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)]" aria-haspopup="listbox" aria-expanded={open}
+                    aria-controls={listId} aria-activedescendant={open ? `${listId}-option-${active}` : undefined} aria-label="Jumlah baris per halaman"
                     onClick={() => (open ? setOpen(false) : openList())} onKeyDown={onTriggerKeyDown}>
                     {fmtIntId(displayedCount)}<ChevronDown className="h-3 w-3 text-[var(--secondary)]" aria-hidden="true" />
                 </button>
@@ -81,7 +83,7 @@ export default function HistoryPagination({ displayedCount, total, pageSize, onP
             </span>
             {open && <div className="absolute top-[calc(100%+6px)] left-0 z-20 max-h-[280px] min-w-[120px] overflow-y-auto rounded-[var(--radius-sm)] border border-[#334155] bg-[#0e1d2e] p-[var(--space-1)] shadow-[0_14px_34px_rgba(0,0,0,0.4)] animate-[select-in_0.14s_ease-out] motion-reduce:animate-none">
                 <ul role="listbox" id={listId} aria-label="Jumlah baris per halaman" className="m-0 list-none p-0">
-                    {PAGE_SIZE_OPTIONS.map((size, index) => <li key={size} role="option" aria-selected={size === pageSize}>
+                    {PAGE_SIZE_OPTIONS.map((size, index) => <li id={`${listId}-option-${index}`} key={size} role="option" aria-selected={size === pageSize}>
                         <button type="button" tabIndex={-1}
                             className={`flex w-full cursor-pointer items-center justify-between gap-[var(--space-2)] rounded-[5px] border-0 bg-transparent px-[var(--space-3)] py-[9px] text-left text-xs text-[var(--secondary)] [&>svg]:h-3.5 [&>svg]:w-3.5 ${index === active ? "bg-[#14283c] text-[var(--text)]" : ""}${size === pageSize ? " font-[var(--weight-strong)] text-[var(--green)]" : ""}`}
                             onMouseEnter={() => setActive(index)} onClick={() => commitSize(size)}>

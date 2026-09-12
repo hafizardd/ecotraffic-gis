@@ -5,7 +5,7 @@ import { Menu } from "lucide-react";
 
 import { useEmissionsContext } from "@/context/EmissionsContext";
 
-export default function TopHeader({ onMenuClick, section, title }: { onMenuClick: () => void; section: string; title: string }) {
+export default function TopHeader({ onMenuClick, menuOpen, section, title }: { onMenuClick: () => void; menuOpen: boolean; section: string; title: string }) {
     const [now, setNow] = useState<Date | null>(null);
     const { connectionStatus, lastMessageAt } = useEmissionsContext();
     useEffect(() => {
@@ -19,7 +19,7 @@ export default function TopHeader({ onMenuClick, section, title }: { onMenuClick
 
     return (
         <header className="flex min-w-0 items-center gap-4 border-b border-[var(--border)] bg-[var(--shell)] px-5 max-[760px]:gap-3 max-[760px]:px-3">
-            <button type="button" className="hidden h-10 w-10 flex-[0_0_40px] rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] p-[9px] text-[var(--secondary)] transition-colors hover:border-[var(--contour-strong)] hover:text-[var(--text)] max-[760px]:block [&>svg]:w-full" onClick={onMenuClick} aria-label="Buka menu" aria-controls="primary-navigation">
+            <button id="mobile-menu-trigger" type="button" className="hidden h-10 w-10 flex-[0_0_40px] rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] p-[9px] text-[var(--secondary)] transition-colors hover:border-[var(--contour-strong)] hover:text-[var(--text)] max-[760px]:block max-[760px]:h-11 max-[760px]:w-11 max-[760px]:flex-[0_0_44px] [&>svg]:w-full" onClick={onMenuClick} aria-label="Buka menu" aria-controls="primary-navigation" aria-expanded={menuOpen}>
                 <Menu aria-hidden="true" />
             </button>
             <div className="flex min-w-0 flex-col"><span className="text-[10px] font-bold tracking-[0.14em] text-[var(--muted)] max-[760px]:hidden">{section}</span><strong className="overflow-hidden text-ellipsis whitespace-nowrap font-[var(--font-display)] text-[15px] font-semibold tracking-[-0.01em]">{title}</strong></div>

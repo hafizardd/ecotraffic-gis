@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { EMISSION_DEFINITIONS } from "@/constants/emissions";
@@ -78,6 +78,7 @@ export default function HistoryTable() {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [reload, setReload] = useState(0);
     const [expanded, setExpanded] = useState<string | null>(null);
+    const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
 
     useEffect(() => {
         const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -127,6 +128,19 @@ export default function HistoryTable() {
         setExpanded(null);
     }
     function switchTab(next: Tab) { setTab(next); setExpanded(null); }
+    function moveTab(event: React.KeyboardEvent<HTMLButtonElement>, current: Tab) {
+        const index = TABS.findIndex(({ key }) => key === current);
+        let next = index;
+        if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
+        else if (event.key === "ArrowLeft") next = (index - 1 + TABS.length) % TABS.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = TABS.length - 1;
+        else return;
+        event.preventDefault();
+        const nextTab = TABS[next].key;
+        switchTab(nextTab);
+        tabRefs.current[nextTab]?.focus();
+    }
     function handleDeleted() {
         setPages({ key: sourceKey, values: { observed: 1, estimated: 1 } });
         setReload((value) => value + 1);
@@ -158,8 +172,8 @@ export default function HistoryTable() {
 
         <div className="mt-[14px] mb-1 flex flex-wrap items-center gap-3">
             <div className="inline-flex gap-[3px] rounded-full border border-[var(--border)] bg-[var(--card-2)] p-[3px]" role="tablist" aria-label="Status mutu data">
-                {TABS.map(({ key: tabKey, label }) => <button key={tabKey} type="button" role="tab" aria-selected={tab === tabKey}
-                    className={`cursor-pointer rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] ${tab === tabKey ? "bg-[#102238]! text-[#4ade80]!" : "text-[var(--secondary)]"}`} onClick={() => switchTab(tabKey)}>{label}</button>)}
+                {TABS.map(({ key: tabKey, label }) => <button key={tabKey} ref={(node) => { tabRefs.current[tabKey] = node; }} type="button" role="tab" aria-selected={tab === tabKey} tabIndex={tab === tabKey ? 0 : -1}
+                    className={`min-h-9 cursor-pointer rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] max-[760px]:min-h-11 ${tab === tabKey ? "bg-[#102238]! text-[#4ade80]!" : "text-[var(--secondary)]"}`} onClick={() => switchTab(tabKey)} onKeyDown={(event) => moveTab(event, tabKey)}>{label}</button>)}
             </div>
             <label className="relative flex h-[var(--control-height)] min-w-[220px] flex-[1_1_260px] items-center gap-2 rounded-[var(--radius-sm)] border border-[#334155] bg-[#102238] px-3 text-[var(--muted)] [&>svg]:h-[15px] [&>svg]:w-[15px] [&>svg]:shrink-0">
                 <Search aria-hidden="true" />
@@ -202,7 +216,7 @@ export default function HistoryTable() {
                                 <td><strong>{record.total_vehicles_per_hour == null ? "-" : fmtIntId(record.total_vehicles_per_hour)}</strong><VehicleBreakdown volume={record.volume_per_hour} /></td>
                                 <td className="text-right tabular-nums"><strong>{record.total_emissions_kg_h == null ? "-" : fmtFloatId(record.total_emissions_kg_h, 3)}</strong><br /><small>{record.units.emissions}</small></td>
                                 <td><StatusBadge record={record} /></td>
-                                <td><button type="button" className="grid h-7 w-7 cursor-pointer place-items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card-2)] text-[var(--secondary)] transition-colors duration-150 hover:border-[var(--green)] hover:text-[var(--text)] [&>svg]:h-3.5 [&>svg]:w-3.5" aria-expanded={open} aria-label={open ? "Tutup detail" : "Buka detail"} onClick={() => setExpanded(open ? null : record.id)}>
+                                <td><button type="button" className="grid h-10 w-10 cursor-pointer place-items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card-2)] text-[var(--secondary)] transition-colors duration-150 hover:border-[var(--green)] hover:text-[var(--text)] [&>svg]:h-3.5 [&>svg]:w-3.5" aria-expanded={open} aria-label={open ? `Tutup detail ${record.segment_name}` : `Buka detail ${record.segment_name}`} onClick={() => setExpanded(open ? null : record.id)}>
                                     {open ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}</button></td>
                             </tr>,
                             open ? <tr key={`${record.id}-detail`}><td className="px-[10px]! pt-0! pb-[14px]!" colSpan={7}><DetailPanel record={record} /></td></tr> : null,

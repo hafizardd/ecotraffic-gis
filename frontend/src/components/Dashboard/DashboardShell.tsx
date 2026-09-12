@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import GlobalCounter from "./GlobalCounter";
 import Sidebar from "./Sidebar";
 import TopHeader from "./TopHeader";
@@ -18,8 +18,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [activeView, setActiveView] = useState<ActiveView>("peta");
+    const mainRef = useRef<HTMLElement>(null);
     const analyticsView = activeView === "emisi" || activeView === "riwayat";
     const page = { emisi: <EmisiTrenPage />, kendaraan: <KendaraanPage />, riwayat: <RiwayatPage />, pengaturan: <PengaturanPage /> }[activeView as Exclude<ActiveView, "peta">];
+    const changeView = useCallback((view: ActiveView) => {
+        setActiveView(view);
+        setMobileNavOpen(false);
+        window.requestAnimationFrame(() => mainRef.current?.focus());
+    }, []);
 
     return (
         <EmissionAnalyticsProvider><div className="flex h-[100dvh] w-screen bg-[var(--bg)] text-[var(--text)]">
@@ -30,12 +36,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 onToggle={() => setSidebarOpen((value) => !value)}
                 onMobileClose={() => setMobileNavOpen(false)}
                 activeView={activeView}
-                onViewChange={(view) => { setActiveView(view); setMobileNavOpen(false); }}
+                onViewChange={changeView}
             />
             <div className={`grid min-w-0 flex-1 transition-[width] duration-200 ease-out ${analyticsView ? "grid-rows-[56px_minmax(0,1fr)]" : "grid-rows-[56px_auto_minmax(0,1fr)]"}`}>
-                <TopHeader onMenuClick={() => setMobileNavOpen(true)} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
+                <TopHeader onMenuClick={() => setMobileNavOpen(true)} menuOpen={mobileNavOpen} section={viewMeta[activeView][0]} title={viewMeta[activeView][1]} />
                 {(activeView === "peta" || activeView === "kendaraan" || activeView === "pengaturan") && <GlobalCounter />}
-                <main id="main-content" tabIndex={-1} className="min-h-0 min-w-0 overflow-hidden p-3 outline-none max-[760px]:p-2">{activeView === "peta" ? children : page}</main>
+                <span className="sr-only" role="status" aria-live="polite">Tampilan {viewMeta[activeView][1]}</span>
+                <main ref={mainRef} id="main-content" tabIndex={-1} aria-label={viewMeta[activeView][1]} className="min-h-0 min-w-0 overflow-hidden p-3 outline-none max-[760px]:p-2">{activeView === "peta" ? children : page}</main>
             </div>
             <BangJoWidget />
         </div></EmissionAnalyticsProvider>

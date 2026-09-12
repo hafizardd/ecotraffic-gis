@@ -36,7 +36,7 @@ function Category({ title, onReset, children }: { title: string; onReset: () => 
     return <div className="grid gap-[9px]">
         <div className="flex items-center justify-between text-[11px] font-bold tracking-[0.08em] text-[var(--secondary)] uppercase">
             <span>{title}</span>
-            <button type="button" className="grid h-6 w-6 cursor-pointer place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--muted)] hover:bg-[#102238] hover:text-[var(--text)] [&>svg]:h-[13px] [&>svg]:w-[13px]" aria-label={`Reset ${title}`} onClick={onReset}><RotateCcw aria-hidden="true" /></button>
+            <button type="button" className="grid h-9 w-9 cursor-pointer place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--muted)] hover:bg-[#102238] hover:text-[var(--text)] max-[760px]:h-11 max-[760px]:w-11 [&>svg]:h-[13px] [&>svg]:w-[13px]" aria-label={`Reset ${title}`} onClick={onReset}><RotateCcw aria-hidden="true" /></button>
         </div>
         {children}
     </div>;

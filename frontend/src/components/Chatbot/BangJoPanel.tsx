@@ -24,9 +24,10 @@ export default function BangJoPanel({ messages, isTyping, minimized, onSend, onM
     useEffect(() => {
         const node = panelRef.current;
         if (!node) return;
+        if (!minimized) node.focus();
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") { onClose(); return; }
-            if (event.key !== "Tab") return;
+            if (event.key !== "Tab" || minimized) return;
             const focusables = Array.from(node.querySelectorAll<HTMLElement>(
                 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
             ));
@@ -38,15 +39,16 @@ export default function BangJoPanel({ messages, isTyping, minimized, onSend, onM
         };
         document.addEventListener("keydown", onKeyDown);
         return () => document.removeEventListener("keydown", onKeyDown);
-    }, [onClose]);
+    }, [minimized, onClose]);
 
     return (
         <div
             ref={panelRef}
+            tabIndex={-1}
             role="dialog"
-            aria-modal="true"
+            aria-modal={!minimized}
             aria-label="Bang Jo"
-            className={`bangjo-panel fixed top-[84px] right-[var(--bangjo-offset-right,22px)] bottom-[22px] z-41 flex w-[min(396px,calc(100vw-32px))] flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[var(--surface)] shadow-[var(--shadow-float)] animate-[panel-in_0.24s_ease-out] motion-reduce:animate-none max-[760px]:inset-0 max-[760px]:z-50 max-[760px]:w-auto max-[760px]:rounded-none max-[760px]:border-0 ${minimized ? "top-auto h-auto max-[760px]:inset-x-0 max-[760px]:top-auto max-[760px]:bottom-0 max-[760px]:rounded-t-[var(--radius-md)]" : ""}`}
+            className={`bangjo-panel fixed top-[84px] right-[var(--bangjo-offset-right,22px)] bottom-[22px] z-41 flex w-[min(396px,calc(100vw-32px))] flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[var(--surface)] shadow-[var(--shadow-float)] outline-none animate-[panel-in_0.24s_ease-out] motion-reduce:animate-none max-[760px]:inset-0 max-[760px]:z-50 max-[760px]:w-auto max-[760px]:rounded-none max-[760px]:border-0 ${minimized ? "top-auto h-auto max-[760px]:inset-x-0 max-[760px]:top-auto max-[760px]:bottom-0 max-[760px]:rounded-t-[var(--radius-md)]" : ""}`}
         >
             <div className={PANEL_HEADER_CLASS}>
                 <div className={PANEL_ICON_CLASS}><Bot aria-hidden="true" /></div>

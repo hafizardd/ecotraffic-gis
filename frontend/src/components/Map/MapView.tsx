@@ -554,7 +554,7 @@ function MapLoadingState({ error }: { error: string | null }) {
                 {error
                     ? <TriangleAlert className="h-5 w-5 text-[var(--danger)]" aria-hidden="true" />
                     : <LoaderCircle className="h-5 w-5 animate-spin text-[var(--selection)] motion-reduce:animate-none" aria-hidden="true" />}
-                <strong className="font-[var(--font-display)] text-[14px] font-semibold">{error ? "Basemap tidak dapat dimuat" : "Menyiapkan atlas kota"}</strong>
+                <strong className="font-[var(--font-display)] text-[14px] font-semibold">{error ? "Basemap tidak dapat dimuat" : "Menyiapkan peta"}</strong>
                 <span className="text-[11px] leading-4 text-[var(--muted)]">{error ?? "Memuat jalan, bangunan, dan referensi spasial…"}</span>
             </div>
         </div>

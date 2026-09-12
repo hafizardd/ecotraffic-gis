@@ -73,9 +73,9 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
                     onChange={handleRange}
                     className="map-range w-full"
                 />
-                <label className="flex min-h-8 items-center gap-2 text-[10px] font-semibold text-[var(--muted)]" htmlFor="activity-hour-day"><span className="max-[430px]:sr-only">Tanggal</span>
+                <label className="flex min-h-[var(--control-height)] items-center gap-2 text-[10px] font-semibold text-[var(--muted)]" htmlFor="activity-hour-day"><span className="max-[430px]:sr-only">Tanggal</span>
                     <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
-                        className="min-h-8 rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface-raised)] px-2 text-[11px] text-[var(--text)] [color-scheme:dark] hover:border-[var(--selection)]"
+                        className="min-h-[var(--control-height)] rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface-raised)] px-2 text-[11px] text-[var(--text)] [color-scheme:dark] hover:border-[var(--selection)]"
                         onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
                 </label>
             </div>

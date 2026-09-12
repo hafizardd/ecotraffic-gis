@@ -4,7 +4,7 @@
 :root {
   color-scheme: dark;
 
-  /* Urban Flow Atlas — civic, mineral surfaces with cartographic contrast. */
+  /* Civic, mineral surfaces with cartographic contrast. */
   --canvas: #091a22;
   --shell: #0d222b;
   --surface: #122b35;
@@ -165,7 +165,7 @@ summary {
 }
 
 .map-range {
-  height: 24px;
+  height: 40px;
   cursor: pointer;
   appearance: none;
   background: transparent;
@@ -295,6 +295,10 @@ summary {
 
 @media (max-width: 760px) {
   :root { --control-height: 44px; }
+
+  .map-range {
+    height: 44px;
+  }
 
   .maplibregl-ctrl-top-right {
     top: 108px;

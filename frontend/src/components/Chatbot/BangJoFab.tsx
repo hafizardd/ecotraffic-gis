@@ -1,8 +1,11 @@
 "use client";
 
-export default function BangJoFab({ onOpen }: { onOpen: () => void }) {
+import type { Ref } from "react";
+
+export default function BangJoFab({ onOpen, buttonRef }: { onOpen: () => void; buttonRef?: Ref<HTMLButtonElement> }) {
     return (
         <button
+            ref={buttonRef}
             type="button"
             className="bangjo-fab fixed right-[var(--bangjo-offset-right,22px)] bottom-[22px] z-40 grid h-[52px] w-[52px] cursor-pointer place-items-center rounded-full border border-[rgba(148,163,184,0.23)] bg-[rgba(7,20,34,0.9)] text-[#dce7f3] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-[8px] transition-[background,box-shadow] duration-180 hover:bg-[#102238] hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] max-[760px]:right-[18px] max-[760px]:bottom-[18px] max-[760px]:h-11 max-[760px]:w-11"
             aria-label="Buka asisten Bang Jo"
