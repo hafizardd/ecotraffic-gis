@@ -103,17 +103,17 @@ export default function Select({ value, options, onChange, ariaLabel, placeholde
 
     return (
         <div className={`relative w-full${className ? ` ${className}` : ""}`} ref={rootRef}>
-            <button ref={triggerRef} type="button" className="group flex min-h-[var(--control-height)] w-full cursor-pointer items-center justify-between gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface-raised)] px-[var(--space-3)] text-left text-xs font-[var(--weight-label)] text-[var(--text)] transition-colors duration-150 hover:border-[var(--selection)] hover:bg-[var(--surface-hover)] aria-expanded:border-[var(--selection)]" role="combobox" aria-haspopup="listbox"
+            <button ref={triggerRef} type="button" className="group flex min-h-(--control-height) w-full cursor-pointer items-center justify-between gap-(--space-2) rounded-sm border border-(--contour-strong) bg-(--surface-raised) px-(--space-3) text-left text-xs font-(--weight-label) text-(--text) transition-colors duration-150 hover:border-(--selection) hover:bg-(--surface-hover) aria-expanded:border-(--selection)" role="combobox" aria-haspopup="listbox"
                 aria-expanded={open} aria-controls={listId} aria-label={ariaLabel}
                 aria-activedescendant={open && !searchable && visible[active] ? `${listId}-option-${active}` : undefined}
                 onClick={() => (open ? closeList() : openList())} onKeyDown={onKeyDown}>
-                <span className={`overflow-hidden text-ellipsis whitespace-nowrap ${selected ? "" : "text-[var(--muted)]"}`}>{selected?.label ?? placeholder}</span>
-                <ChevronDown className="h-4 w-4 flex-[0_0_16px] text-[var(--secondary)] transition-transform duration-180 group-aria-expanded:rotate-180" aria-hidden="true" />
+                <span className={`overflow-hidden text-ellipsis whitespace-nowrap ${selected ? "" : "text-(--muted)"}`}>{selected?.label ?? placeholder}</span>
+                <ChevronDown className="h-4 w-4 flex-[0_0_16px] text-(--secondary) transition-transform duration-180 group-aria-expanded:rotate-180" aria-hidden="true" />
             </button>
             {open && (
-                <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-[280px] overflow-y-auto rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface)] p-[var(--space-1)] shadow-[var(--shadow-float)] animate-[select-in_0.14s_ease-out] motion-reduce:animate-none">
+                <div className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-[280px] overflow-y-auto rounded-sm border border-(--contour-strong) bg-(--surface) p-(--space-1) shadow-(--shadow-float) animate-[select-in_0.14s_ease-out] motion-reduce:animate-none">
                     {searchable && (
-                        <input ref={searchRef} className="sticky top-0 z-[1] mb-[var(--space-1)] min-h-10 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-sunken)] px-[var(--space-3)] py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--selection)] focus:outline-none" type="text" value={search}
+                        <input ref={searchRef} className="sticky top-0 z-[1] mb-(--space-1) min-h-10 w-full rounded-sm border border-(--border) bg-(--surface-sunken) px-(--space-3) py-2 text-xs text-(--text) placeholder:text-(--muted) focus:border-(--selection) focus:outline-none" type="text" value={search}
                             role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls={listId}
                             aria-activedescendant={visible[active] ? `${listId}-option-${active}` : undefined}
                             placeholder={searchPlaceholder} aria-label={`Cari ${ariaLabel}`}
@@ -124,14 +124,14 @@ export default function Select({ value, options, onChange, ariaLabel, placeholde
                         {visible.map((option, index) => (
                             <li id={`${listId}-option-${index}`} key={option.value} role="option" aria-selected={option.value === value} aria-disabled={option.disabled}>
                                 <button type="button" tabIndex={-1} disabled={option.disabled}
-                                    className={`flex min-h-10 w-full cursor-pointer items-center justify-between gap-[var(--space-2)] rounded-[var(--radius-sm)] border-0 bg-transparent px-[var(--space-3)] py-2 text-left text-xs text-[var(--secondary)] disabled:cursor-default disabled:opacity-40 [&>svg]:h-3.5 [&>svg]:w-3.5 ${index === active ? "bg-[var(--surface-raised)] text-[var(--text)]" : ""}${option.value === value ? " text-[var(--brand-strong)] font-[var(--weight-strong)]" : ""}`}
+                                    className={`flex min-h-10 w-full cursor-pointer items-center justify-between gap-(--space-2) rounded-sm border-0 bg-transparent px-(--space-3) py-2 text-left text-xs text-(--secondary) disabled:cursor-default disabled:opacity-40 [&>svg]:h-3.5 [&>svg]:w-3.5 ${index === active ? "bg-(--surface-raised) text-(--text)" : ""}${option.value === value ? " text-(--brand-strong) font-(--weight-strong)" : ""}`}
                                     onMouseEnter={() => !option.disabled && setActive(index)} onClick={() => commit(option)}>
                                     <span>{option.label}</span>
                                     {option.value === value && <Check aria-hidden="true" />}
                                 </button>
                             </li>
                         ))}
-                        {!visible.length && <li role="status" className="px-[var(--space-3)] py-[9px] text-xs text-[var(--muted)]">Tidak ada hasil</li>}
+                        {!visible.length && <li role="status" className="px-(--space-3) py-[9px] text-xs text-(--muted)">Tidak ada hasil</li>}
                     </ul>
                 </div>
             )}

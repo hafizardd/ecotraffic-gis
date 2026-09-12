@@ -86,18 +86,18 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
     const selectedTime = new Date(hours[selected]).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
     return (
-        <section className="absolute bottom-3 left-1/2 z-20 grid w-[min(650px,calc(100%-320px))] -translate-x-1/2 gap-2 rounded-[var(--radius-md)] border border-[var(--contour-strong)] bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] text-[var(--secondary)] shadow-[var(--shadow-float)] backdrop-blur-[10px] max-[980px]:right-3 max-[980px]:left-auto max-[980px]:w-[calc(100%-292px)] max-[980px]:translate-x-0 max-[760px]:right-2 max-[760px]:bottom-2 max-[760px]:left-2 max-[760px]:w-auto" aria-label="Potensi aktivitas per jam" aria-busy={stale}>
+        <section className="absolute bottom-3 left-1/2 z-20 grid w-[min(650px,calc(100%-320px))] -translate-x-1/2 gap-2 rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] px-3 py-2.5 text-[11px] text-(--secondary) shadow-(--shadow-float) backdrop-blur-[10px] max-[980px]:right-3 max-[980px]:left-auto max-[980px]:w-[calc(100%-292px)] max-[980px]:translate-x-0 max-[760px]:right-2 max-[760px]:bottom-2 max-[760px]:left-2 max-[760px]:w-auto" aria-label="Potensi aktivitas per jam" aria-busy={stale}>
             <div className="flex min-w-0 items-center gap-2">
-                <label className="flex items-center gap-1.5 font-semibold text-[var(--text)]" htmlFor="activity-hour-slider"><Clock className="h-4 w-4 text-[var(--selection)]" aria-hidden="true" /> Waktu aktivitas</label>
+                <label className="flex items-center gap-1.5 font-semibold text-(--text)" htmlFor="activity-hour-slider"><Clock className="h-4 w-4 text-(--selection)" aria-hidden="true" /> Waktu aktivitas</label>
                 {last >= 1 && (
-                    <button type="button" className="grid h-6 w-6 cursor-pointer place-items-center rounded-[6px] border border-[color:rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] text-[#dce7f3] hover:border-[var(--selection)] [&>svg]:h-[13px] [&>svg]:w-[13px]" onClick={togglePlay}
+                    <button type="button" className="grid h-6 w-6 cursor-pointer place-items-center rounded-[6px] border border-[color:rgba(148,163,184,0.3)] bg-[rgba(15,34,52,0.9)] text-[#dce7f3] hover:border-(--selection) [&>svg]:h-[13px] [&>svg]:w-[13px]" onClick={togglePlay}
                         aria-label={playing ? "Jeda" : "Putar"} title={playing ? "Jeda" : "Putar"}>
                         {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                     </button>
                 )}
-                <span className="h-3 border-l border-[var(--border)]" aria-hidden="true" />
-                <output className="font-[var(--font-data)] font-semibold text-[#8edcff] tabular-nums" htmlFor="activity-hour-slider" title={selectedLabel} aria-live="polite">{selectedTime}</output>
-                <span className="ml-auto truncate text-[10px] text-[var(--muted)]">
+                <span className="h-3 border-l border-(--border)" aria-hidden="true" />
+                <output className="font-(family-name:--font-data) font-semibold text-[#8edcff] tabular-nums" htmlFor="activity-hour-slider" title={selectedLabel} aria-live="polite">{selectedTime}</output>
+                <span className="ml-auto truncate text-[10px] text-(--muted)">
                     {stale ? "Memperbarui grid…" : `${displayedCount} sel · ${resolution}${aggregated ? " · agregat" : ""}`}
                 </span>
             </div>
@@ -114,9 +114,9 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
                     onChange={handleRange}
                     className="map-range w-full"
                 />
-                <label className="flex min-h-[var(--control-height)] items-center gap-2 text-[10px] font-semibold text-[var(--muted)]" htmlFor="activity-hour-day"><span className="max-[430px]:sr-only">Tanggal</span>
+                <label className="flex min-h-(--control-height) items-center gap-2 text-[10px] font-semibold text-(--muted)" htmlFor="activity-hour-day"><span className="max-[430px]:sr-only">Tanggal</span>
                     <input id="activity-hour-day" type="date" value={day ?? ""} max={maxDay}
-                        className="min-h-[var(--control-height)] rounded-[var(--radius-sm)] border border-[var(--contour-strong)] bg-[var(--surface-raised)] px-2 text-[11px] text-[var(--text)] [color-scheme:dark] hover:border-[var(--selection)]"
+                        className="min-h-(--control-height) rounded-sm border border-(--contour-strong) bg-(--surface-raised) px-2 text-[11px] text-(--text) [color-scheme:dark] hover:border-(--selection)"
                         onChange={(event) => { if (event.target.value) onChangeDay(event.target.value); }} />
                 </label>
             </div>

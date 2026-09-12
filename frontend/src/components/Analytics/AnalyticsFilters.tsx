@@ -9,8 +9,8 @@ import Select from "@/components/ui/Select";
 import { RefreshCw, SlidersHorizontal } from "lucide-react";
 import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS, ANALYTICS_NOTE_CLASS } from "@/styles/tailwind";
 
-const FILTERS_CLASS = "flex flex-wrap items-end gap-[14px] [&>label]:flex [&>label]:flex-[1_1_160px] [&>label]:flex-col [&>label]:gap-[7px] [&>label]:text-xs [&>label]:text-[var(--secondary)] [&>label>div]:max-w-[340px]";
-const DATE_INPUT_CLASS = "min-h-[var(--control-height)] w-full max-w-[340px] rounded-[var(--radius-sm)] border border-[#334155] bg-[#102238] p-[var(--space-2)] text-[#edf5ff] [color-scheme:dark]";
+const FILTERS_CLASS = "flex flex-wrap items-end gap-[14px] [&>label]:flex [&>label]:flex-[1_1_160px] [&>label]:flex-col [&>label]:gap-[7px] [&>label]:text-xs [&>label]:text-(--secondary) [&>label>div]:max-w-[340px]";
+const DATE_INPUT_CLASS = "min-h-(--control-height) w-full max-w-[340px] rounded-sm border border-[#334155] bg-[#102238] p-(--space-2) text-[#edf5ff] [color-scheme:dark]";
 
 export default function AnalyticsFilters() {
     const { filter, query, options, optionsError, setFilter, refresh } = useEmissionAnalytics();
@@ -32,9 +32,9 @@ export default function AnalyticsFilters() {
         setRangeError(null);
         setFilter({ from: start.toISOString(), to: end.toISOString() });
     }
-    return <section className="mb-[14px] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-sunken)]">
-        <div className="flex min-h-9 items-center gap-2 border-b border-[var(--border)] px-3 text-[9px] font-bold tracking-[0.12em] text-[var(--secondary)] uppercase">
-            <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--selection)]" aria-hidden="true" />
+    return <section className="mb-[14px] rounded-md border border-(--border) bg-(--surface-sunken)">
+        <div className="flex min-h-9 items-center gap-2 border-b border-(--border) px-3 text-[9px] font-bold tracking-[0.12em] text-(--secondary) uppercase">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-(--selection)" aria-hidden="true" />
             Lensa analisis
         </div>
         <div className="p-3">
@@ -50,7 +50,7 @@ export default function AnalyticsFilters() {
                 onChange={(value) => setFilter({ segmentId: value || null })} /></label>
             <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center justify-center gap-2`} onClick={refresh}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Perbarui</button>
         </div>
-        <details className="mt-3 border-t border-[var(--border)] pt-2 text-xs text-[var(--secondary)]"><summary className="cursor-pointer py-[7px] font-semibold">Gunakan rentang tanggal & waktu</summary><form action={applyDates} className={`${FILTERS_CLASS} pt-2`}>
+        <details className="mt-3 border-t border-(--border) pt-2 text-xs text-(--secondary)"><summary className="cursor-pointer py-[7px] font-semibold">Gunakan rentang tanggal & waktu</summary><form action={applyDates} className={`${FILTERS_CLASS} pt-2`}>
             <label>Dari (waktu lokal)<input className={DATE_INPUT_CLASS} required type="datetime-local" name="from" /></label>
             <label>Sampai (waktu lokal)<input className={DATE_INPUT_CLASS} required type="datetime-local" name="to" /></label>
             <button className={ANALYTICS_BUTTON_CLASS} type="submit">Terapkan</button>

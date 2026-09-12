@@ -49,8 +49,8 @@ export default function AutoInsightCard({ entity, label }: { entity: AutoInsight
                         </div>
                     )}
                     {answer && (
-                        <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(9,26,34,0.42)] p-3">
-                            <MarkdownText className="m-0 text-[11px] leading-[1.65] text-[var(--text)] [overflow-wrap:anywhere]">{answer.content}</MarkdownText>
+                        <div className="mb-3 rounded-md border border-(--border) bg-[rgba(9,26,34,0.42)] p-3">
+                            <MarkdownText className="m-0 text-[11px] leading-[1.65] text-(--text) [overflow-wrap:anywhere]">{answer.content}</MarkdownText>
                         </div>
                     )}
                     <button type="button" className={`${ANALYTICS_BUTTON_CLASS} flex w-full items-center justify-center gap-2`} onClick={() => askBangJo(question)}>

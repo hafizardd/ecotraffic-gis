@@ -101,9 +101,9 @@ function ActivityGridDetail({ hexId, hour, onClose }: {
 
 function SourceRow({ label, value }: { label: string; value: string }) {
     return (
-        <div className="grid min-w-0 grid-cols-[68px_minmax(0,1fr)] gap-3 border-b border-[var(--border)] pb-2 last:border-b-0 last:pb-0">
-            <dt className="text-[var(--muted)]">{label}</dt>
-            <dd className="m-0 min-w-0 text-[var(--secondary)] [overflow-wrap:anywhere]">{value}</dd>
+        <div className="grid min-w-0 grid-cols-[68px_minmax(0,1fr)] gap-3 border-b border-(--border) pb-2 last:border-b-0 last:pb-0">
+            <dt className="text-(--muted)">{label}</dt>
+            <dd className="m-0 min-w-0 text-(--secondary) [overflow-wrap:anywhere]">{value}</dd>
         </div>
     );
 }

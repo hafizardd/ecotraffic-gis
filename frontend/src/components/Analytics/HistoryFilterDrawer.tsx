@@ -35,9 +35,9 @@ function toLocalInput(value: string | null): string {
 
 function Category({ title, onReset, children }: { title: string; onReset: () => void; children: ReactNode }) {
     return <div className="grid gap-[9px]">
-        <div className="flex items-center justify-between text-[11px] font-bold tracking-[0.08em] text-[var(--secondary)] uppercase">
+        <div className="flex items-center justify-between text-[11px] font-bold tracking-[0.08em] text-(--secondary) uppercase">
             <span>{title}</span>
-            <button type="button" className="grid h-9 w-9 cursor-pointer place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--muted)] hover:bg-[#102238] hover:text-[var(--text)] max-[760px]:h-11 max-[760px]:w-11 [&>svg]:h-[13px] [&>svg]:w-[13px]" aria-label={`Reset ${title}`} onClick={onReset}><RotateCcw aria-hidden="true" /></button>
+            <button type="button" className="grid h-9 w-9 cursor-pointer place-items-center rounded-sm border-0 bg-transparent text-(--muted) hover:bg-[#102238] hover:text-(--text) max-[760px]:h-11 max-[760px]:w-11 [&>svg]:h-[13px] [&>svg]:w-[13px]" aria-label={`Reset ${title}`} onClick={onReset}><RotateCcw aria-hidden="true" /></button>
         </div>
         {children}
     </div>;
@@ -102,7 +102,7 @@ export default function HistoryFilterDrawer({ open, filters, onClose, onApply }:
         <button type="button" className={ANALYTICS_BUTTON_CLASS} onClick={clearAll}>Hapus semua</button>
         <span className="flex-1" />
         <button type="button" className={ANALYTICS_BUTTON_CLASS} onClick={onClose}>Batal</button>
-        <button type="button" className={`${ANALYTICS_BUTTON_CLASS} border-[var(--green)] bg-[#16a34a] text-[#f0fdf4] hover:border-[#4ade80] hover:bg-[#15803d]`} onClick={apply}>Terapkan</button>
+        <button type="button" className={`${ANALYTICS_BUTTON_CLASS} border-(--green) bg-[#16a34a] text-[#f0fdf4] hover:border-[#4ade80] hover:bg-[#15803d]`} onClick={apply}>Terapkan</button>
     </>}>
         <Category title="Koridor" onReset={() => setDraft((current) => ({ ...current, corridorId: null, segmentId: null }))}>
             <Select ariaLabel="Koridor" searchable searchPlaceholder="Cari koridor…" value={draft.corridorId ?? ""}
@@ -119,11 +119,11 @@ export default function HistoryFilterDrawer({ open, filters, onClose, onApply }:
                 onChange={(value) => setDraft((current) => ({ ...current, sourceMode: value || null }))} />
         </Category>
         <Category title="Rentang tanggal" onReset={() => { setFromText(""); setToText(""); setDateError(null); }}>
-            <label className="flex flex-col gap-1.5 text-xs text-[var(--secondary)]">Dari (waktu lokal)
-                <input className="min-h-[var(--control-height)] w-full rounded-[var(--radius-sm)] border border-[#334155] bg-[#102238] p-[var(--space-2)] text-[#edf5ff] [color-scheme:dark]" type="datetime-local" value={fromText} onChange={(event) => setFromText(event.target.value)} />
+            <label className="flex flex-col gap-1.5 text-xs text-(--secondary)">Dari (waktu lokal)
+                <input className="min-h-(--control-height) w-full rounded-sm border border-[#334155] bg-[#102238] p-(--space-2) text-[#edf5ff] [color-scheme:dark]" type="datetime-local" value={fromText} onChange={(event) => setFromText(event.target.value)} />
             </label>
-            <label className="flex flex-col gap-1.5 text-xs text-[var(--secondary)]">Sampai (waktu lokal)
-                <input className="min-h-[var(--control-height)] w-full rounded-[var(--radius-sm)] border border-[#334155] bg-[#102238] p-[var(--space-2)] text-[#edf5ff] [color-scheme:dark]" type="datetime-local" value={toText} onChange={(event) => setToText(event.target.value)} />
+            <label className="flex flex-col gap-1.5 text-xs text-(--secondary)">Sampai (waktu lokal)
+                <input className="min-h-(--control-height) w-full rounded-sm border border-[#334155] bg-[#102238] p-(--space-2) text-[#edf5ff] [color-scheme:dark]" type="datetime-local" value={toText} onChange={(event) => setToText(event.target.value)} />
             </label>
             {dateError && <p role="alert" className={ANALYTICS_ERROR_CLASS}>{dateError}</p>}
         </Category>

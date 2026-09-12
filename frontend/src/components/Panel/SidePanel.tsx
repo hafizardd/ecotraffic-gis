@@ -37,8 +37,8 @@ export default function SidePanel({ camera, historical = null, estimate = null, 
             <div className={PANEL_HEADER_CLASS}>
                 <div className={PANEL_ICON_CLASS}><MapPin aria-hidden="true" /></div>
                 <div className={PANEL_TITLE_CLASS}><span>CCTV terpilih</span><h2>{camera.properties.name}</h2></div>
-                {isTrackingSource && <div className={`hidden items-center gap-1.5 pr-1 text-[9px] font-bold tracking-[0.08em] uppercase min-[980px]:flex ${trackingStatus === "error" ? "text-[#fca5a5]" : "text-[var(--brand-strong)]"}`} role="status">
-                    <i className={`h-1.5 w-1.5 rounded-full ${trackingStatus === "error" ? "bg-[var(--danger)]" : "bg-[var(--green)]"}`} /> {trackingStatus === "error" ? "Terputus" : "Visual live"}
+                {isTrackingSource && <div className={`hidden items-center gap-1.5 pr-1 text-[9px] font-bold tracking-[0.08em] uppercase min-[980px]:flex ${trackingStatus === "error" ? "text-[#fca5a5]" : "text-(--brand-strong)"}`} role="status">
+                    <i className={`h-1.5 w-1.5 rounded-full ${trackingStatus === "error" ? "bg-(--danger)" : "bg-(--green)"}`} /> {trackingStatus === "error" ? "Terputus" : "Visual live"}
                 </div>}
                 <button
                     onClick={onClose}

@@ -125,7 +125,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                                 {damageList.length === 0 && <p className={SEGMENT_EMPTY_CLASS}>Tidak ada indikator kerusakan terdeteksi</p>}
                                 {damageList.length > 0 && <ul className="m-0 grid list-none gap-2 p-0">
                                     {damageList.map((key) => (
-                                        <li className="rounded-[0_var(--radius-sm)_var(--radius-sm)_0] border-l-2 border-[var(--accent)] bg-[rgba(245,165,36,0.07)] px-3 py-2 text-[11px] leading-4 text-[var(--secondary)]" key={key}>{DAMAGE_LABELS[key] ?? key}</li>
+                                        <li className="rounded-[0_var(--radius-sm)_var(--radius-sm)_0] border-l-2 border-(--accent) bg-[rgba(245,165,36,0.07)] px-3 py-2 text-[11px] leading-4 text-(--secondary)" key={key}>{DAMAGE_LABELS[key] ?? key}</li>
                                     ))}
                                 </ul>}
                             </section>
@@ -143,8 +143,8 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                         </section>
                         <section className={SEGMENT_SECTION_CLASS}>
                             <SectionTitle title="Observasi" meta={detail.observed_at ? fmtDateTimeId(detail.observed_at) : MISSING_LABEL} />
-                            {detail.observer_name && <p className="mt-0 mb-2 text-[11px] text-[var(--muted)]">Pengamat: <strong className="font-semibold text-[var(--secondary)]">{detail.observer_name}</strong></p>}
-                            {detail.description && <p className="m-0 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-raised)] px-3 py-2.5 text-[11px] leading-[1.65] text-[var(--secondary)] [overflow-wrap:anywhere]">{detail.description}</p>}
+                            {detail.observer_name && <p className="mt-0 mb-2 text-[11px] text-(--muted)">Pengamat: <strong className="font-semibold text-(--secondary)">{detail.observer_name}</strong></p>}
+                            {detail.description && <p className="m-0 rounded-sm border border-(--border) bg-(--surface-raised) px-3 py-2.5 text-[11px] leading-[1.65] text-(--secondary) [overflow-wrap:anywhere]">{detail.description}</p>}
                             {!detail.description && !detail.observer_name && <p className={SEGMENT_EMPTY_CLASS}>{MISSING_LABEL}</p>}
                         </section>
                         {photos.length > 0 && (
@@ -153,7 +153,7 @@ function BusStopDetailPanel({ sourceId, onClose }: { sourceId: string; onClose: 
                                 <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
                                     {photos.map((item, index) => (
                                         // eslint-disable-next-line @next/next/no-img-element
-                                        <img className="aspect-[4/3] w-full rounded-[var(--radius-sm)] border border-[var(--border)] object-cover" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} loading="lazy" />
+                                        <img className="aspect-[4/3] w-full rounded-sm border border-(--border) object-cover" key={index} src={item.url} alt={`${detail.title} ${index + 1}`} loading="lazy" />
                                     ))}
                                 </div>
                             </section>

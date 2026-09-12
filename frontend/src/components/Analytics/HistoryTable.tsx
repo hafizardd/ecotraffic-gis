@@ -26,19 +26,19 @@ function StatusBadge({ record }: { record: EmissionHistoryRecord }) {
     const label = record.is_interpolated ? "Perkiraan jam" : record.quality_status === "estimated" ? "Perkiraan" : "Terukur";
     const qualityClass = record.is_interpolated ? "bg-[#334155] text-[#cbd5e1]" : record.quality_status === "estimated" ? "bg-[rgba(245,165,36,0.12)] text-[#fbbf24]" : "bg-[rgba(34,197,94,0.12)] text-[#4ade80]";
     return <div className="flex flex-col gap-1">
-        <span className={`inline-block w-fit rounded-full px-2 py-[3px] text-[9px] font-[var(--weight-strong)] ${qualityClass}`}>{label}</span>
-        <small className="text-[9px] text-[var(--muted)]">{formatSourceMode(record.source_mode)} · {record.freshness_status === "fresh" ? "segar" : "perlu diperbarui"}</small>
+        <span className={`inline-block w-fit rounded-full px-2 py-[3px] text-[9px] font-(--weight-strong) ${qualityClass}`}>{label}</span>
+        <small className="text-[9px] text-(--muted)">{formatSourceMode(record.source_mode)} · {record.freshness_status === "fresh" ? "segar" : "perlu diperbarui"}</small>
     </div>;
 }
 
 function VehicleBreakdown({ volume }: { volume: VehicleRates | null }) {
-    if (!volume) return <span className="text-[9px] text-[var(--muted)]">Tidak tersedia</span>;
-    return <span className="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[3px] text-[9px] text-[var(--secondary)]">{VEHICLES.map(({ key, label }) => <span key={key}>{label} {fmtIntId(volume[key])}</span>)}</span>;
+    if (!volume) return <span className="text-[9px] text-(--muted)">Tidak tersedia</span>;
+    return <span className="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[3px] text-[9px] text-(--secondary)">{VEHICLES.map(({ key, label }) => <span key={key}>{label} {fmtIntId(volume[key])}</span>)}</span>;
 }
 
 function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
-    const groupClass = "[&_h4]:mt-0 [&_h4]:mb-[9px] [&_h4]:text-[9px] [&_h4]:font-[var(--weight-strong)] [&_h4]:tracking-[0.1em] [&_h4]:text-[var(--secondary)] [&_h4]:uppercase [&_h4:not(:first-child)]:mt-4 [&_dl]:m-0 [&_dl]:grid [&_dl]:gap-1.5 [&_dl>div]:flex [&_dl>div]:items-center [&_dl>div]:justify-between [&_dl>div]:gap-3 [&_dl>div]:text-[11px] [&_dt]:inline-flex [&_dt]:items-center [&_dt]:gap-1.5 [&_dt]:text-[var(--secondary)] [&_dt_i]:h-2 [&_dt_i]:w-2 [&_dt_i]:rounded-full [&_dd]:m-0 [&_dd]:text-right [&_dd]:text-[var(--text)] [&_dd]:tabular-nums";
-    return <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[18px] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card-2)] p-[14px]">
+    const groupClass = "[&_h4]:mt-0 [&_h4]:mb-[9px] [&_h4]:text-[9px] [&_h4]:font-(--weight-strong) [&_h4]:tracking-[0.1em] [&_h4]:text-(--secondary) [&_h4]:uppercase [&_h4:not(:first-child)]:mt-4 [&_dl]:m-0 [&_dl]:grid [&_dl]:gap-1.5 [&_dl>div]:flex [&_dl>div]:items-center [&_dl>div]:justify-between [&_dl>div]:gap-3 [&_dl>div]:text-[11px] [&_dt]:inline-flex [&_dt]:items-center [&_dt]:gap-1.5 [&_dt]:text-(--secondary) [&_dt_i]:h-2 [&_dt_i]:w-2 [&_dt_i]:rounded-full [&_dd]:m-0 [&_dd]:text-right [&_dd]:text-(--text) [&_dd]:tabular-nums";
+    return <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[18px] rounded-md border border-(--border) bg-(--card-2) p-[14px]">
         <div className={groupClass}>
             <h4>Laju polutan · {record.units.emissions}</h4>
             <dl>{EMISSION_DEFINITIONS.map((p) => <div key={p.key}><dt><i style={{ background: p.color }} />{p.label}</dt><dd>{record.emissions_kg_h[p.key] == null ? "-" : fmtFloatId(record.emissions_kg_h[p.key], 6)}</dd></div>)}</dl>
@@ -160,7 +160,7 @@ export default function HistoryTable() {
 
     function sortHeader(label: string, sortKey: SortKey) {
         const active = sort === sortKey;
-        return <button type="button" className={`inline-flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-[10px] py-[9px] text-[8px] font-[var(--weight-strong)] tracking-[0.08em] uppercase hover:text-[var(--text)] [&>span]:text-[9px] ${active ? "text-[var(--green)]" : "text-[var(--muted)]"}`} onClick={() => changeSort(sortKey)}>
+        return <button type="button" className={`inline-flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-[10px] py-[9px] text-[8px] font-(--weight-strong) tracking-[0.08em] uppercase hover:text-(--text) [&>span]:text-[9px] ${active ? "text-(--green)" : "text-(--muted)"}`} onClick={() => changeSort(sortKey)}>
             {label}<span aria-hidden="true">{active ? (order === "asc" ? "▲" : "▼") : "↕"}</span>
         </button>;
     }
@@ -169,20 +169,20 @@ export default function HistoryTable() {
         <SectionTitle title="Riwayat perhitungan segmen" meta={`Laju polutan dalam ${view?.units.emissions ?? data?.units.emissions ?? "kg/hour"}; data perkiraan dikecualikan, jam perkiraan ditandai.`} aside={`${fmtIntId(view?.total ?? 0)} catatan`} />
 
         <div className="mt-[14px] mb-1 flex flex-wrap items-center gap-3">
-            <div className="inline-flex gap-[3px] rounded-full border border-[var(--border)] bg-[var(--card-2)] p-[3px]" role="tablist" aria-label="Status mutu data">
+            <div className="inline-flex gap-[3px] rounded-full border border-(--border) bg-(--card-2) p-[3px]" role="tablist" aria-label="Status mutu data">
                 {TABS.map(({ key: tabKey, label }) => <button key={tabKey} ref={(node) => { tabRefs.current[tabKey] = node; }} type="button" role="tab" aria-selected={tab === tabKey} tabIndex={tab === tabKey ? 0 : -1}
-                    className={`min-h-9 cursor-pointer rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)] max-[760px]:min-h-11 ${tab === tabKey ? "bg-[#102238]! text-[#4ade80]!" : "text-[var(--secondary)]"}`} onClick={() => switchTab(tabKey)} onKeyDown={(event) => moveTab(event, tabKey)}>{label}</button>)}
+                    className={`min-h-9 cursor-pointer rounded-full border-0 bg-transparent px-4 py-1.5 text-xs font-semibold hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--green) max-[760px]:min-h-11 ${tab === tabKey ? "bg-[#102238]! text-[#4ade80]!" : "text-(--secondary)"}`} onClick={() => switchTab(tabKey)} onKeyDown={(event) => moveTab(event, tabKey)}>{label}</button>)}
             </div>
-            <label className="relative flex h-[var(--control-height)] min-w-[220px] flex-[1_1_260px] items-center gap-2 rounded-[var(--radius-sm)] border border-[#334155] bg-[#102238] px-3 text-[var(--muted)] [&>svg]:h-[15px] [&>svg]:w-[15px] [&>svg]:shrink-0">
+            <label className="relative flex h-(--control-height) min-w-[220px] flex-[1_1_260px] items-center gap-2 rounded-sm border border-[#334155] bg-[#102238] px-3 text-(--muted) [&>svg]:h-[15px] [&>svg]:w-[15px] [&>svg]:shrink-0">
                 <Search aria-hidden="true" />
                 <input className="min-w-0 flex-1 border-0 bg-transparent text-xs text-[#edf5ff] outline-none placeholder:text-[#64748b]" type="search" value={searchInput} aria-label="Cari riwayat"
                     placeholder="Cari nama jalan, segmen, atau informasi lain"
                     onChange={(event) => setSearchInput(event.target.value)} />
-                {searchInput && <button className="grid h-[22px] w-[22px] cursor-pointer place-items-center rounded-full border-0 bg-transparent text-[var(--muted)] hover:text-[var(--text)] [&>svg]:h-3.5 [&>svg]:w-3.5" type="button" aria-label="Bersihkan pencarian" onClick={() => setSearchInput("")}><X aria-hidden="true" /></button>}
+                {searchInput && <button className="grid h-[22px] w-[22px] cursor-pointer place-items-center rounded-full border-0 bg-transparent text-(--muted) hover:text-(--text) [&>svg]:h-3.5 [&>svg]:w-3.5" type="button" aria-label="Bersihkan pencarian" onClick={() => setSearchInput("")}><X aria-hidden="true" /></button>}
             </label>
             <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center gap-[7px] [&>svg]:h-[15px] [&>svg]:w-[15px]`} aria-haspopup="dialog" onClick={() => setDrawerOpen(true)}>
                 <SlidersHorizontal aria-hidden="true" /> Filter
-                {activeFilterCount > 0 && <span className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[var(--green)] px-[5px] text-[10px] font-bold text-[#062018]" aria-label={`${activeFilterCount} filter aktif`}>{activeFilterCount}</span>}
+                {activeFilterCount > 0 && <span className="inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-(--green) px-[5px] text-[10px] font-bold text-[#062018]" aria-label={`${activeFilterCount} filter aktif`}>{activeFilterCount}</span>}
             </button>
         </div>
 
@@ -192,10 +192,10 @@ export default function HistoryTable() {
         {!view && loading ? <SkeletonRows rows={6} height={54} />
             : !view && error ? <p role="alert" className={ANALYTICS_ERROR_CLASS}>{error}</p>
             : !view?.data.length ? <div className={UNAVAILABLE_STATE_CLASS}>Tidak ada pengamatan segmen pada rentang dan lokasi ini.</div>
-            : <div className={`${TABLE_WRAP_CLASS} max-h-[620px] overflow-auto rounded-[var(--radius-md)] border border-[var(--border)]`}>
-                <table className={`${PRIORITY_TABLE_CLASS} min-w-[900px] [&_th]:sticky [&_th]:top-0 [&_th]:z-[2] [&_th]:bg-[#0e1d2e] [&_th]:p-0 [&_td]:px-[10px] [&_td]:py-3 [&_td]:align-top [&_small]:text-[var(--muted)]`}>
+            : <div className={`${TABLE_WRAP_CLASS} max-h-[620px] overflow-auto rounded-md border border-(--border)`}>
+                <table className={`${PRIORITY_TABLE_CLASS} min-w-[900px] [&_th]:sticky [&_th]:top-0 [&_th]:z-[2] [&_th]:bg-[#0e1d2e] [&_th]:p-0 [&_td]:px-[10px] [&_td]:py-3 [&_td]:align-top [&_small]:text-(--muted)`}>
                     <thead><tr>
-                        <th className="w-[46px] text-right text-[var(--secondary)] tabular-nums">No</th>
+                        <th className="w-[46px] text-right text-(--secondary) tabular-nums">No</th>
                         <th>{sortHeader("Waktu", "period_start")}</th>
                         <th>{sortHeader("Lokasi", "segment_name")}</th>
                         <th>Kendaraan / jam</th>
@@ -208,13 +208,13 @@ export default function HistoryTable() {
                         const no = (page - 1) * pageSize + index + 1;
                         return [
                             <tr key={record.id} className={open ? "[&>td]:bg-[#0e1d2e]" : ""}>
-                                <td className="w-[46px] text-right text-[var(--secondary)] tabular-nums">{no}</td>
+                                <td className="w-[46px] text-right text-(--secondary) tabular-nums">{no}</td>
                                 <td><strong>{fmtDateTimeId(record.observed_at)}</strong><br /><small>{fmtDateTimeId(record.period_start)} – {fmtDateTimeId(record.period_end)}</small></td>
                                 <td><strong>{record.segment_name}</strong><br /><small>{record.corridor_name}</small></td>
                                 <td><strong>{record.total_vehicles_per_hour == null ? "-" : fmtIntId(record.total_vehicles_per_hour)}</strong><VehicleBreakdown volume={record.volume_per_hour} /></td>
                                 <td className="text-right tabular-nums"><strong>{record.total_emissions_kg_h == null ? "-" : fmtFloatId(record.total_emissions_kg_h, 3)}</strong><br /><small>{record.units.emissions}</small></td>
                                 <td><StatusBadge record={record} /></td>
-                                <td><button type="button" className="grid h-10 w-10 cursor-pointer place-items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card-2)] text-[var(--secondary)] transition-colors duration-150 hover:border-[var(--green)] hover:text-[var(--text)] [&>svg]:h-3.5 [&>svg]:w-3.5" aria-expanded={open} aria-label={open ? `Tutup detail ${record.segment_name}` : `Buka detail ${record.segment_name}`} onClick={() => setExpanded(open ? null : record.id)}>
+                                <td><button type="button" className="grid h-10 w-10 cursor-pointer place-items-center rounded-sm border border-(--border) bg-(--card-2) text-(--secondary) transition-colors duration-150 hover:border-(--green) hover:text-(--text) [&>svg]:h-3.5 [&>svg]:w-3.5" aria-expanded={open} aria-label={open ? `Tutup detail ${record.segment_name}` : `Buka detail ${record.segment_name}`} onClick={() => setExpanded(open ? null : record.id)}>
                                     {open ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}</button></td>
                             </tr>,
                             open ? <tr key={`${record.id}-detail`}><td className="px-[10px]! pt-0! pb-[14px]!" colSpan={7}><DetailPanel record={record} /></td></tr> : null,

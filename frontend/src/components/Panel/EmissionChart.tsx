@@ -47,7 +47,7 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
 
     if (loading) return <div className="mx-[-5px] mt-0 mb-[-4px]" role="status" aria-label="Memuat tren emisi"><ChartSkeleton height={250} /></div>;
     if (error) return <div className={`${SEGMENT_EMPTY_CLASS} h-[190px] flex-col px-4 [&>strong]:text-[12px] [&>strong]:text-[#fca5a5]`} role="alert"><strong>Data tren tidak tersedia</strong><span>Riwayat emisi gagal dimuat.</span></div>;
-    if (!chartData.length) return <div className={`${SEGMENT_EMPTY_CLASS} h-[190px] flex-col px-4 [&>strong]:text-[12px] [&>strong]:text-[var(--text)]`} role="status"><strong>Belum ada data tren emisi</strong><span>Data akan muncul setelah monitoring dimulai.</span></div>;
+    if (!chartData.length) return <div className={`${SEGMENT_EMPTY_CLASS} h-[190px] flex-col px-4 [&>strong]:text-[12px] [&>strong]:text-(--text)`} role="status"><strong>Belum ada data tren emisi</strong><span>Data akan muncul setelah monitoring dimulai.</span></div>;
 
     function toggleSeries(key: string) {
         setSelected((current) => {
@@ -59,8 +59,8 @@ export default function EmissionChart({ cameraId, liveEmission }: EmissionChartP
     const firstTimestamp = chartData.at(0)?.timestamp;
     const lastTimestamp = chartData.at(-1)?.timestamp;
 
-    return <div className="mx-[-5px] mt-0 mb-[-4px] outline-none focus-visible:rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[var(--green)]">
-        {chartData.length === 1 && <div className="mx-[5px] mt-0 mb-[5px] rounded-[var(--radius-sm)] border border-[rgba(245,165,36,0.2)] bg-[rgba(245,165,36,0.08)] px-2 py-1.5 text-center text-[9px] text-[#f5c35f]">Menunggu data berikutnya untuk membentuk tren</div>}
+    return <div className="mx-[-5px] mt-0 mb-[-4px] outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-(--green)">
+        {chartData.length === 1 && <div className="mx-[5px] mt-0 mb-[5px] rounded-sm border border-[rgba(245,165,36,0.2)] bg-[rgba(245,165,36,0.08)] px-2 py-1.5 text-center text-[9px] text-[#f5c35f]">Menunggu data berikutnya untuk membentuk tren</div>}
         <SeriesToggles items={EMISSION_DEFINITIONS.map(({ key, label, color }) => ({ key, label, color }))} active={selected} onToggle={toggleSeries} label="Polutan pada grafik kamera" compact />
         {selected.size ? <ResponsiveContainer width="100%" height={250} initialDimension={{ width: 400, height: 250 }}>
             <LineChart data={chartData} margin={{ top: 12, right: 10, left: 2, bottom: 4 }} accessibilityLayer>

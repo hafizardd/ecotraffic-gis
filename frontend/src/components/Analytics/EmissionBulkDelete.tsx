@@ -6,7 +6,7 @@ import { fmtIntId } from "@/utils/format";
 import type { AnalyticsQuery } from "@/types";
 import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS } from "@/styles/tailwind";
 
-const PAGINATION_PAGE_CLASS = "min-w-7 cursor-pointer rounded-[var(--radius-sm)] border border-[#1d3a5c] bg-[#0b1a2b] px-[10px] py-1.5 text-xs font-semibold text-[var(--secondary)] tabular-nums enabled:hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green)]";
+const PAGINATION_PAGE_CLASS = "min-w-7 cursor-pointer rounded-sm border border-[#1d3a5c] bg-[#0b1a2b] px-[10px] py-1.5 text-xs font-semibold text-(--secondary) tabular-nums enabled:hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--green)";
 
 type Scope = "beyond" | "page";
 
@@ -66,14 +66,14 @@ export default function EmissionBulkDelete({ query: queryOverride, page, pageSiz
 
     return <div className="my-[14px] flex flex-wrap items-center gap-[10px] text-xs text-[#94a3b8]">
         <label className="inline-flex items-center gap-1.5">Jangkauan
-            <select className="rounded-[var(--radius-sm)] border border-[#1d3a5c] bg-[#0b1a2b] px-2 py-1.5 text-xs text-[var(--text)]" value={scope} disabled={busy} onChange={(event) => { setScope(event.target.value as Scope); setMatched(null); setResult(null); }}>
+            <select className="rounded-sm border border-[#1d3a5c] bg-[#0b1a2b] px-2 py-1.5 text-xs text-(--text)" value={scope} disabled={busy} onChange={(event) => { setScope(event.target.value as Scope); setMatched(null); setResult(null); }}>
                 <option value="beyond">Hapus setelah halaman</option>
                 <option value="page">Hapus hanya halaman ini</option>
             </select>
         </label>
         <span className="inline-flex items-center gap-1.5">Halaman
             <button type="button" className={PAGINATION_PAGE_CLASS} disabled={busy} aria-label="Kurangi nomor halaman" onClick={() => step(-1)}>−</button>
-            <input className="rounded-[var(--radius-sm)] border border-[#1d3a5c] bg-[#0b1a2b] px-2 py-1.5 text-xs text-[var(--text)]" type="number" min={1} max={scope === "page" ? totalPages : undefined} value={targetText} disabled={busy} aria-label="Nomor halaman"
+            <input className="rounded-sm border border-[#1d3a5c] bg-[#0b1a2b] px-2 py-1.5 text-xs text-(--text)" type="number" min={1} max={scope === "page" ? totalPages : undefined} value={targetText} disabled={busy} aria-label="Nomor halaman"
                 onChange={(event) => { setTargetText(event.target.value); setMatched(null); setResult(null); }}
                 onBlur={() => commitTarget()}
                 onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commitTarget(); } }} />
