@@ -15,10 +15,10 @@ STATIC_PROPERTY_KEYS = {
 }
 
 
-def _cell(hex_id, ranking):
+def _cell(hex_id, ranking, volume_mean=5.0):
     return SimpleNamespace(
         hex_id=hex_id, luas_km2=1.0, poi_total=3, poi_breakdown={"Kuliner": 3}, penduduk=100,
-        volume_mean=5.0, norm_volume=50.0, norm_poi=60.0, norm_penduduk=70.0,
+        volume_mean=volume_mean, norm_volume=50.0, norm_poi=60.0, norm_penduduk=70.0,
         skor_total_ahp=55.0, ranking=ranking, klasifikasi_potensi="Sedang",
         ahp_weight_version="hex-ahp-v1", source="excel",
     )
@@ -99,7 +99,7 @@ def test_live_hour_returns_recomputed_features(monkeypatch):
     _patch_volumes(monkeypatch, {1: 10.0, 2: 20.0})
     _patch_profile_hour(monkeypatch, datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc))
     db = _DB([
-        _Result(rows=[(_cell(1, 1), 110.37, -7.79), (_cell(2, 2), 110.38, -7.80)]),
+        _Result(rows=[(_cell(1, 1, volume_mean=10.0), 110.37, -7.79), (_cell(2, 2, volume_mean=20.0), 110.38, -7.80)]),
         _Result(rows=[(1, {"type": "Polygon", "coordinates": []}), (2, {"type": "Polygon", "coordinates": []})]),
     ])
     response = _client(db).get("/api/spatial/activity-grid?hour=2026-09-10T13:00:00Z")
@@ -110,7 +110,9 @@ def test_live_hour_returns_recomputed_features(monkeypatch):
     assert features[1]["properties"]["norm_volume"] is not None
 
 
-def test_hour_without_coverage_is_200_with_no_data_hexes(monkeypatch):
+def test_hour_without_coverage_scores_static_volume_mean_as_fallback(monkeypatch):
+    # With no hourly sample the grid keeps its own historical volume_mean, so
+    # the hour is estimated (fallback), not blank.
     _patch_volumes(monkeypatch, {})
     _patch_profile_hour(monkeypatch, datetime(2020, 1, 1, 0, 0, tzinfo=timezone.utc))
     db = _DB([
@@ -120,9 +122,9 @@ def test_hour_without_coverage_is_200_with_no_data_hexes(monkeypatch):
     response = _client(db).get("/api/spatial/activity-grid?hour=2020-01-01T00:00:00Z")
     assert response.status_code == 200
     properties = response.json()["features"][0]["properties"]
-    assert properties["data_status"] == "no_data"
-    assert properties["norm_volume"] is None
-    assert properties["klasifikasi_potensi"] is None
+    assert properties["data_status"] == "fallback"
+    assert properties["norm_volume"] is not None
+    assert properties["klasifikasi_potensi"] is not None
 
 
 def test_static_grid_response_is_unchanged():
