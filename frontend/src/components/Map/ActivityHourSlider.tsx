@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Clock, Pause, Play } from "lucide-react";
-import { sliderIndex } from "@/utils/activityGrid";
+import { autoplayStep, sliderIndex } from "@/utils/activityGrid";
 import { fmtDateTimeId } from "@/utils/format";
 import type { ActivityTimeMode } from "@/types";
 
 const PLAY_INTERVAL_MS = 1000;
+// Autoplay begins this long after the whole 24h profile is cached, so playback
+// never starts before the grid has actually been updated.
+const AUTO_START_DELAY_MS = 1000;
 
 const TIME_MODES: { key: ActivityTimeMode; label: string }[] = [
     { key: "live", label: "Live" },
@@ -17,7 +20,7 @@ const TIME_MODES: { key: ActivityTimeMode; label: string }[] = [
 // profile (drag debounces the committed hour; play auto-advances left to right).
 // In live the slider is replaced by a live indicator: the grid reads each
 // segment's newest observed fact and repolls, so there is no hour to scrub.
-export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay, displayedCount, resolution, aggregated, stale, timeMode, onTimeModeChange, updatedAt }: {
+export default function ActivityHourSlider({ hours, value, onChange, day, onChangeDay, displayedCount, resolution, aggregated, stale, ready, timeMode, onTimeModeChange, updatedAt }: {
     hours: string[];
     value: string | null;
     onChange: (hour: string) => void;
@@ -27,6 +30,7 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
     resolution: string;
     aggregated: boolean;
     stale: boolean;
+    ready: boolean;
     timeMode: ActivityTimeMode;
     onTimeModeChange: (mode: ActivityTimeMode) => void;
     updatedAt: string | null;
@@ -48,23 +52,39 @@ export default function ActivityHourSlider({ hours, value, onChange, day, onChan
     const [playing, setPlaying] = useState(false);
     const last = hours.length - 1;
     const selected = Math.min(Math.max(preview ?? index, 0), Math.max(last, 0));
+    const autoStarted = useRef(false);
 
-    // One hour per tick, left to right; stop when the rightmost hour is reached.
-    // Rescheduling on `selected` (a timeout, not an interval) keeps the next step
-    // visually aligned with the hour that was just committed.
+    // Start playback once the whole 24h profile is cached, one second later.
+    // Once per replay entry: a later pan/zoom refetch must not restart it.
     useEffect(() => {
-        if (!playing) return;
+        if (timeMode !== "replay") {
+            autoStarted.current = false;
+            return;
+        }
+        if (!ready || autoStarted.current || last < 1) return;
+        autoStarted.current = true;
         const timer = window.setTimeout(() => {
-            const next = selected + 1;
-            if (next > last) {
-                setPlaying(false);
-                return;
-            }
-            setPreview(next);
-            onChange(hours[next]);
+            setPreview(0);
+            onChange(hours[0]);
+            setPlaying(true);
+        }, AUTO_START_DELAY_MS);
+        return () => window.clearTimeout(timer);
+    }, [ready, timeMode, last, hours, onChange]);
+
+    // One hour per tick, left to right; stop at the rightmost hour. Each step
+    // waits until the current hour's data has settled (`stale` false), so the
+    // map can never lag behind the slider label.
+    useEffect(() => {
+        if (!playing || stale) return;
+        const step = autoplayStep(playing, stale, selected, last);
+        const timer = window.setTimeout(() => {
+            if (step.action === "stop") { setPlaying(false); return; }
+            if (step.action === "wait") return;
+            setPreview(step.next);
+            onChange(hours[step.next]);
         }, PLAY_INTERVAL_MS);
         return () => window.clearTimeout(timer);
-    }, [playing, selected, last, hours, onChange]);
+    }, [playing, stale, selected, last, hours, onChange]);
 
     if (timeMode === "replay" && hours.length === 0) return null;
 

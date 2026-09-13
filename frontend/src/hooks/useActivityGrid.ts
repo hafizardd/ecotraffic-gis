@@ -38,6 +38,15 @@ export default function useActivityGrid(bbox: string | null, hour: string | null
     // Aggregated tiers are region-wide, so they ignore the viewport and stay
     // cached across pans (only `fine` keeps a viewport-scoped key).
     const scopeBbox = useMemo(() => (isWholeRegionLod(lod) ? null : bbox), [lod, bbox]);
+    // Readiness is derived from a key, not reset by an effect: when the scope,
+    // lod, or hour set changes the key changes and readiness falls back to false
+    // automatically. Autoplay waits for this so it never steps ahead of the data.
+    const prefetchKey = useMemo(() => {
+        if (!enabled || live || hours.length === 0) return null;
+        return `${scopeBbox ?? "all"}|${lod}|${hours[0]}|${hours[hours.length - 1]}|${hours.length}`;
+    }, [enabled, live, scopeBbox, lod, hours]);
+    const [prefetchReadyKey, setPrefetchReadyKey] = useState<string | null>(null);
+    const prefetchReady = prefetchKey !== null && prefetchReadyKey === prefetchKey;
 
     // Live repoll. The reconcile cadence is ~minute-scale, so this is a prompt
     // pick-up of the newest facts, not a high-frequency feed.
@@ -79,7 +88,7 @@ export default function useActivityGrid(bbox: string | null, hour: string | null
     // the slider is a cache hit (instant, no per-tick network round-trip). The
     // profile is meaningless in live mode, so skip it there.
     useEffect(() => {
-        if (!enabled || live || hours.length === 0) return;
+        if (prefetchKey === null) return;
         const controller = new AbortController();
         let cancelled = false;
         (async () => {
@@ -93,12 +102,14 @@ export default function useActivityGrid(bbox: string | null, hour: string | null
                     if (cache.current.size >= CACHE_LIMIT) cache.current.clear();
                     cache.current.set(key, value);
                 } catch {
+                    // A failed hour leaves playback manual; never claim readiness.
                     return;
                 }
             }
+            if (!cancelled) setPrefetchReadyKey(prefetchKey);
         })();
         return () => { cancelled = true; controller.abort(); };
-    }, [scopeBbox, enabled, lod, hours, live]);
+    }, [prefetchKey, scopeBbox, enabled, lod, hours, live]);
 
     // Near a tier boundary, warm the adjacent tier for the current hour so a
     // mid-zoom size swap is a cache hit instead of a wait.
@@ -118,7 +129,7 @@ export default function useActivityGrid(bbox: string | null, hour: string | null
         return () => controller.abort();
     }, [prefetchTier, lod, bbox, hour, enabled, live]);
 
-    return { activityGrid, error, stale, updatedAt };
+    return { activityGrid, error, stale, updatedAt, prefetchReady };
 }
 
 // Availability is fetched once so the slider never probes hour-by-hour.
