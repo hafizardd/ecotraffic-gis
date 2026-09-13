@@ -52,6 +52,8 @@ SYSTEM_PROMPT = (
     "Jika konteks memuat 'displayed_hour_label', itu adalah jam/tanggal yang sedang dilihat pengguna pada peta; "
     "sebut waktu itu apa adanya saat menjelaskan sel grid, dan gunakan nilai hex_cell (skor_total_ahp, ranking, "
     "klasifikasi_potensi, data_status) sebagai nilai pada jam tersebut (field 'static' hanyalah snapshot offline). "
+    "Jika konteks memuat data_mode='live', nilai hex_cell adalah pembacaan live TERBARU (bukan jam REPLAY tertentu); "
+    "sebut sebagai data live dan JANGAN menyebut jam tampilan. "
     "Jika data_status='fallback', sebut nilainya perkiraan dari sel terdekat; jika is_interpolated=true, sebut hasil interpolasi. "
     "Jika konteks memuat penilaian kualitas halte ('stop' atau scope='bus_stops'), data itu TERSEDIA: jawab dari situ "
     "dan JANGAN pernah menyatakan penilaian kualitas halte tidak tersedia. "
@@ -211,6 +213,9 @@ class ChatRequest(BaseModel):
     stop_id: str | None = None
     hour: str | None = None
     hour_label: str | None = None
+    # "live" reads the newest observed fact per segment; anything else is the
+    # static 24h profile addressed by ``hour``.
+    time_mode: str | None = None
     history: list[HistoryTurn] = Field(default_factory=list)
 
 
@@ -902,7 +907,8 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     timings["resolve_ms"] = round((time.monotonic() - started) * 1000, 2)
 
     hour = _parse_hour(payload.hour)
-    cache_scope = {**scope, "hour": payload.hour, "hour_label": payload.hour_label}
+    live = payload.time_mode == "live"
+    cache_scope = {**scope, "hour": payload.hour, "hour_label": payload.hour_label, "time_mode": payload.time_mode}
     cache_key = _chat_cache_key(payload.message, cache_scope, history)
     cached = await _cache_get(cache_key)
     if cached:
@@ -925,7 +931,7 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         context = bus_stop_payload(await build_bus_stop_overview_context(db))
         label = f"Ringkasan {context.get('jumlah_dinilai')} halte dinilai"
     elif kind == "hex":
-        built = await build_hex_context(db, scope["hex_id"], hour)
+        built = await build_hex_context(db, scope["hex_id"], None if live else hour, live=live)
         if built is None:
             return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
                     "detail": f"Hex {scope['hex_id']} tidak ditemukan pada grid aktivitas.",
@@ -933,13 +939,14 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         corridors = _merge_contexts(built["corridor_contexts"]) if built["corridor_contexts"] else None
         context = {
             "subject": {"type": "hex", "id": scope["hex_id"]},
-            "displayed_hour_label": payload.hour_label,
+            "data_mode": "live" if live else None,
+            "displayed_hour_label": None if live else payload.hour_label,
             "observed_hour": built.get("observed_hour"),
             "hex_cell": built["hex_cell"],
             "corridors": corridors,
         }
         label = f"grid Hex {scope['hex_id']}"
-        if payload.hour_label:
+        if payload.hour_label and not live:
             label += f" · {payload.hour_label}"
         if corridors:
             label += f" · {corridors['segment']['name']}"
@@ -979,6 +986,7 @@ class AutoInsightRequest(BaseModel):
     stop_id: str | None = None
     hour: str | None = None
     hour_label: str | None = None
+    time_mode: str | None = None
 
 
 async def _entity_segment_ids(db: AsyncSession, payload: AutoInsightRequest) -> tuple[list[str], dict | None]:
@@ -1005,7 +1013,8 @@ async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = De
                 "cached": False, "detail": "Pilih segmen, sel grid, atau halte terlebih dahulu."}
 
     hour = _parse_hour(payload.hour)
-    cache_key = f"bangjo:autoinsight:{entity['type']}:{entity['id']}:{payload.hour or ''}"
+    live = payload.time_mode == "live"
+    cache_key = f"bangjo:autoinsight:{entity['type']}:{entity['id']}:{payload.hour or ''}:{payload.time_mode or ''}"
     cached = await _cache_get(cache_key)
     if cached:
         try:
@@ -1016,7 +1025,7 @@ async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = De
             pass
 
     if entity["type"] == "hex":
-        built = await build_hex_context(db, entity["id"], hour)
+        built = await build_hex_context(db, entity["id"], None if live else hour, live=live)
         if built is None:
             return {"needs_selection": True, "answer": None, "context_label": None, "entity": entity,
                     "cached": False, "detail": f"Hex {entity['id']} tidak ditemukan pada grid aktivitas."}
@@ -1024,14 +1033,15 @@ async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = De
         corridors = _merge_contexts(corridor_contexts) if corridor_contexts else None
         context = {
             "subject": entity,
-            "displayed_hour_label": payload.hour_label,
+            "data_mode": "live" if live else None,
+            "displayed_hour_label": None if live else payload.hour_label,
             "observed_hour": built.get("observed_hour"),
             "hex_cell": built["hex_cell"],
             "corridors": corridors,
         }
         prompt = AUTO_INSIGHT_PROMPT_CORRIDOR if corridors else AUTO_INSIGHT_PROMPT_HEX_ONLY
         label = f"grid Hex {entity['id']}"
-        if payload.hour_label:
+        if payload.hour_label and not live:
             label += f" · {payload.hour_label}"
         if corridors:
             label += f" · {corridors['segment']['name']}"

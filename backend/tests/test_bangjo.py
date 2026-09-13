@@ -879,7 +879,7 @@ async def test_auto_insight_maps_hex_and_caches(monkeypatch):
     store = {}
     captured = {}
 
-    async def fake_build_hex_context(db, hex_id, hour=None):
+    async def fake_build_hex_context(db, hex_id, hour=None, live=False):
         captured["hour"] = hour
         return {"hex_cell": _hex_cell(hex_id), "observed_hour": "2026-09-12T05:00:00+00:00",
                 "corridor_contexts": [_context()]}
@@ -927,7 +927,7 @@ async def test_auto_insight_maps_hex_and_caches(monkeypatch):
 async def test_auto_insight_hex_without_segments_answers_from_cell(monkeypatch):
     captured = {}
 
-    async def fake_build_hex_context(db, hex_id, hour=None):
+    async def fake_build_hex_context(db, hex_id, hour=None, live=False):
         return {"hex_cell": _hex_cell(hex_id), "observed_hour": None, "corridor_contexts": []}
 
     async def fake_ask_llm(prompt, context, history, *args, **kwargs):
@@ -1008,7 +1008,7 @@ async def test_auto_insight_stop_discloses_nearest_segment(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_auto_insight_unknown_hex_is_needs_selection(monkeypatch):
-    async def fake_build_hex_context(db, hex_id, hour=None):
+    async def fake_build_hex_context(db, hex_id, hour=None, live=False):
         return None
 
     async def fake_get(key):

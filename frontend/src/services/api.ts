@@ -1,7 +1,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
-import { ActivityGridFeature, ActivityGridFeatureCollection, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoChatFocus, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
+import { ActivityGridFeature, ActivityGridFeatureCollection, ActivityTimeMode, BangJoAutoInsightReply, BangJoAutoInsightRequest, BangJoChatFocus, BangJoReply, BusStopDetail, CameraEmissionsResponse, CameraFeatureCollection, SegmentEmissionDetail, SegmentFeatureCollection, SpatialFeatureCollection } from "@/types";
 import type { GridLod } from "@/utils/activityGrid";
 import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, HistoricalCameraResponse, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
@@ -46,15 +46,17 @@ async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
 
 export const fetchSurveyStops = (bbox?: string) => fetchSpatial(`/api/spatial/survey-stops?limit=200${bbox ? `&bbox=${encodeURIComponent(bbox)}` : ""}`);
 
-export async function fetchActivityGrid(bbox?: string, hour?: string | null, lod: GridLod = "fine", signal?: AbortSignal): Promise<ActivityGridFeatureCollection> {
+export async function fetchActivityGrid(bbox?: string, hour?: string | null, lod: GridLod = "fine", signal?: AbortSignal, mode: ActivityTimeMode = "replay"): Promise<ActivityGridFeatureCollection> {
     const params = new URLSearchParams();
     // Every LOD is viewport-scoped: the count card and quantile breaks are
     // recalculated from whatever is on screen.
     if (bbox) params.set("bbox", bbox);
-    if (hour) params.set("hour", hour);
+    if (mode === "live") params.set("mode", "live");
+    else if (hour) params.set("hour", hour);
     if (lod !== "fine") params.set("lod", lod);
     const query = params.toString();
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`, { signal });
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`,
+        { signal, cache: mode === "live" ? "no-store" : undefined });
     if (!response.ok) throw new Error(`Failed to fetch activity grid: ${response.statusText}`);
     return response.json();
 }
@@ -74,8 +76,13 @@ export async function fetchActivityGridAvailableHours(): Promise<ActivityGridAva
     return response.json();
 }
 
-export async function fetchActivityGridHex(hexId: number, hour?: string | null): Promise<ActivityGridFeature> {
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}${hour ? `?hour=${encodeURIComponent(hour)}` : ""}`);
+export async function fetchActivityGridHex(hexId: number, hour?: string | null, mode: ActivityTimeMode = "replay"): Promise<ActivityGridFeature> {
+    const params = new URLSearchParams();
+    if (mode === "live") params.set("mode", "live");
+    else if (hour) params.set("hour", hour);
+    const query = params.toString();
+    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}${query ? `?${query}` : ""}`,
+        { cache: mode === "live" ? "no-store" : undefined });
     if (!response.ok) throw new Error(`Failed to fetch activity grid hex: ${response.statusText}`);
     return response.json();
 }
