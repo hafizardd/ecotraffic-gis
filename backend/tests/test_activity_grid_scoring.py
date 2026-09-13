@@ -5,29 +5,48 @@ from app.services.classification import quintile_classify
 from app.services.hex_activity_scoring import recompute_hour_scores
 
 
-def _hex(hex_id):
-    return SimpleNamespace(hex_id=hex_id, norm_poi=50.0, norm_penduduk=50.0)
+def _hex(hex_id, volume_mean=None):
+    return SimpleNamespace(hex_id=hex_id, norm_poi=50.0, norm_penduduk=50.0, volume_mean=volume_mean)
 
 
-def test_recompute_flags_unmapped_hexes_with_nearest_neighbour_fallback():
+def test_recompute_labels_observed_and_baseline_grids_on_one_rank_scale():
+    # Hex 2 has an hourly volume; 1 and 3 fall back to their own volume_mean.
+    # All three share one ranking and one quintile scale (the Excel model).
     scores = recompute_hour_scores(
-        [_hex(1), _hex(2), _hex(3)],
-        {1: 100.0},
-        {1: (0.0, 0.0), 2: (0.01, 0.0), 3: (1.0, 0.0)},
+        [_hex(1, volume_mean=10.0), _hex(2, volume_mean=20.0), _hex(3, volume_mean=30.0)],
+        {2: 100.0},
     )
+    assert scores[2]["data_status"] == "live"
+    assert scores[1]["data_status"] == "fallback"
+    assert scores[3]["data_status"] == "fallback"
+    assert sorted(scores[i]["ranking"] for i in (1, 2, 3)) == [1, 2, 3]
+    # Every grid - observed or estimated - gets the class of its rank.
+    for hex_id in (1, 2, 3):
+        rank = scores[hex_id]["ranking"]
+        assert scores[hex_id]["klasifikasi_potensi"] == quintile_classify(rank, 3)[1]
+        assert scores[hex_id]["ranking_total"] == 3
+
+
+def test_recompute_borrows_nearest_observed_volume():
+    hexes = [_hex(1, volume_mean=10.0), _hex(2, volume_mean=20.0), _hex(3, volume_mean=30.0)]
+    centroids = {1: (0.0, 0.0), 2: (0.01, 0.0), 3: (1.0, 0.0)}
+    scores = recompute_hour_scores(hexes, {1: 10.0, 3: 30.0}, centroids)
     assert scores[1]["data_status"] == "live"
+    assert scores[3]["data_status"] == "live"
     assert scores[2]["data_status"] == "fallback"
     assert scores[2]["fallback_from"] == 1
-    assert scores[2]["skor_total_ahp"] is not None
-    assert scores[3]["data_status"] == "fallback"
-    assert scores[3]["fallback_from"] == 1
-    assert scores[3]["ranking"] is None
-    # A borrowed cell still carries a tier label (from its own score, not a rank).
-    assert scores[3]["klasifikasi_potensi"] is not None
+    assert scores[2]["ranking"] is not None
 
 
-def test_recompute_without_centroids_keeps_unmapped_hexes_no_data():
-    scores = recompute_hour_scores([_hex(1), _hex(2)], {1: 50.0})
+def test_recompute_baseline_scoring_needs_no_centroids():
+    scores = recompute_hour_scores([_hex(1, volume_mean=10.0), _hex(2, volume_mean=20.0)], {1: 50.0})
+    assert scores[1]["data_status"] == "live"
+    assert scores[2]["data_status"] == "fallback"
+    assert scores[2]["ranking"] is not None
+
+
+def test_recompute_without_volume_or_baseline_stays_no_data():
+    scores = recompute_hour_scores([_hex(1, volume_mean=50.0), _hex(2)], {1: 50.0})
     assert scores[1]["data_status"] == "live"
     assert scores[2]["data_status"] == "no_data"
     assert scores[2]["skor_total_ahp"] is None

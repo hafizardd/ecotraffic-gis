@@ -2,24 +2,19 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { CAMERA_TIER_COLORS, activityGradientCss, interventionGradientCss, MAP_MODES, type MapLayerKey, type MapMode } from "@/constants/mapColors";
-import { formatNumber } from "@/utils/format";
+import { CAMERA_TIER_COLORS, FIVE_TIER_COLORS, interventionGradientCss, MAP_MODES, type MapLayerKey, type MapMode } from "@/constants/mapColors";
 
 interface MapLegendProps {
     mode: MapMode;
     segmentBuckets: { color: string; label: string }[];
     cameraHistorical?: number;
     cameraTotal: number;
-    activityBreaks?: number[] | null;
     layerVisibility: Record<MapLayerKey, boolean>;
 }
 
-export default function MapLegend({ mode, segmentBuckets, cameraHistorical = 0, cameraTotal, activityBreaks, layerVisibility }: MapLegendProps) {
+export default function MapLegend({ mode, segmentBuckets, cameraHistorical = 0, cameraTotal, layerVisibility }: MapLegendProps) {
     const [open, setOpen] = useState(false);
     const modeLabel = MAP_MODES.find((item) => item.key === mode)?.label ?? "";
-    const activityLabels = activityBreaks && activityBreaks.length >= 2
-        ? activityBreaks.map((value) => formatNumber(value, Math.abs(value) >= 10 ? 0 : 1))
-        : null;
 
     return (
         <aside className={`absolute left-3 z-19 flex max-h-[calc(100%-156px)] flex-col overflow-hidden rounded-md border border-(--contour-strong) bg-[rgba(11,32,41,0.94)] text-[11px] text-(--text) shadow-(--shadow-float) backdrop-blur-[10px] max-[760px]:left-2 max-[760px]:max-h-[48vh] ${mode === "potential" ? "bottom-3 max-[760px]:bottom-28" : "bottom-3 max-[760px]:bottom-2"} ${open ? "w-62 max-[760px]:right-2 max-[760px]:w-auto" : "w-auto max-w-55"}`} aria-label="Legenda peta">
@@ -54,13 +49,15 @@ export default function MapLegend({ mode, segmentBuckets, cameraHistorical = 0, 
                         <>
                             {layerVisibility.activityGrid && <section>
                                 <h3>Potensi aktivitas</h3>
-                                <div className="flex flex-col gap-1">
-                                    <div className="h-2.5 rounded-(--radius-badge)" style={{ background: activityGradientCss() }} />
-                                    {activityLabels
-                                        ? <div className="flex justify-between text-[10px] text-(--muted)">{activityLabels.map((label) => <span key={label}>{label}</span>)}</div>
-                                        : <div className="flex justify-between text-[10px] text-(--muted)"><span>Sangat rendah</span><span>Sangat tinggi</span></div>}
-                                </div>
-                                <p className="mt-2 mb-0 text-[10px] leading-4 text-(--muted)">Skala warna mengikuti sebaran skor di layar. Hexagon mengikuti zoom.</p>
+                                <ul className="m-0 flex list-none flex-col gap-1.5 p-0 [&_li]:flex [&_li]:items-center [&_li]:gap-2 [&_li]:text-[11px] [&_li]:text-(--secondary) [&_i]:h-2.5 [&_i]:w-2.5 [&_i]:flex-[0_0_10px] [&_i]:rounded-(--radius-badge)">
+                                    <li><i style={{ background: FIVE_TIER_COLORS.veryLow }} />Sangat Rendah</li>
+                                    <li><i style={{ background: FIVE_TIER_COLORS.low }} />Rendah</li>
+                                    <li><i style={{ background: FIVE_TIER_COLORS.medium }} />Sedang</li>
+                                    <li><i style={{ background: FIVE_TIER_COLORS.high }} />Tinggi</li>
+                                    <li><i style={{ background: FIVE_TIER_COLORS.veryHigh }} />Sangat Tinggi</li>
+                                    <li><i style={{ background: FIVE_TIER_COLORS.unknown }} />Tanpa data</li>
+                                </ul>
+                                <p className="mt-2 mb-0 text-[10px] leading-4 text-(--muted)">Warna mengikuti klasifikasi potensi sel, sama dengan panel detail. Hexagon mengikuti zoom.</p>
                             </section>}
                             {layerVisibility.surveyStops && <section>
                                 <h3>Kondisi halte (skor intervensi)</h3>

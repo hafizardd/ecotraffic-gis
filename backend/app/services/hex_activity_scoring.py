@@ -1,10 +1,15 @@
 """Live hourly re-scoring of the activity-potential hex grid.
 
-Only the volume input is recomputed from live ``segment_emissions`` rows; the
-offline ``norm_poi``/``norm_penduduk`` and the fixed AHP weights are reused
-as-is. A hex with no mapped segment (or no volume sample) in the hour keeps a
-``None`` score rather than a fabricated zero, mirroring the pipeline norm that
-missing spatial data is omitted, never invented.
+Reproduces the offline Excel model (``Skoring Grid Potensi Timbulan
+Kemacetan.xlsx``) at request time: each grid is scored from its three
+normalized AHP inputs, ranked across the whole grid, then split evenly into
+five classes by rank (``CHOOSE(ROUNDUP(rank*5/total))``).
+
+Volume adapts to the data source: a grid with a real hourly volume (live,
+historical, or gap-filled/interpolated) uses it; a grid without one uses its
+own stored historical ``volume_mean``. POI and population are static offline
+inputs. Grids with neither an hourly volume nor a ``volume_mean`` stay
+``no_data`` - missing spatial data is omitted, never invented.
 """
 
 from dataclasses import dataclass, field
@@ -25,10 +30,14 @@ from app.services.emission_analytics import (
 )
 from app.services.segment_estimate import is_interpolated_of, latest_observed_facts
 
-# From the 'AHP Bobot' Saaty matrix (CR = 0.0096). Same values the offline
-# importer verifies against; kept here as the single source of truth so the
-# live recomputation can never drift from the stored snapshot.
-HEX_AHP_WEIGHTS = {"volume": 0.5390, "poi": 0.2973, "penduduk": 0.1638}
+# 'AHP Bobot' B29-B31 from the Excel model (CR = 0.0096). Same values the
+# offline importer verifies against; full precision so the live recomputation
+# never drifts from the stored snapshot.
+HEX_AHP_WEIGHTS = {
+    "volume": 0.538961038961039,
+    "poi": 0.2972582972582973,
+    "penduduk": 0.16378066378066378,
+}
 
 NO_DATA = {"norm_volume": None, "skor_total_ahp": None, "ranking": None,
            "klasifikasi_potensi": None, "data_status": "no_data", "no_data_reason": None}
@@ -97,28 +106,12 @@ def aggregate_potential(members: list[tuple[str | None, float]]) -> int:
 def minmax_normalize(value: float, vmin: float, vmax: float) -> float:
     """The Excel model's ``1 + ((X-MIN)/(MAX-MIN))*99`` scale (1..100).
 
-    A degenerate hour (every observed hex has the same volume) has no spread to
-    normalize against; the observed value is the maximum, so it maps to 100.
+    A degenerate grid (every reference value equal, e.g. a single cell) has no
+    spread to normalize against; the value is the maximum, so it maps to 100.
     """
     if vmax <= vmin:
         return 100.0
     return 1.0 + ((value - vmin) / (vmax - vmin)) * 99.0
-
-
-# Fixed score -> tier bands, mirroring the frontend ACTIVITY_SCORE_RAMP stops
-# (1/25/50/75/100). Used only for cells without a live rank (fallback), so a
-# borrowed cell can still read Rendah/Tinggi/Sangat Tinggi without claiming a
-# position in the observed ranking.
-_SCORE_BANDS = ((25.0, "Sangat Rendah"), (50.0, "Rendah"), (75.0, "Sedang"), (100.0, "Tinggi"))
-
-
-def score_band_label(score: float | None) -> str | None:
-    if score is None:
-        return None
-    for upper, label in _SCORE_BANDS:
-        if score < upper:
-            return label
-    return "Sangat Tinggi"
 
 
 def _ahp_score(cell, norm_volume: float) -> float:
@@ -127,9 +120,19 @@ def _ahp_score(cell, norm_volume: float) -> float:
             + HEX_AHP_WEIGHTS["penduduk"] * cell.norm_penduduk)
 
 
+def _reference_volume_range(hexes) -> tuple[float, float] | None:
+    """Grid-wide ``volume_mean`` range: the Excel Min-Max normalization basis.
+
+    Used only when an hour has no observed volume at all, so the fallback grid
+    still normalizes against the model's own ``MIN``/``MAX`` scale.
+    """
+    values = [float(cell.volume_mean) for cell in hexes if getattr(cell, "volume_mean", None) is not None]
+    return (min(values), max(values)) if values else None
+
+
 def _nearest_scored_hex(centroid: tuple[float, float], centroids: dict[int, tuple[float, float]],
                         scored_ids: set[int]) -> int | None:
-    """Nearest hex that has a real volume this hour (squared lon/lat distance)."""
+    """Nearest hex with a real volume this hour (squared lon/lat distance)."""
     lon, lat = centroid
     best_id: int | None = None
     best_distance = float("inf")
@@ -159,66 +162,86 @@ def _no_data_reason(hex_id: int, mapped: frozenset[int]) -> str:
 
 
 def recompute_hour_scores(hexes, hex_volumes, centroids: dict[int, tuple[float, float]] | None = None) -> dict[int, dict]:
-    """Per-hex live properties for one hour bucket.
+    """Per-hex live properties for one hour, mirroring the Excel rank model.
 
     ``hexes`` are ``ActivityGridHex``-shaped rows; ``hex_volumes`` holds only
-    hexes with a real mapped volume this hour (as ``HexHourData`` or a plain
-    ``{hex_id: float}``). Without ``centroids``, hexes absent from the volumes
-    stay ``no_data`` with null scores and a ``no_data_reason``. With
-    ``centroids``, they inherit the nearest scored hex's volume behind a
-    ``data_status="fallback"`` flag, so the map has no unexplained grey cells
-    while still distinguishing borrowed values from observed ones.
+    hexes with a real volume this hour (as ``HexHourData`` or a plain
+    ``{hex_id: float}``). Volume adapts to the data source:
+
+    * observed grids use their hourly volume (live, historical, interpolated);
+    * a grid without one borrows the nearest observed grid's volume and is
+      flagged ``data_status="fallback"`` with ``fallback_from``;
+    * if no observed volume exists in the hour (or no centroid is available to
+      borrow), the grid falls back to its own stored ``volume_mean``.
+
+    Scores are normalized against the observed-hour range (the grid-wide
+    ``volume_mean`` range when nothing is observed), all scored grids are ranked
+    together, and the five Excel classes are assigned by rank.
     """
     volumes, mapped = _normalize_hour_data(hex_volumes)
+    observed_ids = set(volumes)
+    candidates: list[tuple] = []
+
+    if observed_ids:
+        values = [entry.volume for entry in volumes.values()]
+        vmin, vmax = min(values), max(values)
+        for hex_cell in hexes:
+            hourly = volumes.get(hex_cell.hex_id)
+            if hourly is not None:
+                norm_volume = minmax_normalize(hourly.volume, vmin, vmax)
+                score = _ahp_score(hex_cell, norm_volume)
+                candidates.append((hex_cell, norm_volume, score, "live", hourly, None, hourly.interpolated))
+                continue
+            source_id = None
+            centroid = centroids.get(hex_cell.hex_id) if centroids else None
+            if centroid is not None:
+                source_id = _nearest_scored_hex(centroid, centroids, observed_ids)
+            if source_id is not None:
+                source = volumes[source_id]
+                volume, interpolated = source.volume, source.interpolated
+            else:
+                baseline = getattr(hex_cell, "volume_mean", None)
+                if baseline is None:
+                    continue
+                volume, interpolated = float(baseline), False
+            norm_volume = minmax_normalize(volume, vmin, vmax)
+            candidates.append((hex_cell, norm_volume, _ahp_score(hex_cell, norm_volume),
+                               FALLBACK_STATUS, None, source_id, interpolated))
+    else:
+        reference = _reference_volume_range(hexes)
+        if reference is not None:
+            vmin, vmax = reference
+            for hex_cell in hexes:
+                baseline = getattr(hex_cell, "volume_mean", None)
+                if baseline is None:
+                    continue
+                norm_volume = minmax_normalize(float(baseline), vmin, vmax)
+                candidates.append((hex_cell, norm_volume, _ahp_score(hex_cell, norm_volume),
+                                   FALLBACK_STATUS, None, None, False))
+
     result = {hex_cell.hex_id: dict(NO_DATA) for hex_cell in hexes}
-    observed = [hex_cell for hex_cell in hexes if hex_cell.hex_id in volumes]
-    if not observed:
-        for hex_cell in hexes:
-            result[hex_cell.hex_id]["no_data_reason"] = _no_data_reason(hex_cell.hex_id, mapped)
-        return result
 
-    values = [volumes[hex_cell.hex_id].volume for hex_cell in observed]
-    vmin, vmax = min(values), max(values)
-    scored = []
-    for hex_cell in observed:
-        norm_volume = minmax_normalize(volumes[hex_cell.hex_id].volume, vmin, vmax)
-        scored.append((hex_cell.hex_id, norm_volume, _ahp_score(hex_cell, norm_volume)))
-
-    scored.sort(key=lambda item: (-item[2], item[0]))
-    total = len(scored)
-    for rank, (hex_id, norm_volume, score) in enumerate(scored, 1):
+    # One global ranking and one quintile split for observed and estimated grids
+    # alike, so class never contradicts score (Excel: RANK over the whole grid).
+    candidates.sort(key=lambda item: (-item[2], item[0].hex_id))
+    total = len(candidates)
+    for rank, (hex_cell, norm_volume, score, status, data, source_id, interpolated) in enumerate(candidates, 1):
         _, label = quintile_classify(rank, total)
-        data = volumes[hex_id]
-        result[hex_id] = {"norm_volume": norm_volume, "skor_total_ahp": score,
-                          "ranking": rank, "ranking_total": total,
-                          "klasifikasi_potensi": label, "data_status": "live",
-                          "source_segments": list(data.segment_ids),
-                          "is_interpolated": data.interpolated, "no_data_reason": None}
+        entry = {
+            "norm_volume": norm_volume, "skor_total_ahp": score,
+            "ranking": rank, "ranking_total": total,
+            "klasifikasi_potensi": label, "data_status": status,
+            "source_segments": list(data.segment_ids) if data else [],
+            "is_interpolated": interpolated,
+            "no_data_reason": None if status == "live" else _no_data_reason(hex_cell.hex_id, mapped),
+        }
+        if source_id is not None:
+            entry["fallback_from"] = source_id
+        result[hex_cell.hex_id] = entry
 
-    if centroids:
-        scored_ids = {hex_cell.hex_id for hex_cell in observed}
-        for hex_cell in hexes:
-            if hex_cell.hex_id in scored_ids or hex_cell.hex_id not in centroids:
-                continue
-            source_id = _nearest_scored_hex(centroids[hex_cell.hex_id], centroids, scored_ids)
-            if source_id is None:
-                continue
-            source = volumes[source_id]
-            norm_volume = minmax_normalize(source.volume, vmin, vmax)
-            score = _ahp_score(hex_cell, norm_volume)
-            result[hex_cell.hex_id] = {
-                "norm_volume": norm_volume, "skor_total_ahp": score,
-                "ranking": None, "ranking_total": total,
-                "klasifikasi_potensi": score_band_label(score), "data_status": FALLBACK_STATUS,
-                "fallback_from": source_id, "source_segments": [],
-                "is_interpolated": source.interpolated,
-                "no_data_reason": _no_data_reason(hex_cell.hex_id, mapped),
-            }
-
-    # Anything still unscored (centroids absent or no scored neighbour) explains itself.
     for hex_cell in hexes:
         entry = result[hex_cell.hex_id]
-        if entry["data_status"] == "no_data" and entry.get("no_data_reason") is None:
+        if entry["data_status"] == "no_data":
             entry["no_data_reason"] = _no_data_reason(hex_cell.hex_id, mapped)
     return result
 

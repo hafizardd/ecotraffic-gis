@@ -11,14 +11,13 @@ from app.services.hex_activity_scoring import (
     label_potential,
     minmax_normalize,
     recompute_hour_scores,
-    score_band_label,
 )
 
 HOUR = datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc)
 
 
-def _hex(hex_id, norm_poi, norm_penduduk):
-    return SimpleNamespace(hex_id=hex_id, norm_poi=norm_poi, norm_penduduk=norm_penduduk)
+def _hex(hex_id, norm_poi, norm_penduduk, volume_mean=None):
+    return SimpleNamespace(hex_id=hex_id, norm_poi=norm_poi, norm_penduduk=norm_penduduk, volume_mean=volume_mean)
 
 
 def test_minmax_maps_extremes_to_1_and_100():
@@ -31,13 +30,24 @@ def test_minmax_degenerate_spread_is_the_observed_maximum():
     assert minmax_normalize(7, 7, 7) == 100.0
 
 
-def test_score_band_label_matches_the_fixed_ramp():
-    assert score_band_label(10) == "Sangat Rendah"
-    assert score_band_label(40) == "Rendah"
-    assert score_band_label(60) == "Sedang"
-    assert score_band_label(90) == "Tinggi"
-    assert score_band_label(100) == "Sangat Tinggi"
-    assert score_band_label(None) is None
+def test_recompute_borrows_nearest_volume_when_hour_has_no_sample():
+    hexes = [_hex(1, 0.0, 0.0, volume_mean=10.0), _hex(2, 0.0, 0.0, volume_mean=20.0), _hex(3, 0.0, 0.0, volume_mean=30.0)]
+    centroids = {1: (0.0, 0.0), 2: (0.01, 0.0), 3: (1.0, 0.0)}
+    result = recompute_hour_scores(hexes, {1: 10.0, 3: 30.0}, centroids)
+    # Hex 2 has no sample, so it borrows the nearest observed grid (hex 1);
+    # the observed-hour range (10-30) is the normalization basis.
+    assert result[2]["data_status"] == "fallback"
+    assert result[2]["fallback_from"] == 1
+    assert result[2]["norm_volume"] == pytest.approx(1.0)
+    assert result[3]["norm_volume"] == pytest.approx(100.0)
+
+
+def test_recompute_no_coverage_normalizes_against_volume_mean():
+    hexes = [_hex(1, 0.0, 0.0, volume_mean=10.0), _hex(2, 0.0, 0.0, volume_mean=20.0)]
+    result = recompute_hour_scores(hexes, {})
+    assert result[1]["data_status"] == "fallback"
+    assert result[1]["norm_volume"] == pytest.approx(1.0)
+    assert result[2]["norm_volume"] == pytest.approx(100.0)
 
 
 def test_recompute_uses_static_poi_population_with_live_volume():
