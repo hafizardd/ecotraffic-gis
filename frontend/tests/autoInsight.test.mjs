@@ -88,6 +88,8 @@ test("ttl expiry refetches the same entity", async () => {
 test("entityKey is stable", () => {
     assert.equal(entityKey({ type: "hex", id: 7 }), "hex:7");
     assert.equal(entityKey({ type: "hex", id: 7, hour: "2026-09-12T05:00:00Z" }), "hex:7:2026-09-12T05:00:00Z");
+    assert.equal(entityKey({ type: "hex", id: 7, timeMode: "live" }), "hex:7:live");
+    assert.equal(entityKey({ type: "hex", id: 7, timeMode: "replay", hour: "2026-09-12T05:00:00Z" }), "hex:7:replay:2026-09-12T05:00:00Z");
 });
 
 test("hour change bypasses the cache", async () => {

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services import hex_activity_scoring
 from app.services.hex_activity_scoring import (
     HEX_AHP_WEIGHTS,
     aggregate_potential,
@@ -141,6 +142,35 @@ async def test_hourly_hex_volumes_skips_segments_without_usable_sample():
 async def test_hourly_hex_volumes_skips_segments_outside_grid():
     db = _DB([[_means_row("SEG-1", car=4.0)], [], []])
     assert (await hourly_hex_volumes(db, HOUR)).volumes == {}
+
+
+@pytest.mark.asyncio
+async def test_latest_hex_volumes_sums_newest_facts_and_flags_interpolation(monkeypatch):
+    facts = {
+        "SEG-LIVE": SimpleNamespace(volume_per_hour={"car": 30.0, "motorcycle": 10.0}, ahp_metadata={}),
+        "SEG-REPLAY": SimpleNamespace(
+            volume_per_hour={"car": 5.0, "motorcycle": None},
+            ahp_metadata={"calculation_metadata": {"is_interpolated": True}},
+        ),
+        "SEG-EMPTY": SimpleNamespace(volume_per_hour={"car": None}, ahp_metadata={}),
+    }
+
+    async def fake_facts(_db):
+        return facts
+
+    async def fake_primary(_db, segment_ids):
+        return {"SEG-LIVE": 7, "SEG-REPLAY": 7, "SEG-EMPTY": 9}
+
+    monkeypatch.setattr(hex_activity_scoring, "latest_observed_facts", fake_facts)
+    monkeypatch.setattr(hex_activity_scoring, "_primary_hex_by_segment", fake_primary)
+
+    data = await hex_activity_scoring.latest_hex_volumes(object())
+    assert data.volumes[7].volume == 45.0
+    assert data.volumes[7].segment_ids == ("SEG-LIVE", "SEG-REPLAY")
+    assert data.volumes[7].interpolated is True
+    # A mapped-but-volumeless segment still marks its hex, so the reason is exact.
+    assert data.mapped_hex_ids == frozenset({7, 9})
+    assert 9 not in data.volumes
 
 
 def test_label_potential_matches_frontend_scale():

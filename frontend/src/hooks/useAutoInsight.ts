@@ -11,7 +11,7 @@ const controller = createAutoInsight<BangJoAutoInsightReply>({
         const request: BangJoAutoInsightRequest = entity.type === "segment"
             ? { road_segment_id: String(entity.id) }
             : entity.type === "hex"
-                ? { hex_id: Number(entity.id), hour: entity.hour ?? null, hour_label: entity.hourLabel ?? null }
+                ? { hex_id: Number(entity.id), hour: entity.hour ?? null, hour_label: entity.hourLabel ?? null, time_mode: entity.timeMode ?? null }
                 : { stop_id: String(entity.id) };
         try {
             return await fetchBangJoAutoInsight(request);

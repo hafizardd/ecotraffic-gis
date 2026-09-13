@@ -1,3 +1,5 @@
+import type { ActivityTimeMode } from "@/types";
+
 export interface SelectionState {
     segmentId: string | null;
     hexId: number | null;
@@ -6,6 +8,8 @@ export interface SelectionState {
     // Active activity-grid filters, so Bang Jo can answer for what is displayed.
     activityHour: string | null;
     profileDay: string | null;
+    // "live" omits the time filter from Bang Jo requests; "replay" sends the hour.
+    activityTimeMode: ActivityTimeMode;
     isPanelOpen: boolean;
 }
 
@@ -13,7 +17,7 @@ type SelectionListener = (state: SelectionState) => void;
 
 const EMPTY: SelectionState = {
     segmentId: null, hexId: null, stopId: null, cameraId: null,
-    activityHour: null, profileDay: null, isPanelOpen: false,
+    activityHour: null, profileDay: null, activityTimeMode: "replay", isPanelOpen: false,
 };
 
 let selection: SelectionState = { ...EMPTY };

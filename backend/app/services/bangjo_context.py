@@ -17,7 +17,7 @@ from app.models.road_segment import RoadSegment
 from app.models.segment_emission import SegmentEmission
 from app.models.spatial_sources import SurveyStopObservation
 from app.services.emission_analytics import source_mode_expression
-from app.services.hex_activity_scoring import hour_scores, profile_hour
+from app.services.hex_activity_scoring import hour_scores, live_scores, profile_hour
 from app.services.segment_estimate import OBSERVED, build_display_fact, build_display_facts
 from app.services.spatial_integration import K4_BUFFER_M
 from cv.proposal_emission_factors import POLLUTANTS
@@ -629,15 +629,22 @@ async def _hex_hour_entry(db: AsyncSession, hex_id: int, hour: datetime | None) 
     return moment, scores.get(hex_id, {})
 
 
-async def build_hex_context(db: AsyncSession, hex_id: int, hour: datetime | None = None) -> dict | None:
+async def _hex_live_entry(db: AsyncSession, hex_id: int) -> dict:
+    """Newest-observed (live lens) score for one hex; no profile/anchor needed."""
+    _, scores = await live_scores(db)
+    return scores.get(hex_id, {})
+
+
+async def build_hex_context(db: AsyncSession, hex_id: int, hour: datetime | None = None, live: bool = False) -> dict | None:
     """Hex cell evidence plus the corridor contexts crossing that cell.
 
     Returns ``None`` for an unknown hex. When ``hour`` is given, the cell's
     score/class/ranking are the ones the map displays at that hour (the static
-    offline snapshot is kept under ``static`` for reference); this is what keeps
-    the answer aligned with the panel the user is looking at. ``corridor_contexts``
-    is an empty list (not ``None``) when no road segment crosses the cell, so
-    callers can still answer from the cell's own AHP data.
+    offline snapshot is kept under ``static`` for reference); when ``live`` is
+    true, they come from each segment's newest observed fact instead. This is
+    what keeps the answer aligned with the panel the user is looking at.
+    ``corridor_contexts`` is an empty list (not ``None``) when no road segment
+    crosses the cell, so callers can still answer from the cell's own AHP data.
     """
     hex_cell = (
         await db.execute(select(ActivityGridHex).where(ActivityGridHex.hex_id == hex_id))
@@ -649,8 +656,19 @@ async def build_hex_context(db: AsyncSession, hex_id: int, hour: datetime | None
         context for context in [await build_context(db, sid) for sid in segment_ids] if context
     ]
     hex_context = _hex_cell_context(hex_cell)
-    moment, entry = await _hex_hour_entry(db, hex_id, hour)
     observed_hour = None
+    if live:
+        entry = await _hex_live_entry(db, hex_id)
+        hex_context["static"] = {
+            "skor_total_ahp": hex_cell.skor_total_ahp,
+            "ranking": hex_cell.ranking,
+            "klasifikasi_potensi": hex_cell.klasifikasi_potensi,
+            "volume_mean": hex_cell.volume_mean,
+        }
+        hex_context.update(_hour_view(entry))
+        hex_context["data_mode"] = "live"
+        return {"hex_cell": hex_context, "observed_hour": None, "corridor_contexts": corridor_contexts}
+    moment, entry = await _hex_hour_entry(db, hex_id, hour)
     if moment is not None and entry is not None:
         observed_hour = moment.isoformat()
         hex_context["static"] = {
