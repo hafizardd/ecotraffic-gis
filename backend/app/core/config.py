@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     BANGJO_MIN_TOKENS: int = Field(default=512, gt=0)
     BANGJO_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
     BANGJO_DEBUG_RAW: bool = False
+    # Question-driven retrieval: when the deterministic router cannot confidently
+    # resolve the question, ask the model (tool-calling) which data to fetch
+    # before narrating. Off = keep the old regex-only routing.
+    BANGJO_TOOL_ROUTING_ENABLED: bool = True
+    BANGJO_PLANNER_MAX_TOKENS: int = Field(default=300, gt=0)
 
     # Groq reasoning controls. Leave both unset for a plain instruct model (the
     # recommended default): there is no chain-of-thought to leak. For a

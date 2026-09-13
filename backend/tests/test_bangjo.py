@@ -1410,3 +1410,202 @@ def test_fit_messages_returns_none_when_user_turn_alone_is_too_big(monkeypatch):
     monkeypatch.setattr(bangjo.settings, "BANGJO_MAX_TOKENS", 2048)
 
     assert bangjo._fit_messages("system", "z" * 40000, []) is None
+
+
+# --- segment/stop id resolution ---------------------------------------------
+
+@pytest.mark.asyncio
+async def test_resolve_segment_cascade_matches_segment_id(monkeypatch):
+    db = _FakeDB([_FakeResult(rows=[("SEG-0001", "Jalan Malioboro"), ("SEG-0002", "Jalan Solo")])])
+
+    async def must_not_embed(db_, message):
+        raise AssertionError("embedding must not run when an ID matches")
+
+    monkeypatch.setattr(bangjo, "resolve_by_embedding", must_not_embed)
+
+    ids, candidates, method = await bangjo._resolve_segment_cascade(db, "berapa emisi SEG-0002?")
+
+    assert ids == ["SEG-0002"]
+    assert candidates == []
+    assert method == "id"
+
+
+@pytest.mark.asyncio
+async def test_resolve_stop_matches_source_id():
+    db = _FakeDB([_FakeResult(rows=[("STOP-9", "Halte Malioboro")])])
+
+    assert await bangjo._resolve_stop(db, "bagaimana kondisi STOP-9?") == "STOP-9"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_prefers_message_entity_over_selection():
+    db = _FakeDB([_FakeResult(rows=[("SEG-0001", "Jalan Malioboro"), ("SEG-0002", "Jalan Solo")])])
+    payload = bangjo.ChatRequest(message="berapa emisi SEG-0002?", road_segment_id="SEG-0001")
+
+    scope, confident = await bangjo._dispatch_scope_ex(db, payload)
+
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-0002"]}
+    assert confident is True
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_selection_fallback_is_low_confidence(monkeypatch):
+    db = _FakeDB([_FakeResult(rows=[("SEG-0001", "Jalan Malioboro")])])
+
+    async def fake_embed(db_, message):
+        return None
+
+    monkeypatch.setattr(bangjo, "resolve_by_embedding", fake_embed)
+
+    payload = bangjo.ChatRequest(message="berapa jumlahnya sekarang?", road_segment_id="SEG-0001")
+
+    scope, confident = await bangjo._dispatch_scope_ex(db, payload)
+
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-0001"]}
+    assert confident is False
+
+
+# --- guardrail relaxation ----------------------------------------------------
+
+def test_screen_query_accepts_followups_and_new_traffic_topics():
+    assert guardrails.screen_query("bagaimana kondisi itu sekarang?")["blocked"] is False
+    assert guardrails.screen_query("coba cek yang lainnya dong")["blocked"] is False
+    assert guardrails.screen_query("apakah kecepatan sudah normal?")["blocked"] is False
+    assert guardrails.screen_query("berapa emisi SEG-0023?")["blocked"] is False
+
+
+def test_screen_query_still_blocks_off_topic_without_referent():
+    assert guardrails.screen_query("apa resep rendang yang enak sekali")["blocked"] is True
+
+
+# --- question-driven retrieval planner ---------------------------------------
+
+def test_parse_tool_calls_reads_name_and_json_arguments():
+    message = {"tool_calls": [
+        {"function": {"name": "get_segment", "arguments": '{"query": "SEG-0022"}'}},
+        {"function": {"name": "list_corridors", "arguments": ""}},
+    ]}
+
+    assert bangjo._parse_tool_calls(message) == [
+        {"name": "get_segment", "arguments": {"query": "SEG-0022"}},
+        {"name": "list_corridors", "arguments": {}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_to_scope_maps_each_function():
+    db = _FakeDB([_FakeResult(rows=[("SEG-0002", "Jalan Solo")])])
+    payload = bangjo.ChatRequest(message="x")
+
+    assert await bangjo._tool_calls_to_scope(
+        db, [{"name": "get_segment", "arguments": {"query": "SEG-0002"}}], payload
+    ) == {"kind": "segment", "segment_ids": ["SEG-0002"]}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "list_corridors", "arguments": {}}], payload
+    ) == {"kind": "overview"}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "rank_bus_stops", "arguments": {}}], payload
+    ) == {"kind": "bus_stops"}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "rank_activity_cells", "arguments": {}}], payload
+    ) == {"kind": "hex_activity"}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "get_activity_cell", "arguments": {"hex_id": 42}}], payload
+    ) == {"kind": "hex", "hex_id": 42}
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_disabled_returns_none(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", False)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+
+    assert await bangjo._plan_retrieval("berapa emisi?", []) is None
+
+
+class _ToolResponse:
+    status_code = 200
+    request = None
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"choices": [{"message": {"content": None, "tool_calls": [
+            {"function": {"name": "get_segment", "arguments": '{"query": "SEG-0022"}'}}]}}]}
+
+
+class _ToolClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        return _ToolResponse()
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_reads_tool_calls(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: _ToolClient())
+
+    calls = await bangjo._plan_retrieval("berapa emisi SEG-0022?", [])
+
+    assert calls == [{"name": "get_segment", "arguments": {"query": "SEG-0022"}}]
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_without_tool_calls_returns_none(monkeypatch):
+    class _NoToolClient(_ToolClient):
+        async def post(self, url, headers=None, json=None):
+            return _FakeResponse(200, "Saya tidak tahu.")
+
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: _NoToolClient())
+
+    assert await bangjo._plan_retrieval("berapa emisi SEG-0022?", []) is None
+
+
+@pytest.mark.asyncio
+async def test_chat_uses_planner_when_router_falls_back(monkeypatch):
+    captured = {}
+
+    async def fake_dispatch(db, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0001"]}, False
+
+    async def fake_plan(message, history):
+        return [{"name": "get_segment", "arguments": {"query": "SEG-0002"}}]
+
+    async def fake_scope(db, calls, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0002"]}
+
+    async def fake_build(db, scope, payload):
+        captured["scope"] = scope
+        return {"segment": {"name": "Jalan Solo"}}, "Jalan Solo (SEG-0002)", None
+
+    async def fake_ask(message, context, history, *args, **kwargs):
+        return {"content": "**Ringkasan** Jalan Solo.", "source": "llm"}
+
+    async def fake_get(key):
+        return None
+
+    async def fake_set(key, value, ttl):
+        return None
+
+    monkeypatch.setattr(bangjo, "_dispatch_scope_ex", fake_dispatch)
+    monkeypatch.setattr(bangjo, "_plan_retrieval", fake_plan)
+    monkeypatch.setattr(bangjo, "_tool_calls_to_scope", fake_scope)
+    monkeypatch.setattr(bangjo, "_build_scope_context", fake_build)
+    monkeypatch.setattr(bangjo, "_ask_llm", fake_ask)
+    monkeypatch.setattr(bangjo, "_cache_get", fake_get)
+    monkeypatch.setattr(bangjo, "_cache_set", fake_set)
+
+    response = await bangjo.bangjo_chat(
+        bangjo.ChatRequest(message="berapa emisi SEG-0002?", road_segment_id="SEG-0001"), None
+    )
+
+    assert captured["scope"] == {"kind": "segment", "segment_ids": ["SEG-0002"]}
+    assert response["context_label"] == "Jalan Solo (SEG-0002)"
