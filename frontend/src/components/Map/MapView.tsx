@@ -121,7 +121,7 @@ export default function MapView() {
             return reference ? withDay(reference, nextDay) : null;
         });
     }, [activeHour]);
-    const { activityGrid, error: gridError, stale: gridStale, updatedAt: gridUpdatedAt } = useActivityGrid(bbox, gridHour, visible.activityGrid, lod, activityHours, prefetchTier, timeMode === "live");
+    const { activityGrid, error: gridError, stale: gridStale, updatedAt: gridUpdatedAt, prefetchReady } = useActivityGrid(bbox, gridHour, visible.activityGrid, lod, activityHours, prefetchTier, timeMode === "live");
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
     const geoMapidApiKey = process.env.NEXT_PUBLIC_GEOMAPID_API_KEY;
@@ -422,7 +422,7 @@ export default function MapView() {
              {!mapReady && <MapLoadingState error={basemapError} />}
              {effectiveVisible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
                  day={profileDay ?? anchorDay} onChangeDay={changeDay} displayedCount={displayedCount}
-                 resolution={GRID_LOD_RESOLUTION[lod]} aggregated={lod !== "fine"} stale={gridStale}
+                 resolution={GRID_LOD_RESOLUTION[lod]} aggregated={lod !== "fine"} stale={gridStale} ready={prefetchReady}
                  timeMode={timeMode} onTimeModeChange={setTimeMode} updatedAt={gridUpdatedAt} />}
              {mapReady && mapNotice && <MapNotice {...mapNotice} />}
              {effectiveVisible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>

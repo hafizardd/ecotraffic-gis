@@ -31,6 +31,10 @@ OVERVIEW_TOP_LIMIT = 10
 OVERVIEW_BOTTOM_LIMIT = 5
 OVERVIEW_INTERVENTION_LIMIT = 20
 BUS_STOP_RANKING_LIMIT = 5
+ACTIVITY_OVERVIEW_TOP_LIMIT = 10
+ACTIVITY_OVERVIEW_BOTTOM_LIMIT = 5
+ACTIVITY_CORRIDORS_PER_HEX = 3
+ACTIVITY_POI_LIMIT = 3
 INTERVENTION_LABELS = {
     "add_new_stop": "tambah halte baru",
     "improve_existing_stop": "perbaiki halte yang ada",
@@ -421,6 +425,8 @@ def overview_payload(context: dict) -> dict:
         return _overview_row(corridor, bands.get(corridor["name"], "Sedang"))
 
     median = ranked[len(ranked) // 2] if ranked else None
+    top = ranked[:OVERVIEW_TOP_LIMIT]
+    bottom = ranked[-OVERVIEW_BOTTOM_LIMIT:][::-1] if ranked else []
     needs = sorted(
         (row(corridor) for corridor in corridors if corridor.get("intervention_hint")),
         key=lambda item: item["total_emisi"] if item["total_emisi"] is not None else -1.0,
@@ -452,8 +458,12 @@ def overview_payload(context: dict) -> dict:
             "median": row(median) if median else None,
             "terendah": row(ranked[-1]) if ranked else None,
         },
-        "emisi_tertinggi": [row(corridor) for corridor in ranked[:OVERVIEW_TOP_LIMIT]],
-        "emisi_terendah": [row(corridor) for corridor in ranked[-OVERVIEW_BOTTOM_LIMIT:]],
+        "emisi_tertinggi": [row(corridor) for corridor in top],
+        # Lowest first, so the extremes of both lists are equally unambiguous.
+        "emisi_terendah": [row(corridor) for corridor in bottom],
+        "ditampilkan": {"tertinggi": len(top), "terendah": len(bottom)},
+        "emisi_dipotong": len(ranked) > len(top) + len(bottom),
+        "jumlah_tanpa_emisi": len(corridors) - len(ranked),
         "butuh_intervensi": needs[:OVERVIEW_INTERVENTION_LIMIT],
         "intervensi_dipotong": len(needs) > OVERVIEW_INTERVENTION_LIMIT,
     }
@@ -680,4 +690,126 @@ async def build_hex_context(db: AsyncSession, hex_id: int, hour: datetime | None
         hex_context.update(_hour_view(entry))
         hex_context["observed_hour"] = observed_hour
     return {"hex_cell": hex_context, "observed_hour": observed_hour, "corridor_contexts": corridor_contexts}
+
+
+async def _corridor_names_by_hex(db: AsyncSession, limit_per_hex: int = ACTIVITY_CORRIDORS_PER_HEX) -> dict[int, list[str]]:
+    """Names of road segments crossing each hex, one grouped query (no per-cell loop)."""
+    rows = (
+        await db.execute(
+            select(ActivityGridHex.hex_id, RoadSegment.name)
+            .join(RoadSegment, func.ST_Intersects(ActivityGridHex.geometry, RoadSegment.geometry))
+        )
+    ).all()
+    grouped: dict[int, list[str]] = {}
+    for hex_id, name in rows:
+        if not name:
+            continue
+        names = grouped.setdefault(hex_id, [])
+        if name not in names and len(names) < limit_per_hex:
+            names.append(name)
+    return grouped
+
+
+async def build_activity_overview_context(db: AsyncSession, hour: datetime | None = None, live: bool = False) -> dict:
+    """Whole-grid activity-potential evidence: every scored hex with its location hints.
+
+    Mirrors the map lens: ``live`` reads each segment's newest observed fact, a
+    given ``hour`` addresses the static 24h REPLAY profile, and neither falls back
+    to the offline AHP snapshot. This is the retrieval path that makes
+    "daerah dengan potensi aktivitas tertinggi" answerable - the per-cell AHP
+    scores already exist on ``ActivityGridHex`` but were never assembled as a
+    whole-grid ranking before.
+    """
+    scores: dict[int, dict] | None = None
+    if live:
+        cells, scores = await live_scores(db)
+    elif hour is not None:
+        moment = await profile_hour(db, hour)
+        if moment is not None:
+            cells, scores = await hour_scores(db, moment)
+        else:
+            cells = (await db.execute(select(ActivityGridHex))).scalars().all()
+    else:
+        cells = (await db.execute(select(ActivityGridHex))).scalars().all()
+
+    corridors = await _corridor_names_by_hex(db)
+    rows: list[dict] = []
+    for cell in cells:
+        row = _hex_cell_context(cell)
+        if scores is not None and cell.hex_id in scores:
+            row.update(_hour_view(scores[cell.hex_id]))
+        row["koridor"] = corridors.get(cell.hex_id, [])
+        rows.append(row)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "scope": "hex_activity",
+        "metric": (
+            "skor_total_ahp = skor potensi aktivitas AHP 0-100 "
+            "(gabungan volume lalu lintas, jumlah POI, jumlah penduduk); makin tinggi makin tinggi potensi"
+        ),
+        "cell_count": len(rows),
+        "cells": rows,
+    }
+
+
+def _activity_status(row: dict) -> str:
+    status = row.get("data_status")
+    if status == "fallback":
+        return "perkiraan"
+    if status == "live":
+        return "terukur"
+    return "statis"
+
+
+def activity_overview_payload(context: dict) -> dict:
+    """Compact, prompt-shaped view of :func:`build_activity_overview_context`.
+
+    Only scored cells are ranked; best/median/worst plus the top and bottom
+    slices stay answerable within the token budget. Truncation is disclosed so
+    the model never presents a partial list as the whole grid.
+    """
+    cells = context.get("cells") or []
+    ranked = sorted(
+        (row for row in cells if row.get("skor_total_ahp") is not None),
+        key=lambda row: row["skor_total_ahp"],
+        reverse=True,
+    )
+
+    def row(cell: dict) -> dict:
+        poi = sorted((cell.get("poi_breakdown") or {}).items(), key=lambda item: item[1] or 0, reverse=True)
+        return {
+            "sel": cell.get("hex_id"),
+            "skor": round(cell["skor_total_ahp"], 2),
+            "kelas": cell.get("klasifikasi_potensi"),
+            "jumlah_poi": cell.get("poi_total"),
+            "poi_utama": [{"kategori": category, "jumlah": count} for category, count in poi[:ACTIVITY_POI_LIMIT]],
+            "penduduk": cell.get("penduduk"),
+            "volume_mean": cell.get("volume_mean"),
+            "koridor": cell.get("koridor") or [],
+            "status_data": _activity_status(cell),
+        }
+
+    top = ranked[:ACTIVITY_OVERVIEW_TOP_LIMIT]
+    bottom = ranked[-ACTIVITY_OVERVIEW_BOTTOM_LIMIT:][::-1] if ranked else []
+    median = ranked[len(ranked) // 2] if ranked else None
+    return {
+        "scope": "hex_activity",
+        "jumlah_sel": context.get("cell_count"),
+        "jumlah_sel_dinilai": len(ranked),
+        "satuan_skor": "skor potensi aktivitas 0-100; makin tinggi makin tinggi potensi",
+        "metode": "gabungan volume lalu lintas, jumlah POI, dan jumlah penduduk (bobot AHP)",
+        "ringkasan": {
+            "tertinggi": row(ranked[0]) if ranked else None,
+            "median": row(median) if median else None,
+            "terendah": row(ranked[-1]) if ranked else None,
+        },
+        "potensi_tertinggi": [row(cell) for cell in top],
+        "potensi_terendah": [row(cell) for cell in bottom],
+        "ditampilkan": {"tertinggi": len(top), "terendah": len(bottom)},
+        "dipotong": len(ranked) > len(top) + len(bottom),
+        "catatan_data": (
+            "Peringkat hanya mencakup sel yang punya skor; sel tanpa data tidak diikutkan. "
+            "Gunakan ringkasan untuk potensi tertinggi/terendah yang pasti."
+        ),
+    }
 

@@ -24,13 +24,29 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _WORDS = re.compile(r"[a-zA-Z]+")
 
 _TOPIC = re.compile(
-    r"\b(lalu ?lintas|traffic|emisi|emission|koridor|segmen|segment|halte|bus ?stop|"
+    r"\b(lalu ?lintas|traffic|emisi|emission|koridor|segmen|segment|seg|kor|halte|bus ?stop|"
     r"asi|avoid|shift|improve|intervensi|dashboard|volume|kendaraan|vkt|polusi|polutan|"
-    r"co2|nox|so2|pm|malioboro|jalan|jl|gang|gg|peta|wilayah)\b",
+    r"pencemaran|kemacetan|macet|kecepatan|kepadatan|kapasitas|waktu\s*tempuh|transportasi|"
+    r"parkir|rute|angkutan|moda|pejalan|sepeda|mobil|motor|bus|"
+    r"co2|co\b|nox|so2|sox|pm|pm10|pm2\.?5|hc|"
+    r"malioboro|jalan|jl|gang|gg|peta|wilayah|"
+    r"aktivitas|activity|potensi|daerah|kawasan|zona|grid|sel|hex|ruas)\b",
     re.IGNORECASE,
 )
 _GREETING = re.compile(
     r"^\s*(halo|hai|hi|hello|pagi|siang|malam|selamat|terima\s*kasih|makasih|thanks)\b",
+    re.IGNORECASE,
+)
+# Conversational follow-ups ("kalau yang itu?", "kenapa tadi lebih tinggi?") carry
+# no topic keyword. They pass when they also point back at something already
+# discussed, so off-topic questions still do not slip through.
+_FOLLOWUP = re.compile(
+    r"\b(kalau|kalo|yang|juga|kok|gimana|bagaimana|kenapa|mengapa|banding|bandingkan|"
+    r"dibanding|versus|vs|sama|rinci|detail|jelaskan|terangkan|lanjut|sebelumnya|tadi)\b",
+    re.IGNORECASE,
+)
+_REFERENTIAL = re.compile(
+    r"\b(itu|ini|tersebut|tadi|sebelumnya|lain|lainnya|nya)\b",
     re.IGNORECASE,
 )
 
@@ -72,7 +88,11 @@ def screen_query(message: str) -> dict:
             return {"blocked": True, "reason": "too_long", "message": REJECT_MESSAGE}
         if _injection_match(text):
             return {"blocked": True, "reason": "injection", "message": REJECT_MESSAGE}
-        in_scope = bool(_TOPIC.search(text)) or bool(_GREETING.search(text))
+        in_scope = (
+            bool(_TOPIC.search(text))
+            or bool(_GREETING.search(text))
+            or (bool(_FOLLOWUP.search(text)) and bool(_REFERENTIAL.search(text)))
+        )
         if in_scope or len(_WORDS.findall(text)) < MIN_SCOPE_WORDS:
             return {"blocked": False, "reason": None, "message": None}
         return {"blocked": True, "reason": "out_of_scope", "message": REJECT_MESSAGE}

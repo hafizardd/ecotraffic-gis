@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gridLod, nextGridLod, sliderIndex, withDay, hourKey, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel } from "../src/utils/activityGrid.ts";
+import { gridLod, nextGridLod, sliderIndex, autoplayStep, withDay, hourKey, isWholeRegionLod, adjacentTierToPrefetch, featureInBbox, dataStatusLabel, noDataReasonLabel } from "../src/utils/activityGrid.ts";
 import { breaksToStops } from "../src/constants/mapColors.ts";
 
 test("lod steps coarse -> medium -> sub -> fine across the zoom breakpoints", () => {
@@ -39,6 +39,14 @@ test("slider is hidden with no hours and clamps to the available range", () => {
     assert.equal(sliderIndex(hours, null), 1);
     assert.equal(sliderIndex(hours, hours[0]), 0);
     assert.equal(sliderIndex(hours, "2026-09-09T00:00:00+00:00"), 1);
+});
+
+test("autoplay waits for data, advances, then stops at the last hour", () => {
+    assert.deepEqual(autoplayStep(false, false, 0, 23), { action: "wait" });
+    // Stale data means the current hour has not settled yet: do not advance.
+    assert.deepEqual(autoplayStep(true, true, 0, 23), { action: "wait" });
+    assert.deepEqual(autoplayStep(true, false, 5, 23), { action: "advance", next: 6 });
+    assert.deepEqual(autoplayStep(true, false, 23, 23), { action: "stop" });
 });
 
 test("withDay reuses a profile hour on any calendar day", () => {
