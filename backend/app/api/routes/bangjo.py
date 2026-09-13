@@ -68,6 +68,10 @@ SYSTEM_PROMPT = (
     "ringkasan.tertinggi/ringkasan.median/ringkasan.terendah untuk pertanyaan tertinggi/normal/terendah; "
     "gunakan pita_emisi sebagai penentu 'tinggi'/'sedang'/'rendah' (JANGAN membuat ambang batas sendiri), "
     "dan hanya sebut koridor berlabel 'Tinggi' sebagai emisi tinggi. "
+    "Untuk pertanyaan 'ruas jalan/koridor terbaik atau terburuk': 'terburuk' = emisi tertinggi "
+    "(ringkasan.tertinggi) dan 'terbaik' = emisi terendah (ringkasan.terendah); jangan menukar keduanya. "
+    "Daftar emisi_tertinggi/emisi_terendah hanya sebagian (lihat emisi_dipotong dan jumlah_tanpa_emisi); "
+    "pakai ringkasan untuk jawaban pasti dan sebutkan bila ada koridor yang belum punya data emisi. "
     "Gunakan kerangka ASI: Avoid (hindari), Shift (alihkan), Improve (perbaiki). "
     "Untuk rekomendasi intervensi koridor, pilih tepat satu langkah berdasarkan konteks: "
     "kekosongan cakupan halte -> tambah halte baru; halte lemah -> perbaiki halte yang ada; "
@@ -153,8 +157,8 @@ AUTO_INSIGHT_PROMPT_HEX_ONLY = (
 )
 
 _RANKING_QUERY = re.compile(
-    r"\b(tersibuk|tertinggi|terbesar|terbanyak|terburuk|"
-    r"paling\s+(sibuk|tinggi|besar|banyak)|top|ranking|peringkat)\b",
+    r"\b(tersibuk|tertinggi|terbesar|terbanyak|terburuk|terbaik|terjelek|terbersih|"
+    r"paling\s+(sibuk|tinggi|besar|banyak|baik|buruk|jelek|bersih)|top|ranking|peringkat)\b",
     re.IGNORECASE,
 )
 
@@ -182,6 +186,28 @@ _SPATIAL_QUERY = re.compile(
 
 # A named/selected road wins over the whole-grid activity ranking.
 _SEGMENT_NOUN = re.compile(r"\b(koridor|jalan|segmen|segment|ruas)\b", re.IGNORECASE)
+_STOP_NOUN = re.compile(r"\b(halte|bus\s?stop|terminal|shelter|trayek|pemberhentian)\b", re.IGNORECASE)
+_HEX_NOUN = re.compile(r"\b(grid|sel|hex|daerah|wilayah|kawasan|zona|area)\b", re.IGNORECASE)
+
+# A referential ("ini/itu") must answer for the kind of object the user names;
+# when that object is not selected, ask instead of narrating a different one.
+_CLARIFY = {
+    "segment": "Pilih dulu koridor/segmen jalan di peta, lalu tanyakan lagi tentang koridor itu.",
+    "stop": "Pilih dulu halte di peta, lalu tanyakan lagi tentang halte itu.",
+    "hex": "Pilih dulu sel grid di peta, lalu tanyakan lagi tentang sel itu.",
+    None: "Pilih objek di peta (koridor, halte, atau sel grid) lalu tanyakan lagi.",
+}
+
+
+def _referential_target(message: str) -> str | None:
+    text = message or ""
+    if _STOP_NOUN.search(text):
+        return "stop"
+    if _SEGMENT_NOUN.search(text):
+        return "segment"
+    if _HEX_NOUN.search(text):
+        return "hex"
+    return None
 
 # Requests that should get the structured ASI recommendation format.
 _INTERVENTION_QUERY = re.compile(
@@ -379,6 +405,41 @@ async def _resolve_segment_cascade(
     return ids, candidates, "string"
 
 
+async def _dispatch_referential(db: AsyncSession, payload: "ChatRequest") -> dict:
+    """Resolve a referential ("ini/itu/tersebut") to the selection matching its subject.
+
+    "koridor ini" must answer for a corridor, "halte ini" for a halte, and
+    "sel/grid ini" for a hex cell. When the matching object is not selected the
+    route asks the user to pick one, instead of silently narrating whichever
+    selection happens to be active.
+    """
+    target = _referential_target(payload.message)
+    if target == "stop":
+        if payload.stop_id:
+            return {"kind": "stop", "stop_id": payload.stop_id}
+        return {"kind": "clarify", "detail": _CLARIFY["stop"]}
+    if target == "hex":
+        if payload.hex_id is not None:
+            return {"kind": "hex", "hex_id": payload.hex_id}
+        return {"kind": "clarify", "detail": _CLARIFY["hex"]}
+    if target == "segment":
+        if payload.road_segment_id:
+            return {"kind": "segment", "segment_ids": [payload.road_segment_id]}
+        # A selected hex still answers "koridor ini" via the corridors crossing it.
+        if payload.hex_id is not None and db is not None:
+            crossing = await segments_for_hex(db, payload.hex_id)
+            if crossing:
+                return {"kind": "segment", "segment_ids": list(crossing)}
+        return {"kind": "clarify", "detail": _CLARIFY["segment"]}
+    if payload.hex_id is not None:
+        return {"kind": "hex", "hex_id": payload.hex_id}
+    if payload.stop_id:
+        return {"kind": "stop", "stop_id": payload.stop_id}
+    if payload.road_segment_id:
+        return {"kind": "segment", "segment_ids": [payload.road_segment_id]}
+    return {"kind": "clarify", "detail": _CLARIFY[None]}
+
+
 async def _dispatch_scope(db: AsyncSession, payload: "ChatRequest") -> dict:
     """Decide which context to retrieve for a chat turn.
 
@@ -404,12 +465,14 @@ async def _dispatch_scope(db: AsyncSession, payload: "ChatRequest") -> dict:
     if _is_overview_query(message):
         return {"kind": "overview"}
 
-    if not referential:
-        ids, candidates, method = await _resolve_segment_cascade(db, message)
-        if ids:
-            return {"kind": "segment", "segment_ids": ids}
-        if method == "ambiguous" and candidates:
-            return {"kind": "ambiguous", "candidates": candidates}
+    if referential:
+        return await _dispatch_referential(db, payload)
+
+    ids, candidates, method = await _resolve_segment_cascade(db, message)
+    if ids:
+        return {"kind": "segment", "segment_ids": ids}
+    if method == "ambiguous" and candidates:
+        return {"kind": "ambiguous", "candidates": candidates}
 
     if payload.hex_id is not None:
         return {"kind": "hex", "hex_id": payload.hex_id}
@@ -940,6 +1003,11 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
         return {"needs_selection": True, "candidates": scope["candidates"], "answer": None,
                 "context_label": None, "blocked": False, "message": None}
+    if scope["kind"] == "clarify":
+        # A referential pointed at an object the user has not selected.
+        timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
+        return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
+                "detail": scope["detail"], "blocked": False, "message": None}
     timings["resolve_ms"] = round((time.monotonic() - started) * 1000, 2)
 
     hour = _parse_hour(payload.hour)

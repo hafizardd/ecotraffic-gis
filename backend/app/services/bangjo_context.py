@@ -425,6 +425,8 @@ def overview_payload(context: dict) -> dict:
         return _overview_row(corridor, bands.get(corridor["name"], "Sedang"))
 
     median = ranked[len(ranked) // 2] if ranked else None
+    top = ranked[:OVERVIEW_TOP_LIMIT]
+    bottom = ranked[-OVERVIEW_BOTTOM_LIMIT:][::-1] if ranked else []
     needs = sorted(
         (row(corridor) for corridor in corridors if corridor.get("intervention_hint")),
         key=lambda item: item["total_emisi"] if item["total_emisi"] is not None else -1.0,
@@ -456,8 +458,12 @@ def overview_payload(context: dict) -> dict:
             "median": row(median) if median else None,
             "terendah": row(ranked[-1]) if ranked else None,
         },
-        "emisi_tertinggi": [row(corridor) for corridor in ranked[:OVERVIEW_TOP_LIMIT]],
-        "emisi_terendah": [row(corridor) for corridor in ranked[-OVERVIEW_BOTTOM_LIMIT:]],
+        "emisi_tertinggi": [row(corridor) for corridor in top],
+        # Lowest first, so the extremes of both lists are equally unambiguous.
+        "emisi_terendah": [row(corridor) for corridor in bottom],
+        "ditampilkan": {"tertinggi": len(top), "terendah": len(bottom)},
+        "emisi_dipotong": len(ranked) > len(top) + len(bottom),
+        "jumlah_tanpa_emisi": len(corridors) - len(ranked),
         "butuh_intervensi": needs[:OVERVIEW_INTERVENTION_LIMIT],
         "intervensi_dipotong": len(needs) > OVERVIEW_INTERVENTION_LIMIT,
     }

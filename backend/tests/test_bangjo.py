@@ -226,6 +226,8 @@ def test_overview_query_detection():
     assert bangjo._is_overview_query("sebutkan koridor apa saja yang butuh intervensi") is True
     assert bangjo._is_overview_query("koridor mana yang emisinya tertinggi?") is True
     assert bangjo._is_overview_query("koridor dengan emisi terendah") is True
+    assert bangjo._is_overview_query("dimana ruas jalan terbaik?") is True
+    assert bangjo._is_overview_query("ruas jalan terburuk") is True
     assert bangjo._is_overview_query("berapa emisi jalan malioboro") is False
     assert bangjo._is_overview_query("apa prioritas intervensi untuk koridor ini?") is False
 
@@ -315,6 +317,14 @@ def test_overview_payload_is_compact_and_bounded():
     assert len(payload["emisi_terendah"]) == bangjo_context.OVERVIEW_BOTTOM_LIMIT
     assert len(payload["butuh_intervensi"]) == bangjo_context.OVERVIEW_INTERVENTION_LIMIT
     assert payload["intervensi_dipotong"] is True
+    # Partial lists are disclosed, and the bottom list starts at the true lowest.
+    assert payload["ditampilkan"] == {
+        "tertinggi": bangjo_context.OVERVIEW_TOP_LIMIT,
+        "terendah": bangjo_context.OVERVIEW_BOTTOM_LIMIT,
+    }
+    assert payload["emisi_dipotong"] is True
+    assert payload["jumlah_tanpa_emisi"] == 0
+    assert payload["emisi_terendah"][0]["nama"] == "Jalan 59"
     assert payload["sebaran_emisi"] == {"Tinggi": 20, "Sedang": 20, "Rendah": 20}
     # Severity is computed, not left to the model.
     assert payload["emisi_tertinggi"][0]["pita_emisi"] == "Tinggi"
@@ -920,6 +930,19 @@ async def test_bangjo_chat_ambiguous_name_still_asks_selection(monkeypatch):
     assert [candidate["name"] for candidate in response["candidates"]] == ["Jalan A", "Jalan B"]
 
 
+@pytest.mark.asyncio
+async def test_bangjo_chat_referential_without_selection_asks_clarify():
+    # No matching selection: must ask, not fall through to the overview (which
+    # would need a DB and answer a different question).
+    response = await bangjo.bangjo_chat(
+        bangjo.ChatRequest(message="Apa prioritas intervensi untuk koridor ini?"), None
+    )
+
+    assert response["needs_selection"] is True
+    assert response["context_label"] is None
+    assert "koridor" in response["detail"].lower()
+
+
 # --- auto-insight ---------------------------------------------------------
 
 def _hex_cell(hex_id=5):
@@ -1213,6 +1236,52 @@ async def test_dispatch_scope_routes_activity_potential_to_hex_activity():
         None, bangjo.ChatRequest(message="Di mana daerah dengan potensi aktivitas tertinggi?")
     )
     assert scope == {"kind": "hex_activity"}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_segment_requires_segment_selection():
+    # "koridor ini" with only a halte selected must not narrate the halte.
+    scope = await bangjo._dispatch_scope(
+        None, bangjo.ChatRequest(message="Apa prioritas intervensi untuk koridor ini?", stop_id="STOP-1")
+    )
+    assert scope["kind"] == "clarify"
+    assert "koridor" in scope["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_segment_uses_selected_segment():
+    scope = await bangjo._dispatch_scope(
+        None, bangjo.ChatRequest(message="Kenapa skor koridor ini tinggi?", road_segment_id="SEG-1")
+    )
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-1"]}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_segment_uses_selected_hex_corridors(monkeypatch):
+    async def fake_segments_for_hex(db, hex_id):
+        return ["SEG-7", "SEG-8"]
+
+    monkeypatch.setattr(bangjo, "segments_for_hex", fake_segments_for_hex)
+    scope = await bangjo._dispatch_scope(
+        object(), bangjo.ChatRequest(message="Apa prioritas untuk koridor ini?", hex_id=42)
+    )
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-7", "SEG-8"]}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_halte_requires_halte_selection():
+    db = _FakeDB([_FakeResult(rows=[])])
+    scope = await bangjo._dispatch_scope(
+        db, bangjo.ChatRequest(message="Bagaimana kualitas halte ini?", road_segment_id="SEG-1")
+    )
+    assert scope["kind"] == "clarify"
+    assert "halte" in scope["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_without_selection_asks_to_pick():
+    scope = await bangjo._dispatch_scope(None, bangjo.ChatRequest(message="Rekomendasi ASI untuk ini?"))
+    assert scope["kind"] == "clarify"
 
 
 @pytest.mark.asyncio
