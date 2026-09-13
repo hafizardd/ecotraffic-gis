@@ -28,8 +28,6 @@ import {
     SEGMENT_COLORS,
     CAMERA_TIER_COLORS,
     FIVE_TIER_COLORS,
-    ACTIVITY_SCORE_STOPS,
-    breaksToStops,
     MODE_VISIBILITY,
     DEFAULT_MAP_MODE,
     BUS_STOP_BUFFER_M,
@@ -191,10 +189,6 @@ export default function MapView() {
             properties: { ...feature.properties, potential: classificationTier(feature.properties.klasifikasi_potensi) },
         })),
     }), [activityGrid]);
-
-    // Viewport-scoped quantile stops; null when the visible scores have no
-    // spread, in which case the fill falls back to the classification tier.
-    const activityBreaks = useMemo(() => breaksToStops(activityGrid.breaks), [activityGrid.breaks]);
 
     // Aggregated tiers ship the whole region (so zoom-out has no empty edges);
     // the count card still reports only what is inside the viewport.
@@ -445,13 +439,18 @@ export default function MapView() {
              {/* Declared last so the grid paints on top of segments/camera/POI. Click priority stays
                  independent of paint order: onClick checks segment/camera hits first regardless. */}
              {effectiveVisible.activityGrid && <Source id="activity-grid" type="geojson" data={activityGridGeoJSON as never}>
-                 {/* Viewport-quantile ramp when the visible scores have spread;
-                     otherwise the discrete classification tier, matching the legend. */}
+                 {/* Fill every cell by its absolute classification tier, so the
+                     hex colour always equals the panel badge and legend colour
+                     (a viewport-quantile ramp made the same hex change colour on
+                     pan/zoom while the panel label stayed fixed). */}
                  <Layer id="activity-grid-fill" type="fill" paint={{
-                     "fill-color": ["case",
-                         ["==", ["get", "skor_total_ahp"], null],
-                         ["step", ["get", "potential"], FIVE_TIER_COLORS.unknown, 1, FIVE_TIER_COLORS.veryLow, 2, FIVE_TIER_COLORS.low, 3, FIVE_TIER_COLORS.medium, 4, FIVE_TIER_COLORS.high, 5, FIVE_TIER_COLORS.veryHigh],
-                         ["interpolate", ["linear"], ["get", "skor_total_ahp"], ...(activityBreaks ?? [...ACTIVITY_SCORE_STOPS])]],
+                     "fill-color": ["step", ["get", "potential"],
+                         FIVE_TIER_COLORS.unknown,
+                         1, FIVE_TIER_COLORS.veryLow,
+                         2, FIVE_TIER_COLORS.low,
+                         3, FIVE_TIER_COLORS.medium,
+                         4, FIVE_TIER_COLORS.high,
+                         5, FIVE_TIER_COLORS.veryHigh],
                      // `stale` dims the previous frame while the next LOD/bbox
                      // loads, instead of blanking the grid mid-zoom. Fallback
                      // cells are dimmed too, so borrowed scores read as softer.
@@ -539,7 +538,6 @@ export default function MapView() {
                 segmentBuckets={SEGMENT_BUCKET_COLORS}
                 cameraHistorical={hoverCounts.historical}
                 cameraTotal={hoverCounts.total}
-                activityBreaks={activityGrid.breaks ?? null}
                 layerVisibility={layerVisibility}
             />
               {hoveredSegmentId && (

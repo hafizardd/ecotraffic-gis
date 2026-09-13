@@ -22,9 +22,9 @@ export const FIVE_TIER_COLORS = {
     unknown: "#94a3b8",
 } as const;
 
-// Fixed AHP-score ramp (score is 1..100), kept as the fallback for the grid
-// fill when the viewport has no quantile spread. The live ramp itself is
-// rebuilt per viewport from `breaksToStops`.
+// Fixed AHP-score ramp (score is 1..100), used only by the panel's continuous
+// score meter. Grid fills use the discrete `classificationTier` colours so the
+// hex colour always equals the panel badge.
 export const ACTIVITY_SCORE_RAMP: ReadonlyArray<[number, string]> = [
     [1, FIVE_TIER_COLORS.veryLow],
     [25, FIVE_TIER_COLORS.low],
@@ -32,18 +32,6 @@ export const ACTIVITY_SCORE_RAMP: ReadonlyArray<[number, string]> = [
     [75, FIVE_TIER_COLORS.high],
     [100, FIVE_TIER_COLORS.veryHigh],
 ];
-
-// MapLibre interpolate stops, flat: [stop, color, stop, color, ...].
-export const ACTIVITY_SCORE_STOPS: ReadonlyArray<number | string> = ACTIVITY_SCORE_RAMP.flat();
-
-// Viewport quantile breaks (min..max, one per tier colour) -> flat MapLibre
-// `interpolate` stops. Returns null for a degenerate viewport (too few points
-// or no spread) so the caller can fall back to the discrete tier `step`.
-export function breaksToStops(breaks: number[] | null | undefined): (number | string)[] | null {
-    if (!breaks || breaks.length < 2) return null;
-    const colors = [FIVE_TIER_COLORS.veryLow, FIVE_TIER_COLORS.low, FIVE_TIER_COLORS.medium, FIVE_TIER_COLORS.high, FIVE_TIER_COLORS.veryHigh];
-    return breaks.flatMap((value, index) => [value, colors[Math.min(index, colors.length - 1)]]);
-}
 
 export function activityGradientCss(): string {
     return `linear-gradient(90deg, ${ACTIVITY_SCORE_RAMP.map(([score, color]) => `${color} ${score}%`).join(", ")})`;
