@@ -426,6 +426,10 @@ export interface BangJoReply {
 
 export type BangJoEntityType = "segment" | "hex" | "stop";
 
+// Activity-potential lens: "replay" addresses the static 24h profile by hour,
+// "live" reads each segment's newest observed fact (no time filter).
+export type ActivityTimeMode = "live" | "replay";
+
 // Active map selection + displayed grid hour, sent so answers match the screen.
 export interface BangJoChatFocus {
     road_segment_id?: string | null;
@@ -433,6 +437,7 @@ export interface BangJoChatFocus {
     stop_id?: string | null;
     hour?: string | null;
     hour_label?: string | null;
+    time_mode?: ActivityTimeMode | null;
 }
 
 export interface BangJoAutoInsightRequest {
@@ -441,6 +446,7 @@ export interface BangJoAutoInsightRequest {
     stop_id?: string;
     hour?: string | null;
     hour_label?: string | null;
+    time_mode?: ActivityTimeMode | null;
 }
 
 export interface BangJoAutoInsightReply {

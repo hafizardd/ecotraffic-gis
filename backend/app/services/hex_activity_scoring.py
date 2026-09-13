@@ -23,6 +23,7 @@ from app.services.emission_analytics import (
     source_mode_expression,
     vehicle_segment_means,
 )
+from app.services.segment_estimate import is_interpolated_of, latest_observed_facts
 
 # From the 'AHP Bobot' Saaty matrix (CR = 0.0096). Same values the offline
 # importer verifies against; kept here as the single source of truth so the
@@ -294,6 +295,46 @@ async def hourly_hex_volumes(db, hour_start: datetime) -> HexHourData:
     return HexHourData(volumes=volumes, mapped_hex_ids=mapped_hex_ids)
 
 
+async def latest_hex_volumes(db) -> HexHourData:
+    """Sum each segment's newest observed volume per primary hex (live lens).
+
+    Unlike :func:`hourly_hex_volumes` (one fixed hour bucket), this reads the
+    latest non-SYNTHETIC fact per segment: the two live tracking cameras'
+    segments move as their ``SegmentEmission`` rows are reconciled, while every
+    other hex holds its newest REPLAY/observed value.
+    """
+    facts = await latest_observed_facts(db)
+    per_segment: dict[str, float] = {}
+    interpolated: set[str] = set()
+    for segment_id, emission in facts.items():
+        volume = emission.volume_per_hour or {}
+        values = [volume.get(key) for key in VEHICLE_KEYS]
+        if all(value is None for value in values):
+            continue
+        per_segment[segment_id] = sum(float(value) for value in values if value is not None)
+        if is_interpolated_of(emission):
+            interpolated.add(segment_id)
+
+    hex_by_segment = await _primary_hex_by_segment(db, list(facts))
+    mapped_hex_ids = frozenset(hex_id for hex_id in hex_by_segment.values() if hex_id is not None)
+
+    grouped: dict[int, dict] = {}
+    for segment_id, volume in per_segment.items():
+        hex_id = hex_by_segment.get(segment_id)
+        if hex_id is None:
+            continue
+        entry = grouped.setdefault(hex_id, {"volume": 0.0, "segment_ids": [], "interpolated": False})
+        entry["volume"] += volume
+        entry["segment_ids"].append(segment_id)
+        entry["interpolated"] = entry["interpolated"] or segment_id in interpolated
+
+    volumes = {
+        hex_id: HexHourVolume(entry["volume"], tuple(sorted(entry["segment_ids"])), entry["interpolated"])
+        for hex_id, entry in grouped.items()
+    }
+    return HexHourData(volumes=volumes, mapped_hex_ids=mapped_hex_ids)
+
+
 # --- static 24h profile addressing (shared by the map route and Bang Jo) -------
 
 
@@ -315,6 +356,13 @@ async def hour_scores(db, hour: datetime) -> tuple[list, dict[int, dict]]:
     """Global (whole-grid) live scores for one hour, so map and panel agree."""
     cells, centroids = await all_cells_with_centroids(db)
     scores = recompute_hour_scores(cells, await hourly_hex_volumes(db, hour), centroids)
+    return cells, scores
+
+
+async def live_scores(db) -> tuple[list, dict[int, dict]]:
+    """Global scores from each segment's newest observed fact (live lens)."""
+    cells, centroids = await all_cells_with_centroids(db)
+    scores = recompute_hour_scores(cells, await latest_hex_volumes(db), centroids)
     return cells, scores
 
 

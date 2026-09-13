@@ -3,27 +3,29 @@
 import { useEffect, useState } from "react";
 import { Grid3x3, X } from "lucide-react";
 import { fetchActivityGridHex } from "@/services/api";
-import { ActivityGridFeature } from "@/types";
+import { ActivityGridFeature, ActivityTimeMode } from "@/types";
 import Skeleton from "@/components/ui/Skeleton";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { MISSING_LABEL, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
+import { MISSING_LABEL, fmtDateTimeId, fmtFloatId, fmtIntId, formatCameraName } from "@/utils/format";
 import { dataStatusLabel, noDataReasonLabel } from "@/utils/activityGrid";
 import ActivityPotentialCard from "./ActivityPotentialCard";
 import AutoInsightCard from "./AutoInsightCard";
 import { CRITERIA_GRID_CLASS, PANEL_CLASS, PANEL_CLOSE_CLASS, PANEL_ICON_CLASS, SEGMENT_OVERVIEW_CLASS, SEGMENT_PANEL_CONTENT_CLASS, SEGMENT_PANEL_HEADER_CLASS, SEGMENT_PANEL_TITLE_CLASS, SEGMENT_SECTION_CLASS, SEGMENT_STATE_CLASS } from "@/styles/tailwind";
 
-export default function ActivityGridPanel({ hexId, hour, onClose }: {
+export default function ActivityGridPanel({ hexId, hour, mode, onClose }: {
     hexId: number | null;
     hour?: string | null;
+    mode: ActivityTimeMode;
     onClose: () => void;
 }) {
     if (hexId == null) return null;
-    return <ActivityGridDetail key={`${hexId}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} onClose={onClose} />;
+    return <ActivityGridDetail key={`${hexId}-${mode}-${hour ?? "static"}`} hexId={hexId} hour={hour ?? null} mode={mode} onClose={onClose} />;
 }
 
-function ActivityGridDetail({ hexId, hour, onClose }: {
+function ActivityGridDetail({ hexId, hour, mode, onClose }: {
     hexId: number;
     hour: string | null;
+    mode: ActivityTimeMode;
     onClose: () => void;
 }) {
     const [feature, setFeature] = useState<ActivityGridFeature | null>(null);
@@ -31,21 +33,25 @@ function ActivityGridDetail({ hexId, hour, onClose }: {
 
     useEffect(() => {
         let mounted = true;
-        fetchActivityGridHex(hexId, hour)
+        fetchActivityGridHex(hexId, hour, mode)
             .then((value) => mounted && setFeature(value))
             .catch((err) => mounted && setError(err instanceof Error ? err : new Error("Data grid tidak tersedia")));
         return () => {
             mounted = false;
         };
-    }, [hexId, hour]);
+    }, [hexId, hour, mode]);
 
     const props = feature?.properties;
+    const isLive = mode === "live";
     const currentHourLabel = hour ? new Date(hour).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : null;
-    const sourceMeta = !hour
-        ? "Sumber: data statis"
-        : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data`
-            : props?.data_status === "fallback" ? `Pukul ${currentHourLabel} · perkiraan area terdekat`
-                : `Skor pukul ${currentHourLabel} · terukur`;
+    const sourceMeta = isLive
+        ? (props?.data_status === "fallback" ? "Live terbaru · perkiraan area terdekat" : "Live terbaru")
+        : !hour
+            ? "Sumber: data statis"
+            : props?.data_status === "no_data" ? `Pukul ${currentHourLabel} · tanpa data`
+                : props?.data_status === "fallback" ? `Pukul ${currentHourLabel} · perkiraan area terdekat`
+                    : `Skor pukul ${currentHourLabel} · terukur`;
+    const hourLabel = hour ? fmtDateTimeId(hour) : null;
 
     return (
         <aside className={PANEL_CLASS} aria-label={`Detail grid potensi Hex ${hexId}`}>
@@ -63,9 +69,9 @@ function ActivityGridDetail({ hexId, hour, onClose }: {
                 {props && (
                     <>
                         <ActivityPotentialCard properties={props} />
-                        <AutoInsightCard entity={{ type: "hex", id: hexId }} label={`grid Hex ${hexId}`} />
+                        <AutoInsightCard entity={{ type: "hex", id: hexId, hour: isLive ? null : hour, hourLabel: isLive ? null : hourLabel, timeMode: mode }} label={`grid Hex ${hexId}`} />
                         <section className={SEGMENT_SECTION_CLASS}>
-                            <SectionTitle title="Jejak sumber" meta={hour ? currentHourLabel ?? undefined : "Model offline"} />
+                            <SectionTitle title="Jejak sumber" meta={isLive ? "Live terbaru" : hour ? currentHourLabel ?? undefined : "Model offline"} />
                             <dl className="m-0 grid gap-2 text-[11px]">
                                 <SourceRow label="Status" value={dataStatusLabel(props.data_status)} />
                                 {props.is_interpolated && <SourceRow label="Metode" value="Interpolasi 24 jam; bukan pengamatan langsung" />}

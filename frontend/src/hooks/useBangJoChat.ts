@@ -44,7 +44,10 @@ export default function useBangJoChat() {
         setMessages((prev) => [...prev, { id: newId(), role: "user", content, timestamp: new Date().toISOString() }]);
         setIsTyping(true);
         const selection = getSelection();
-        const hour = selection.activityHour;
+        // Live mode has no time lens, so the payload carries no hour filter and
+        // tells the backend to read the newest observed facts instead.
+        const replay = selection.activityTimeMode === "replay";
+        const hour = replay ? selection.activityHour : null;
         try {
             const reply = await fetchBangJoReply(content, {
                 road_segment_id: selection.segmentId,
@@ -52,6 +55,7 @@ export default function useBangJoChat() {
                 stop_id: selection.stopId,
                 hour,
                 hour_label: hour ? fmtDateTimeId(hour) : null,
+                time_mode: selection.activityTimeMode,
             }, history);
             setMessages((prev) => [...prev, {
                 id: newId(), role: "assistant", content: formatAnswer(reply),

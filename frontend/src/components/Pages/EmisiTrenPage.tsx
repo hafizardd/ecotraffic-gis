@@ -7,6 +7,7 @@ import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import useAnalyticsResource from "@/hooks/useAnalyticsResource";
 import { fetchEmissionTrend, fetchPollutantComposition, fetchTopEmissionCorridors } from "@/services/api";
 import type { PollutantKey, TopEmissionCorridor } from "@/types";
+import { RotateCcw } from "lucide-react";
 import { fmtChartTickId, fmtDateTimeId, fmtFloatId } from "@/utils/format";
 import AnalyticsFilters from "../Analytics/AnalyticsFilters";
 import RealtimePollutants from "../Analytics/RealtimePollutants";
@@ -29,7 +30,7 @@ const renderActiveSector = ({ cx, cy, innerRadius, outerRadius, startAngle, endA
 );
 
 export default function EmisiTrenPage() {
-    const { query, setFilter } = useEmissionAnalytics();
+    const { query, filter, setFilter } = useEmissionAnalytics();
     const [selected, setSelected] = useState<PollutantKey[]>(DEFAULT_SELECTED);
     const [rankPollutant, setRankPollutant] = useState<PollutantKey>("co2");
     const load = useCallback(async (signal: AbortSignal) => {
@@ -93,6 +94,11 @@ export default function EmisiTrenPage() {
                 <SectionTitle title="Top 5 koridor" meta={`Diperingkat dan dibandingkan berdasarkan ${rankingLabel}. Klik batang untuk menyaring koridor.`}
                     aside={<Select ariaLabel="Polutan peringkat" value={rankPollutant}
                         options={EMISSION_DEFINITIONS.map((p) => ({ value: p.key, label: p.label }))} onChange={(value) => setRankPollutant(value as PollutantKey)} />} />
+                {filter.corridorId && <div className="mb-2 flex justify-end">
+                    <button type="button" className={`${ANALYTICS_BUTTON_CLASS} inline-flex items-center gap-2`} onClick={() => setFilter({ corridorId: null, segmentId: null })}>
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />Kembali ke semua koridor
+                    </button>
+                </div>}
                 <div className="relative">
                     {resolving ? <ChartSkeleton bars={5} height={250} />
                         : hasTop ? <>

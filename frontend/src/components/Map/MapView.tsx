@@ -12,7 +12,7 @@ import { getCameraTier } from "@/utils/markerColor";
 import { cameraDisplayValue, type CameraDisplayValue } from "@/utils/cameraValue";
 import { neighborEstimate } from "@/utils/cameraEstimate";
 import useCameras from "@/hooks/useCameras";
-import { CameraFeature } from "@/types";
+import { CameraFeature, ActivityTimeMode } from "@/types";
 import { useEmissionsContext } from "@/context/EmissionsContext";
 import useSegments from "@/hooks/useSegments";
 import useSpatialLayers from "@/hooks/useSpatialLayers";
@@ -86,6 +86,7 @@ export default function MapView() {
     const [prefetchTier, setPrefetchTier] = useState<GridLod | null>(null);
     const [activityHour, setActivityHour] = useState<string | null>(null);
     const [profileDay, setProfileDay] = useState<string | null>(null);
+    const [timeMode, setTimeMode] = useState<ActivityTimeMode>(() => readStoredTimeMode());
     const [hoveredHex, setHoveredHex] = useState<{ lon: number; lat: number; id: number | null; count: number | null; status: string | null; reason: string | null } | null>(null);
     const [hoveredHexId, setHoveredHexId] = useState<number | null>(null);
     const [selectedHexId, setSelectedHexId] = useState<number | null>(null);
@@ -99,7 +100,7 @@ export default function MapView() {
     };
     const { surveyStops, errors: spatialErrors } = useSpatialLayers(bbox, { surveyStops: visible.surveyStops });
     const historicalCameras = useHistoricalCameraEmissions(visible.cameras);
-    const activityHours = useActivityGridHours(visible.activityGrid);
+    const activityHours = useActivityGridHours(visible.activityGrid && timeMode === "replay");
     // The backend serves one static 24h profile; picking a day only relabels the
     // same buckets, so the slider always has a full day to scrub.
     const anchorDay = activityHours.length > 0 ? activityHours[activityHours.length - 1].slice(0, 10) : null;
@@ -110,6 +111,9 @@ export default function MapView() {
     const activeHour = visible.activityGrid && displayHours.length > 0
         ? (activityHour && displayHours.includes(activityHour) ? activityHour : displayHours[displayHours.length - 1])
         : null;
+    // Live has no time lens: it reads each segment's newest observed fact. Only
+    // replay addresses the static 24h profile by hour.
+    const gridHour = timeMode === "replay" ? activeHour : null;
     const changeDay = useCallback((nextDay: string) => {
         setProfileDay(nextDay);
         setActivityHour((current) => {
@@ -117,7 +121,7 @@ export default function MapView() {
             return reference ? withDay(reference, nextDay) : null;
         });
     }, [activeHour]);
-    const { activityGrid, error: gridError, stale: gridStale } = useActivityGrid(bbox, activeHour, visible.activityGrid, lod, activityHours, prefetchTier);
+    const { activityGrid, error: gridError, stale: gridStale, updatedAt: gridUpdatedAt, prefetchReady } = useActivityGrid(bbox, gridHour, visible.activityGrid, lod, activityHours, prefetchTier, timeMode === "live");
     const mapRef = useRef<MapRef>(null);
     const mapAreaRef = useRef<HTMLDivElement>(null);
     const geoMapidApiKey = process.env.NEXT_PUBLIC_GEOMAPID_API_KEY;
@@ -134,6 +138,10 @@ export default function MapView() {
         localStorage.setItem("etg-map-mode", mode);
     }, [mode]);
 
+    useEffect(() => {
+        localStorage.setItem("etg-activity-time-mode", timeMode);
+    }, [timeMode]);
+
     // Single source of truth for the selection/panel state consumed by Bang Jo
     // (auto-insight target + dock offset).
     useEffect(() => {
@@ -142,10 +150,11 @@ export default function MapView() {
             hexId: selectedHexId,
             stopId: selectedStopId,
             cameraId: selectedCamera?.properties.camera_id ?? null,
-            activityHour: activeHour,
+            activityHour: gridHour,
             profileDay,
+            activityTimeMode: timeMode,
         });
-    }, [selectedSegmentId, selectedHexId, selectedStopId, selectedCamera, activeHour, profileDay]);
+    }, [selectedSegmentId, selectedHexId, selectedStopId, selectedCamera, gridHour, profileDay, timeMode]);
 
     // Leaving the map (e.g. switching to Emisi & Tren) unmounts this view; clear
     // the shared selection so Bang Jo undocks instead of staying parked beside a
@@ -361,8 +370,8 @@ export default function MapView() {
         if (effectiveVisible.activityGrid && gridError) mapNotice = { tone: "error", title: "Grid potensi tidak tersedia", detail: gridError.message };
         else if (effectiveVisible.surveyStops && spatialErrors.surveyStops) mapNotice = { tone: "warning", title: "Halte survei tidak tersedia", detail: spatialErrors.surveyStops.message };
         else if (effectiveVisible.activityGrid && gridStale) mapNotice = { tone: "loading", title: "Memperbarui grid potensi", detail: "Tampilan sebelumnya dipertahankan sementara." };
-        else if (effectiveVisible.activityGrid && activityHours.length === 0) mapNotice = { tone: "info", title: "Jam aktivitas belum tersedia" };
-        else if (effectiveVisible.activityGrid && activeHour && activityGrid.features.length === 0) mapNotice = { tone: "info", title: "Tidak ada sel pada area dan jam ini" };
+        else if (effectiveVisible.activityGrid && timeMode === "replay" && activityHours.length === 0) mapNotice = { tone: "info", title: "Jam aktivitas belum tersedia" };
+        else if (effectiveVisible.activityGrid && gridHour && activityGrid.features.length === 0) mapNotice = { tone: "info", title: "Tidak ada sel pada area dan jam ini" };
     }
 
     return (
@@ -413,7 +422,8 @@ export default function MapView() {
              {!mapReady && <MapLoadingState error={basemapError} />}
              {effectiveVisible.activityGrid && <ActivityHourSlider hours={displayHours} value={activeHour} onChange={setActivityHour}
                  day={profileDay ?? anchorDay} onChangeDay={changeDay} displayedCount={displayedCount}
-                 resolution={GRID_LOD_RESOLUTION[lod]} aggregated={lod !== "fine"} stale={gridStale} />}
+                 resolution={GRID_LOD_RESOLUTION[lod]} aggregated={lod !== "fine"} stale={gridStale} ready={prefetchReady}
+                 timeMode={timeMode} onTimeModeChange={setTimeMode} updatedAt={gridUpdatedAt} />}
              {mapReady && mapNotice && <MapNotice {...mapNotice} />}
              {effectiveVisible.segments && <Source id="segments" type="geojson" data={segmentGeoJSON}>
                  <Layer id="segments-line" type="line" paint={{ "line-color": ["case", ["==", ["get", "total_emission_g_h"], null], SEGMENT_COLORS.noData, ["step", ["get", "total_emission_g_h"], SEGMENT_COLORS.low, 1000, SEGMENT_COLORS.medium, 5000, SEGMENT_COLORS.high, 20000, SEGMENT_COLORS.critical]], "line-width": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 6, 3], "line-opacity": ["case", ["==", ["get", "segment_id"], hoveredSegmentId], 0.95, 0.72] }} />
@@ -546,7 +556,7 @@ export default function MapView() {
                 ? <BusStopPanel sourceId={selectedStopId} onClose={() => setSelectedStopId(null)} />
                 : selectedSegmentId
                     ? <SegmentPanel segmentId={selectedSegmentId} onClose={() => { setSelectedSegmentId(null); }} />
-                    : <ActivityGridPanel hexId={selectedHexId} hour={activeHour} onClose={() => setSelectedHexId(null)} />}
+                    : <ActivityGridPanel hexId={selectedHexId} hour={gridHour} mode={timeMode} onClose={() => setSelectedHexId(null)} />}
         </div>
     );
 }
@@ -585,5 +595,13 @@ function readStoredMode(): MapMode {
         return isMapMode(raw) ? raw : DEFAULT_MAP_MODE;
     } catch {
         return DEFAULT_MAP_MODE;
+    }
+}
+
+function readStoredTimeMode(): ActivityTimeMode {
+    try {
+        return localStorage.getItem("etg-activity-time-mode") === "live" ? "live" : "replay";
+    } catch {
+        return "replay";
     }
 }

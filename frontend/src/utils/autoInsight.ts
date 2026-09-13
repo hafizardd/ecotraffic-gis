@@ -9,6 +9,9 @@ export interface AutoInsightEntity {
     // the hour slider regenerates an insight that matches the displayed hour.
     hour?: string | null;
     hourLabel?: string | null;
+    // Live vs replay lens; part of the key so switching mode never reuses an
+    // insight generated for the other lens.
+    timeMode?: "live" | "replay";
 }
 
 export interface AutoInsightOptions<T> {
@@ -19,7 +22,7 @@ export interface AutoInsightOptions<T> {
 }
 
 export function entityKey(entity: AutoInsightEntity): string {
-    const base = `${entity.type}:${entity.id}`;
+    const base = `${entity.type}:${entity.id}${entity.timeMode ? `:${entity.timeMode}` : ""}`;
     return entity.hour ? `${base}:${entity.hour}` : base;
 }
 

@@ -18,6 +18,8 @@ import app.services.bangjo_guardrails as guardrails
 import app.services.bangjo_retrieval as bangjo_retrieval
 from app.api.routes.bangjo import BangJoLLMError, _validate_markdown
 from app.services.bangjo_context import (
+    activity_overview_payload,
+    build_activity_overview_context,
     build_bus_stop_overview_context,
     build_context,
     build_hex_context,
@@ -224,6 +226,8 @@ def test_overview_query_detection():
     assert bangjo._is_overview_query("sebutkan koridor apa saja yang butuh intervensi") is True
     assert bangjo._is_overview_query("koridor mana yang emisinya tertinggi?") is True
     assert bangjo._is_overview_query("koridor dengan emisi terendah") is True
+    assert bangjo._is_overview_query("dimana ruas jalan terbaik?") is True
+    assert bangjo._is_overview_query("ruas jalan terburuk") is True
     assert bangjo._is_overview_query("berapa emisi jalan malioboro") is False
     assert bangjo._is_overview_query("apa prioritas intervensi untuk koridor ini?") is False
 
@@ -313,6 +317,14 @@ def test_overview_payload_is_compact_and_bounded():
     assert len(payload["emisi_terendah"]) == bangjo_context.OVERVIEW_BOTTOM_LIMIT
     assert len(payload["butuh_intervensi"]) == bangjo_context.OVERVIEW_INTERVENTION_LIMIT
     assert payload["intervensi_dipotong"] is True
+    # Partial lists are disclosed, and the bottom list starts at the true lowest.
+    assert payload["ditampilkan"] == {
+        "tertinggi": bangjo_context.OVERVIEW_TOP_LIMIT,
+        "terendah": bangjo_context.OVERVIEW_BOTTOM_LIMIT,
+    }
+    assert payload["emisi_dipotong"] is True
+    assert payload["jumlah_tanpa_emisi"] == 0
+    assert payload["emisi_terendah"][0]["nama"] == "Jalan 59"
     assert payload["sebaran_emisi"] == {"Tinggi": 20, "Sedang": 20, "Rendah": 20}
     # Severity is computed, not left to the model.
     assert payload["emisi_tertinggi"][0]["pita_emisi"] == "Tinggi"
@@ -325,6 +337,57 @@ def test_overview_payload_is_compact_and_bounded():
     assert "intervention_hint" not in json.dumps(payload)
     assert "road_segment_ids" not in json.dumps(payload)
     assert len(json.dumps(payload)) < 8000
+
+
+def _hex_cell_row(hex_id, score, poi_total=10, poi=None, pop=900, volume=50.0):
+    return SimpleNamespace(
+        hex_id=hex_id, luas_km2=0.4, poi_total=poi_total, poi_breakdown=poi or {"kantor": 4, "toko": 2},
+        penduduk=pop, volume_mean=volume, skor_total_ahp=score, ranking=hex_id,
+        klasifikasi_potensi="Tinggi" if score >= 75 else "Rendah", ahp_weight_version="v1", source="ahp",
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_activity_overview_context_ranks_cells_with_corridors():
+    cells = [_hex_cell_row(1, 90.0), _hex_cell_row(2, 20.0), _hex_cell_row(3, 55.0)]
+    db = _FakeDB([
+        _FakeResult(rows=cells),
+        _FakeResult(rows=[(1, "Jalan A"), (1, "Jalan B"), (3, "Jalan C")]),
+    ])
+
+    context = await build_activity_overview_context(db)
+
+    assert context["scope"] == "hex_activity"
+    assert context["cell_count"] == 3
+    assert context["cells"][0]["koridor"] == ["Jalan A", "Jalan B"]
+    assert context["cells"][1]["koridor"] == []
+
+
+def test_activity_overview_payload_is_compact_and_bounded():
+    cells = [
+        {"hex_id": index, "skor_total_ahp": float(100 - index), "klasifikasi_potensi": "Tinggi",
+         "poi_total": index, "poi_breakdown": {"kantor": index}, "penduduk": 1000, "volume_mean": 10.0,
+         "koridor": [f"Jalan {index}"]}
+        for index in range(40)
+    ]
+
+    payload = activity_overview_payload({"scope": "hex_activity", "cell_count": 40, "cells": cells})
+
+    assert payload["scope"] == "hex_activity"
+    assert payload["jumlah_sel"] == 40
+    assert payload["jumlah_sel_dinilai"] == 40
+    assert payload["ringkasan"]["tertinggi"]["sel"] == 0
+    assert payload["ringkasan"]["terendah"]["sel"] == 39
+    assert len(payload["potensi_tertinggi"]) == bangjo_context.ACTIVITY_OVERVIEW_TOP_LIMIT
+    assert len(payload["potensi_terendah"]) == bangjo_context.ACTIVITY_OVERVIEW_BOTTOM_LIMIT
+    # Lowest potential comes first in the bottom list.
+    assert payload["potensi_terendah"][0]["sel"] == 39
+    assert payload["dipotong"] is True
+    # Cells with no score are excluded from the ranking, not fabricated.
+    unscored = [*cells, {"hex_id": 999, "skor_total_ahp": None, "koridor": []}]
+    lean = activity_overview_payload({"scope": "hex_activity", "cell_count": 41, "cells": unscored})
+    assert lean["jumlah_sel_dinilai"] == 40
+    assert all(row["sel"] != 999 for row in [lean["ringkasan"]["tertinggi"], lean["ringkasan"]["terendah"]])
 
 
 def test_merge_contexts_aggregates_chunks():
@@ -439,6 +502,7 @@ def test_screen_query_rejects_out_of_scope():
 def test_screen_query_accepts_in_scope_and_greetings():
     assert guardrails.screen_query("berapa emisi koridor ini?")["blocked"] is False
     assert guardrails.screen_query("halo")["blocked"] is False
+    assert guardrails.screen_query("Di mana daerah dengan potensi aktivitas tertinggi")["blocked"] is False
 
 
 def test_screen_query_blocks_injection_and_overlong():
@@ -866,6 +930,19 @@ async def test_bangjo_chat_ambiguous_name_still_asks_selection(monkeypatch):
     assert [candidate["name"] for candidate in response["candidates"]] == ["Jalan A", "Jalan B"]
 
 
+@pytest.mark.asyncio
+async def test_bangjo_chat_referential_without_selection_asks_clarify():
+    # No matching selection: must ask, not fall through to the overview (which
+    # would need a DB and answer a different question).
+    response = await bangjo.bangjo_chat(
+        bangjo.ChatRequest(message="Apa prioritas intervensi untuk koridor ini?"), None
+    )
+
+    assert response["needs_selection"] is True
+    assert response["context_label"] is None
+    assert "koridor" in response["detail"].lower()
+
+
 # --- auto-insight ---------------------------------------------------------
 
 def _hex_cell(hex_id=5):
@@ -879,7 +956,7 @@ async def test_auto_insight_maps_hex_and_caches(monkeypatch):
     store = {}
     captured = {}
 
-    async def fake_build_hex_context(db, hex_id, hour=None):
+    async def fake_build_hex_context(db, hex_id, hour=None, live=False):
         captured["hour"] = hour
         return {"hex_cell": _hex_cell(hex_id), "observed_hour": "2026-09-12T05:00:00+00:00",
                 "corridor_contexts": [_context()]}
@@ -927,7 +1004,7 @@ async def test_auto_insight_maps_hex_and_caches(monkeypatch):
 async def test_auto_insight_hex_without_segments_answers_from_cell(monkeypatch):
     captured = {}
 
-    async def fake_build_hex_context(db, hex_id, hour=None):
+    async def fake_build_hex_context(db, hex_id, hour=None, live=False):
         return {"hex_cell": _hex_cell(hex_id), "observed_hour": None, "corridor_contexts": []}
 
     async def fake_ask_llm(prompt, context, history, *args, **kwargs):
@@ -1008,7 +1085,7 @@ async def test_auto_insight_stop_discloses_nearest_segment(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_auto_insight_unknown_hex_is_needs_selection(monkeypatch):
-    async def fake_build_hex_context(db, hex_id, hour=None):
+    async def fake_build_hex_context(db, hex_id, hour=None, live=False):
         return None
 
     async def fake_get(key):
@@ -1146,6 +1223,67 @@ async def test_dispatch_scope_routes_halte_ranking_to_bus_stops():
     assert english == {"kind": "bus_stops"}
 
 
+def test_activity_query_detection():
+    assert bangjo._is_activity_query("Di mana daerah dengan potensi aktivitas tertinggi?") is True
+    assert bangjo._is_activity_query("sel grid mana dengan aktivitas terbesar?") is True
+    assert bangjo._is_activity_query("aktivitas koridor ini") is False
+    assert bangjo._is_activity_query("berapa emisi jalan malioboro?") is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_routes_activity_potential_to_hex_activity():
+    scope = await bangjo._dispatch_scope(
+        None, bangjo.ChatRequest(message="Di mana daerah dengan potensi aktivitas tertinggi?")
+    )
+    assert scope == {"kind": "hex_activity"}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_segment_requires_segment_selection():
+    # "koridor ini" with only a halte selected must not narrate the halte.
+    scope = await bangjo._dispatch_scope(
+        None, bangjo.ChatRequest(message="Apa prioritas intervensi untuk koridor ini?", stop_id="STOP-1")
+    )
+    assert scope["kind"] == "clarify"
+    assert "koridor" in scope["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_segment_uses_selected_segment():
+    scope = await bangjo._dispatch_scope(
+        None, bangjo.ChatRequest(message="Kenapa skor koridor ini tinggi?", road_segment_id="SEG-1")
+    )
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-1"]}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_segment_uses_selected_hex_corridors(monkeypatch):
+    async def fake_segments_for_hex(db, hex_id):
+        return ["SEG-7", "SEG-8"]
+
+    monkeypatch.setattr(bangjo, "segments_for_hex", fake_segments_for_hex)
+    scope = await bangjo._dispatch_scope(
+        object(), bangjo.ChatRequest(message="Apa prioritas untuk koridor ini?", hex_id=42)
+    )
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-7", "SEG-8"]}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_halte_requires_halte_selection():
+    db = _FakeDB([_FakeResult(rows=[])])
+    scope = await bangjo._dispatch_scope(
+        db, bangjo.ChatRequest(message="Bagaimana kualitas halte ini?", road_segment_id="SEG-1")
+    )
+    assert scope["kind"] == "clarify"
+    assert "halte" in scope["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_referential_without_selection_asks_to_pick():
+    scope = await bangjo._dispatch_scope(None, bangjo.ChatRequest(message="Rekomendasi ASI untuk ini?"))
+    assert scope["kind"] == "clarify"
+
+
 @pytest.mark.asyncio
 async def test_dispatch_scope_prefers_selection_for_referential_hex():
     scope = await bangjo._dispatch_scope(
@@ -1272,3 +1410,202 @@ def test_fit_messages_returns_none_when_user_turn_alone_is_too_big(monkeypatch):
     monkeypatch.setattr(bangjo.settings, "BANGJO_MAX_TOKENS", 2048)
 
     assert bangjo._fit_messages("system", "z" * 40000, []) is None
+
+
+# --- segment/stop id resolution ---------------------------------------------
+
+@pytest.mark.asyncio
+async def test_resolve_segment_cascade_matches_segment_id(monkeypatch):
+    db = _FakeDB([_FakeResult(rows=[("SEG-0001", "Jalan Malioboro"), ("SEG-0002", "Jalan Solo")])])
+
+    async def must_not_embed(db_, message):
+        raise AssertionError("embedding must not run when an ID matches")
+
+    monkeypatch.setattr(bangjo, "resolve_by_embedding", must_not_embed)
+
+    ids, candidates, method = await bangjo._resolve_segment_cascade(db, "berapa emisi SEG-0002?")
+
+    assert ids == ["SEG-0002"]
+    assert candidates == []
+    assert method == "id"
+
+
+@pytest.mark.asyncio
+async def test_resolve_stop_matches_source_id():
+    db = _FakeDB([_FakeResult(rows=[("STOP-9", "Halte Malioboro")])])
+
+    assert await bangjo._resolve_stop(db, "bagaimana kondisi STOP-9?") == "STOP-9"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_prefers_message_entity_over_selection():
+    db = _FakeDB([_FakeResult(rows=[("SEG-0001", "Jalan Malioboro"), ("SEG-0002", "Jalan Solo")])])
+    payload = bangjo.ChatRequest(message="berapa emisi SEG-0002?", road_segment_id="SEG-0001")
+
+    scope, confident = await bangjo._dispatch_scope_ex(db, payload)
+
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-0002"]}
+    assert confident is True
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_selection_fallback_is_low_confidence(monkeypatch):
+    db = _FakeDB([_FakeResult(rows=[("SEG-0001", "Jalan Malioboro")])])
+
+    async def fake_embed(db_, message):
+        return None
+
+    monkeypatch.setattr(bangjo, "resolve_by_embedding", fake_embed)
+
+    payload = bangjo.ChatRequest(message="berapa jumlahnya sekarang?", road_segment_id="SEG-0001")
+
+    scope, confident = await bangjo._dispatch_scope_ex(db, payload)
+
+    assert scope == {"kind": "segment", "segment_ids": ["SEG-0001"]}
+    assert confident is False
+
+
+# --- guardrail relaxation ----------------------------------------------------
+
+def test_screen_query_accepts_followups_and_new_traffic_topics():
+    assert guardrails.screen_query("bagaimana kondisi itu sekarang?")["blocked"] is False
+    assert guardrails.screen_query("coba cek yang lainnya dong")["blocked"] is False
+    assert guardrails.screen_query("apakah kecepatan sudah normal?")["blocked"] is False
+    assert guardrails.screen_query("berapa emisi SEG-0023?")["blocked"] is False
+
+
+def test_screen_query_still_blocks_off_topic_without_referent():
+    assert guardrails.screen_query("apa resep rendang yang enak sekali")["blocked"] is True
+
+
+# --- question-driven retrieval planner ---------------------------------------
+
+def test_parse_tool_calls_reads_name_and_json_arguments():
+    message = {"tool_calls": [
+        {"function": {"name": "get_segment", "arguments": '{"query": "SEG-0022"}'}},
+        {"function": {"name": "list_corridors", "arguments": ""}},
+    ]}
+
+    assert bangjo._parse_tool_calls(message) == [
+        {"name": "get_segment", "arguments": {"query": "SEG-0022"}},
+        {"name": "list_corridors", "arguments": {}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_to_scope_maps_each_function():
+    db = _FakeDB([_FakeResult(rows=[("SEG-0002", "Jalan Solo")])])
+    payload = bangjo.ChatRequest(message="x")
+
+    assert await bangjo._tool_calls_to_scope(
+        db, [{"name": "get_segment", "arguments": {"query": "SEG-0002"}}], payload
+    ) == {"kind": "segment", "segment_ids": ["SEG-0002"]}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "list_corridors", "arguments": {}}], payload
+    ) == {"kind": "overview"}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "rank_bus_stops", "arguments": {}}], payload
+    ) == {"kind": "bus_stops"}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "rank_activity_cells", "arguments": {}}], payload
+    ) == {"kind": "hex_activity"}
+    assert await bangjo._tool_calls_to_scope(
+        None, [{"name": "get_activity_cell", "arguments": {"hex_id": 42}}], payload
+    ) == {"kind": "hex", "hex_id": 42}
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_disabled_returns_none(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", False)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+
+    assert await bangjo._plan_retrieval("berapa emisi?", []) is None
+
+
+class _ToolResponse:
+    status_code = 200
+    request = None
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"choices": [{"message": {"content": None, "tool_calls": [
+            {"function": {"name": "get_segment", "arguments": '{"query": "SEG-0022"}'}}]}}]}
+
+
+class _ToolClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        return _ToolResponse()
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_reads_tool_calls(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: _ToolClient())
+
+    calls = await bangjo._plan_retrieval("berapa emisi SEG-0022?", [])
+
+    assert calls == [{"name": "get_segment", "arguments": {"query": "SEG-0022"}}]
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_without_tool_calls_returns_none(monkeypatch):
+    class _NoToolClient(_ToolClient):
+        async def post(self, url, headers=None, json=None):
+            return _FakeResponse(200, "Saya tidak tahu.")
+
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: _NoToolClient())
+
+    assert await bangjo._plan_retrieval("berapa emisi SEG-0022?", []) is None
+
+
+@pytest.mark.asyncio
+async def test_chat_uses_planner_when_router_falls_back(monkeypatch):
+    captured = {}
+
+    async def fake_dispatch(db, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0001"]}, False
+
+    async def fake_plan(message, history):
+        return [{"name": "get_segment", "arguments": {"query": "SEG-0002"}}]
+
+    async def fake_scope(db, calls, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0002"]}
+
+    async def fake_build(db, scope, payload):
+        captured["scope"] = scope
+        return {"segment": {"name": "Jalan Solo"}}, "Jalan Solo (SEG-0002)", None
+
+    async def fake_ask(message, context, history, *args, **kwargs):
+        return {"content": "**Ringkasan** Jalan Solo.", "source": "llm"}
+
+    async def fake_get(key):
+        return None
+
+    async def fake_set(key, value, ttl):
+        return None
+
+    monkeypatch.setattr(bangjo, "_dispatch_scope_ex", fake_dispatch)
+    monkeypatch.setattr(bangjo, "_plan_retrieval", fake_plan)
+    monkeypatch.setattr(bangjo, "_tool_calls_to_scope", fake_scope)
+    monkeypatch.setattr(bangjo, "_build_scope_context", fake_build)
+    monkeypatch.setattr(bangjo, "_ask_llm", fake_ask)
+    monkeypatch.setattr(bangjo, "_cache_get", fake_get)
+    monkeypatch.setattr(bangjo, "_cache_set", fake_set)
+
+    response = await bangjo.bangjo_chat(
+        bangjo.ChatRequest(message="berapa emisi SEG-0002?", road_segment_id="SEG-0001"), None
+    )
+
+    assert captured["scope"] == {"kind": "segment", "segment_ids": ["SEG-0002"]}
+    assert response["context_label"] == "Jalan Solo (SEG-0002)"

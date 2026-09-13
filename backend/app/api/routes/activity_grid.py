@@ -16,6 +16,8 @@ from app.services.hex_activity_scoring import (
     available_hours,
     hour_scores,
     hourly_hex_volumes,
+    latest_hex_volumes,
+    live_scores,
     profile_hour,
     recompute_hour_scores,
 )
@@ -96,9 +98,8 @@ async def _camera_ids_by_segment(db, segment_ids: list[str]) -> dict[str, list[s
     return mapping
 
 
-async def _live_grid(db, hour: datetime, bounds):
-    """Static POI/population + live hourly volume, re-ranked for one hour bucket."""
-    cells, scores = await hour_scores(db, hour)
+async def _scored_grid(db, cells, scores, bounds):
+    """Hex features with the hourly/live scores merged onto the static POI data."""
     cells_by_id = {cell.hex_id: cell for cell in cells}
     features = []
     for hex_id, geometry in await _geometry_rows(db, bounds):
@@ -111,7 +112,19 @@ async def _live_grid(db, hour: datetime, bounds):
     return _envelope(features, quantile_breaks([feature["properties"].get("skor_total_ahp") for feature in features]), "fine")
 
 
-async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, lod: str):
+async def _live_grid(db, hour: datetime, bounds):
+    """Static POI/population + live hourly volume, re-ranked for one hour bucket."""
+    cells, scores = await hour_scores(db, hour)
+    return await _scored_grid(db, cells, scores, bounds)
+
+
+async def _latest_grid(db, bounds):
+    """Static POI/population + newest observed volume per segment (live lens)."""
+    cells, scores = await live_scores(db)
+    return await _scored_grid(db, cells, scores, bounds)
+
+
+async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, lod: str, live: bool = False):
     """Zoomed-out LOD: native cells rolled up into H3 cells at ``resolution``.
 
     Native cells stay the unit of scoring - the H3 geometry and its metrics are
@@ -126,11 +139,13 @@ async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, l
             text("ST_Y(ST_Centroid(activity_grid_hexes.geometry))::float"),
         )
     )).all()
-    scores = recompute_hour_scores(
-        [row[0] for row in rows],
-        await hourly_hex_volumes(db, hour),
-        {row[0].hex_id: (row[1], row[2]) for row in rows},
-    ) if hour else None
+    centroids = {row[0].hex_id: (row[1], row[2]) for row in rows}
+    if live:
+        scores = recompute_hour_scores([row[0] for row in rows], await latest_hex_volumes(db), centroids)
+    elif hour:
+        scores = recompute_hour_scores([row[0] for row in rows], await hourly_hex_volumes(db, hour), centroids)
+    else:
+        scores = None
 
     groups: dict[str, list] = {}
     included: list = []
@@ -170,17 +185,23 @@ async def _aggregated_grid(db, hour: datetime | None, resolution: int, bounds, l
 
 @router.get("/activity-grid")
 async def get_activity_grid(response: Response, bbox: str | None = None, hour: str | None = None, lod: str | None = None,
-                            db: AsyncSession = Depends(get_db)):
+                            mode: str | None = None, db: AsyncSession = Depends(get_db)):
+    live = mode == "live"
     # The grid only changes when a new hour bucket lands, so let the browser (and
     # any intermediary keyed on the full bbox/hour/lod URL) reuse the snapshot
-    # briefly instead of re-downloading it on every pan back-and-forth.
-    response.headers["Cache-Control"] = "public, max-age=30"
+    # briefly instead of re-downloading it on every pan back-and-forth. Live mode
+    # reflects the newest facts, so it must never be cached.
+    response.headers["Cache-Control"] = "no-store" if live else "public, max-age=30"
     bounds = _parse_bbox(bbox)
     resolution = LOD_RESOLUTIONS.get(lod or "")
     if resolution is not None:
         # Aggregated tiers use the same daily-profile lens as the native grid.
+        if live:
+            return await _aggregated_grid(db, None, resolution, bounds, lod, live=True)
         moment = await profile_hour(db, _parse_hour(hour)) if hour else None
         return await _aggregated_grid(db, moment, resolution, bounds, lod)
+    if live:
+        return await _latest_grid(db, bounds)
     if hour:
         moment = await profile_hour(db, _parse_hour(hour))
         if moment is not None:
@@ -239,8 +260,17 @@ async def get_activity_grid_hex_hourly(hex_id: int, db: AsyncSession = Depends(g
     return {"hex_id": hex_id, "series": series}
 
 
+async def _attach_source_cameras(db, properties: dict, entry: dict, scores: dict[int, dict]) -> None:
+    """Fallback cells borrow from a source hex; report that hex's feeders."""
+    segments = entry.get("source_segments") or scores.get(entry.get("fallback_from") or -1, {}).get("source_segments") or []
+    if segments:
+        cameras = await _camera_ids_by_segment(db, segments)
+        properties["source_cameras"] = sorted({camera for ids in cameras.values() for camera in ids})
+
+
 @router.get("/activity-grid/{hex_id}")
-async def get_activity_grid_hex(hex_id: int, hour: str | None = None, db: AsyncSession = Depends(get_db)):
+async def get_activity_grid_hex(hex_id: int, hour: str | None = None, mode: str | None = None,
+                                db: AsyncSession = Depends(get_db)):
     geometry = (
         await db.execute(
             select(text(f"ST_AsGeoJSON(activity_grid_hexes.geometry, {_GEOJSON_PRECISION})::json")).where(ActivityGridHex.hex_id == hex_id)
@@ -250,17 +280,18 @@ async def get_activity_grid_hex(hex_id: int, hour: str | None = None, db: AsyncS
     if cell is None:
         raise HTTPException(status_code=404, detail="Activity grid hex not found")
     properties = _hex_properties(cell)
-    if hour:
+    if mode == "live":
+        _, scores = await live_scores(db)
+        entry = scores.get(hex_id, dict(NO_DATA))
+        properties.update(entry)
+        await _attach_source_cameras(db, properties, entry, scores)
+    elif hour:
         moment = await profile_hour(db, _parse_hour(hour))
         if moment is not None:
             _, scores = await hour_scores(db, moment)
             entry = scores.get(hex_id, dict(NO_DATA))
             properties.update(entry)
-            # Fallback cells borrow from a source hex; report that hex's feeders.
-            segments = entry.get("source_segments") or scores.get(entry.get("fallback_from") or -1, {}).get("source_segments") or []
-            if segments:
-                cameras = await _camera_ids_by_segment(db, segments)
-                properties["source_cameras"] = sorted({camera for ids in cameras.values() for camera in ids})
+            await _attach_source_cameras(db, properties, entry, scores)
     return _feature(geometry, properties)
 
 

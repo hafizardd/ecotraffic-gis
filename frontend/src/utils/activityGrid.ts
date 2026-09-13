@@ -56,6 +56,19 @@ export function sliderIndex(hours: string[], value: string | null): number {
     return index === -1 ? hours.length - 1 : index;
 }
 
+// Autoplay decision for the replay slider. "wait" means do not schedule the next
+// step yet (paused, or the current hour's data has not settled); "stop" pauses at
+// the last hour; "advance" moves to the next index. Pure so it is unit-testable.
+export type AutoplayStep = { action: "wait" } | { action: "stop" } | { action: "advance"; next: number };
+
+export function autoplayStep(playing: boolean, stale: boolean, selected: number, last: number): AutoplayStep {
+    if (!playing) return { action: "wait" };
+    // Never step ahead of the data: the map is still showing the previous hour.
+    if (stale) return { action: "wait" };
+    if (selected + 1 > last) return { action: "stop" };
+    return { action: "advance", next: selected + 1 };
+}
+
 // The 24h dataset is one static profile, so any calendar day reuses the same
 // buckets: rewrite only the date part of a canonical hour for display/requests.
 export function withDay(iso: string, day: string | null): string {

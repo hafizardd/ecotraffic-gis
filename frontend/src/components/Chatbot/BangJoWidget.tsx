@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import useBangJoChat from "@/hooks/useBangJoChat";
 import BangJoFab from "./BangJoFab";
 import BangJoPanel from "./BangJoPanel";
+import type { QuickQuestionTarget } from "./BangJoQuickQuestions";
 import { subscribeBangJoQuestion, subscribeSelection, type SelectionState } from "@/utils/selectionStore";
 import { bangjoDock } from "@/utils/bangjoLayout";
 
@@ -16,6 +17,15 @@ export default function BangJoWidget() {
     const [selection, setSelectionState] = useState<SelectionState | null>(null);
     const fabRef = useRef<HTMLButtonElement>(null);
     const { messages, isTyping, sendMessage } = useBangJoChat();
+    // Prompts follow the selected object so a referential template ("ini") always
+    // points at something the user has actually picked.
+    const quickTarget: QuickQuestionTarget = selection?.segmentId
+        ? "segment"
+        : selection?.stopId
+            ? "stop"
+            : selection?.hexId != null
+                ? "hex"
+                : null;
 
     useEffect(() => subscribeSelection(setSelectionState), []);
 
@@ -48,6 +58,7 @@ export default function BangJoWidget() {
                     messages={messages}
                     isTyping={isTyping}
                     minimized={minimized}
+                    quickTarget={quickTarget}
                     onSend={sendMessage}
                     onMinimize={() => setMinimized((value) => !value)}
                     onClose={() => {

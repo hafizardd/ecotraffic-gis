@@ -24,6 +24,8 @@ from app.core.database import get_db
 from app.models.road_segment import RoadSegment
 from app.models.spatial_sources import SurveyStopObservation
 from app.services.bangjo_context import (
+    activity_overview_payload,
+    build_activity_overview_context,
     build_bus_stop_overview_context,
     build_context,
     build_hex_context,
@@ -42,16 +44,24 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 SYSTEM_PROMPT = (
     "Anda adalah Bang Jo, asisten WebGIS EcoTraffic Yogyakarta. "
-    "Jawab HANYA berdasarkan objek konteks JSON yang diberikan. "
-    "JANGAN menyebut angka yang tidak ada di konteks; jika data tidak tersedia, tulis 'tidak tersedia'. "
+    "Jawab berdasarkan objek konteks JSON yang diberikan; jangan mengarang angka di luar konteks. "
+    "Jika sebuah dimensi memang tidak ada di konteks, katakan datanya belum tersedia pada konteks ini "
+    "lalu sebutkan dimensi yang tersedia. "
     "Konteks bisa berbentuk (a) satu koridor pada field 'segment', atau (b) ringkasan seluruh koridor "
     "dengan scope='overview' (field ringkasan, emisi_tertinggi, emisi_terendah, butuh_intervensi, pita_emisi), "
     "atau (c) peringkat kualitas halte dengan scope='bus_stops' (field ringkasan, halte_terbaik, halte_terburuk; "
     "satuan skor 0-100 dan MAKIN TINGGI MAKIN BAIK), atau (d) satu halte pada field 'stop' (skor_total, aksesibilitas, "
-    "kondisi, lingkungan, jumlah_fasilitas, jumlah_kerusakan) beserta koridor terdekatnya. "
+    "kondisi, lingkungan, jumlah_fasilitas, jumlah_kerusakan) beserta koridor terdekatnya, "
+    "atau (e) peringkat potensi aktivitas sel grid dengan scope='hex_activity' (field ringkasan, potensi_tertinggi, "
+    "potensi_terendah; satuan skor 0-100 dan MAKIN TINGGI MAKIN TINGGI POTENSI AKTIVITAS). "
+    "Untuk pertanyaan 'daerah dengan potensi aktivitas tertinggi/terendah', jawab dari ringkasan pada scope='hex_activity': "
+    "sebut sel beserta koridor yang melintasinya dan poi_utama sebagai pemicu; jangan menyebut angka sel sebagai nama tempat. "
+    "Daftar potensi_tertinggi/potensi_terendah hanya sebagian (lihat 'dipotong'); gunakan ringkasan untuk jawaban pasti. "
     "Jika konteks memuat 'displayed_hour_label', itu adalah jam/tanggal yang sedang dilihat pengguna pada peta; "
     "sebut waktu itu apa adanya saat menjelaskan sel grid, dan gunakan nilai hex_cell (skor_total_ahp, ranking, "
     "klasifikasi_potensi, data_status) sebagai nilai pada jam tersebut (field 'static' hanyalah snapshot offline). "
+    "Jika konteks memuat data_mode='live', nilai hex_cell adalah pembacaan live TERBARU (bukan jam REPLAY tertentu); "
+    "sebut sebagai data live dan JANGAN menyebut jam tampilan. "
     "Jika data_status='fallback', sebut nilainya perkiraan dari sel terdekat; jika is_interpolated=true, sebut hasil interpolasi. "
     "Jika konteks memuat penilaian kualitas halte ('stop' atau scope='bus_stops'), data itu TERSEDIA: jawab dari situ "
     "dan JANGAN pernah menyatakan penilaian kualitas halte tidak tersedia. "
@@ -59,6 +69,10 @@ SYSTEM_PROMPT = (
     "ringkasan.tertinggi/ringkasan.median/ringkasan.terendah untuk pertanyaan tertinggi/normal/terendah; "
     "gunakan pita_emisi sebagai penentu 'tinggi'/'sedang'/'rendah' (JANGAN membuat ambang batas sendiri), "
     "dan hanya sebut koridor berlabel 'Tinggi' sebagai emisi tinggi. "
+    "Untuk pertanyaan 'ruas jalan/koridor terbaik atau terburuk': 'terburuk' = emisi tertinggi "
+    "(ringkasan.tertinggi) dan 'terbaik' = emisi terendah (ringkasan.terendah); jangan menukar keduanya. "
+    "Daftar emisi_tertinggi/emisi_terendah hanya sebagian (lihat emisi_dipotong dan jumlah_tanpa_emisi); "
+    "pakai ringkasan untuk jawaban pasti dan sebutkan bila ada koridor yang belum punya data emisi. "
     "Gunakan kerangka ASI: Avoid (hindari), Shift (alihkan), Improve (perbaiki). "
     "Untuk rekomendasi intervensi koridor, pilih tepat satu langkah berdasarkan konteks: "
     "kekosongan cakupan halte -> tambah halte baru; halte lemah -> perbaiki halte yang ada; "
@@ -73,8 +87,12 @@ SYSTEM_PROMPT = (
     "sebut nilai itu sebagai PERKIRAAN dari segmen/sel terdekat (sebut borrowed_from/fallback_from bila ada), "
     "bukan pengukuran. Jika segment.is_static=true, sebut datanya statis (profil 24 jam), bukan arus langsung. "
     "Jangan pernah menyebut perkiraan/data statis sebagai nilai terukur."
-    "Jika konteks TIDAK memuat data yang diminta, jangan meminta pengguna menyebut nama koridor. "
-    "Sebutkan dimensi yang memang tersedia di konteks dan tawarkan pilihan konkret sebagai pertanyaan lanjutan. "
+    "Jika konteks yang diberikan bukan objek yang ditanyakan (misalnya pengguna menyebut koridor/halte lain), "
+    "sebut objek yang sedang dijawab dan arahkan pengguna ke objek itu. "
+    "Jika konteks belum memuat data yang diminta, sebutkan dimensi yang tersedia di konteks dan "
+    "tawarkan pengguna menanyakannya secara spesifik. "
+    "Jawab topik pada pertanyaan TERBARU; gunakan riwayat hanya untuk memahami rujukan seperti 'itu', 'yang tadi', "
+    "atau 'lainnya', dan jangan lanjut membahas topik lama bila pertanyaan terbaru sudah berpindah objek. "
     "PENTING: tulis dalam Bahasa Indonesia manusia. JANGAN pernah menampilkan nama field atau kode teknis "
     "(misalnya yang mengandung garis bawah '_', atau kode seperti increase_frequency, add_new_stop, "
     "improve_existing_stop, coverage_gap, weak_stop_count). Terjemahkan: increase_frequency menjadi "
@@ -144,8 +162,8 @@ AUTO_INSIGHT_PROMPT_HEX_ONLY = (
 )
 
 _RANKING_QUERY = re.compile(
-    r"\b(tersibuk|tertinggi|terbesar|terbanyak|terburuk|"
-    r"paling\s+(sibuk|tinggi|besar|banyak)|top|ranking|peringkat)\b",
+    r"\b(tersibuk|tertinggi|terbesar|terbanyak|terburuk|terbaik|terjelek|terbersih|"
+    r"paling\s+(sibuk|tinggi|besar|banyak|baik|buruk|jelek|bersih)|top|ranking|peringkat)\b",
     re.IGNORECASE,
 )
 
@@ -161,6 +179,40 @@ _OVERVIEW_QUERY = re.compile(
 
 # "koridor ini/itu/tersebut" points at the current map selection, not the whole dataset.
 _REFERENTIAL = re.compile(r"\b(ini|itu|tersebut)\b", re.IGNORECASE)
+
+# Whole-grid activity-potential questions ("daerah dengan potensi aktivitas
+# tertinggi"). Kept separate from corridor emission overview so the answer can
+# rank hex cells, where the POI/population/volume AHP score actually lives.
+_ACTIVITY_QUERY = re.compile(r"\b(potensi|aktivitas|activity)\b", re.IGNORECASE)
+_SPATIAL_QUERY = re.compile(
+    r"\b(daerah|wilayah|kawasan|zona|area|lokasi|sel|grid|hex)\b|\bdi\s+mana\b",
+    re.IGNORECASE,
+)
+
+# A named/selected road wins over the whole-grid activity ranking.
+_SEGMENT_NOUN = re.compile(r"\b(koridor|jalan|segmen|segment|ruas)\b", re.IGNORECASE)
+_STOP_NOUN = re.compile(r"\b(halte|bus\s?stop|terminal|shelter|trayek|pemberhentian)\b", re.IGNORECASE)
+_HEX_NOUN = re.compile(r"\b(grid|sel|hex|daerah|wilayah|kawasan|zona|area)\b", re.IGNORECASE)
+
+# A referential ("ini/itu") must answer for the kind of object the user names;
+# when that object is not selected, ask instead of narrating a different one.
+_CLARIFY = {
+    "segment": "Pilih dulu koridor/segmen jalan di peta, lalu tanyakan lagi tentang koridor itu.",
+    "stop": "Pilih dulu halte di peta, lalu tanyakan lagi tentang halte itu.",
+    "hex": "Pilih dulu sel grid di peta, lalu tanyakan lagi tentang sel itu.",
+    None: "Pilih objek di peta (koridor, halte, atau sel grid) lalu tanyakan lagi.",
+}
+
+
+def _referential_target(message: str) -> str | None:
+    text = message or ""
+    if _STOP_NOUN.search(text):
+        return "stop"
+    if _SEGMENT_NOUN.search(text):
+        return "segment"
+    if _HEX_NOUN.search(text):
+        return "hex"
+    return None
 
 # Requests that should get the structured ASI recommendation format.
 _INTERVENTION_QUERY = re.compile(
@@ -211,6 +263,9 @@ class ChatRequest(BaseModel):
     stop_id: str | None = None
     hour: str | None = None
     hour_label: str | None = None
+    # "live" reads the newest observed fact per segment; anything else is the
+    # static 24h profile addressed by ``hour``.
+    time_mode: str | None = None
     history: list[HistoryTurn] = Field(default_factory=list)
 
 
@@ -234,6 +289,21 @@ def _is_overview_query(message: str) -> bool:
     if _REFERENTIAL.search(text):
         return False
     return bool(_OVERVIEW_QUERY.search(text) or _RANKING_QUERY.search(text))
+
+
+def _is_activity_query(message: str) -> bool:
+    """Whole-grid activity-potential question ("daerah dengan potensi aktivitas tertinggi").
+
+    A road noun ("koridor", "jalan", ...) points at a corridor instead, and a
+    referential ("ini/itu") must resolve to the active selection, so both are
+    excluded here.
+    """
+    text = message or ""
+    if _REFERENTIAL.search(text) or _SEGMENT_NOUN.search(text):
+        return False
+    if not _ACTIVITY_QUERY.search(text):
+        return False
+    return bool(_SPATIAL_QUERY.search(text) or _RANKING_QUERY.search(text) or "potensi" in text.casefold())
 
 
 def _is_intervention_query(message: str) -> bool:
@@ -276,12 +346,15 @@ def _parse_hour(value: str | None) -> datetime | None:
 
 
 async def _resolve_stop(db: AsyncSession, message: str) -> str | None:
-    """Exact normalized title match for a named halte (selection still wins for 'halte ini')."""
+    """Match a named halte by title or source_id (selection still wins for 'halte ini')."""
     rows = (await db.execute(select(SurveyStopObservation.source_id, SurveyStopObservation.title))).all()
     lower = _normalize_name(message)
     for source_id, title in rows:
         key = _normalize_name(title)
         if key and key in lower:
+            return source_id
+        stop_key = _normalize_name(source_id or "")
+        if stop_key and stop_key in lower:
             return source_id
     return None
 
@@ -320,9 +393,20 @@ async def _resolve_segment(db: AsyncSession, message: str) -> tuple[list[str] | 
 async def _resolve_segment_cascade(
     db: AsyncSession, message: str
 ) -> tuple[list[str] | None, list[dict], str]:
-    """Layer A (normalized name/alias) -> Layer B (embeddings) -> string fallback."""
+    """Layer A (id/normalized name/alias) -> Layer B (embeddings) -> string fallback."""
     rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
     lower = _normalize_name(message)
+    id_hits = [
+        (rid, name)
+        for rid, name in rows
+        if _normalize_name(rid or "") and _normalize_name(rid) in lower
+    ]
+    if len(id_hits) == 1:
+        return [id_hits[0][0]], [], "id"
+    if len(id_hits) > 1:
+        return None, [
+            {"road_segment_id": rid, "name": name, "count": 1} for rid, name in id_hits
+        ], "ambiguous"
     groups: dict[str, list[dict]] = {}
     for rid, name in rows:
         key = _normalize_name(name)
@@ -340,43 +424,155 @@ async def _resolve_segment_cascade(
     return ids, candidates, "string"
 
 
-async def _dispatch_scope(db: AsyncSession, payload: "ChatRequest") -> dict:
-    """Decide which context to retrieve for a chat turn.
+async def _dispatch_referential(db: AsyncSession, payload: "ChatRequest") -> dict:
+    """Resolve a referential ("ini/itu/tersebut") to the selection matching its subject.
 
-    Precedence: halte quality ranking -> selected/named halte -> whole-dataset
-    corridor overview -> named corridor -> active map selection -> overview.
-    Referential wording ("ini", "itu", "tersebut") resolves to the active
-    selection instead of name matching, since the user is pointing at the
-    visualization.
+    "koridor ini" must answer for a corridor, "halte ini" for a halte, and
+    "sel/grid ini" for a hex cell. When the matching object is not selected the
+    route asks the user to pick one, instead of silently narrating whichever
+    selection happens to be active.
     """
-    message = payload.message
-    referential = bool(_REFERENTIAL.search(message))
-
-    if _is_bus_stop_ranking(message):
-        return {"kind": "bus_stops"}
-    if _is_bus_stop_query(message) and payload.stop_id and (referential or not _is_ranking_query(message)):
-        return {"kind": "stop", "stop_id": payload.stop_id}
-    if _is_bus_stop_query(message):
-        named_stop = await _resolve_stop(db, message)
-        if named_stop:
-            return {"kind": "stop", "stop_id": named_stop}
-    if _is_overview_query(message):
-        return {"kind": "overview"}
-
-    if not referential:
-        ids, candidates, method = await _resolve_segment_cascade(db, message)
-        if ids:
-            return {"kind": "segment", "segment_ids": ids}
-        if method == "ambiguous" and candidates:
-            return {"kind": "ambiguous", "candidates": candidates}
-
+    target = _referential_target(payload.message)
+    if target == "stop":
+        if payload.stop_id:
+            return {"kind": "stop", "stop_id": payload.stop_id}
+        return {"kind": "clarify", "detail": _CLARIFY["stop"]}
+    if target == "hex":
+        if payload.hex_id is not None:
+            return {"kind": "hex", "hex_id": payload.hex_id}
+        return {"kind": "clarify", "detail": _CLARIFY["hex"]}
+    if target == "segment":
+        if payload.road_segment_id:
+            return {"kind": "segment", "segment_ids": [payload.road_segment_id]}
+        # A selected hex still answers "koridor ini" via the corridors crossing it.
+        if payload.hex_id is not None and db is not None:
+            crossing = await segments_for_hex(db, payload.hex_id)
+            if crossing:
+                return {"kind": "segment", "segment_ids": list(crossing)}
+        return {"kind": "clarify", "detail": _CLARIFY["segment"]}
     if payload.hex_id is not None:
         return {"kind": "hex", "hex_id": payload.hex_id}
     if payload.stop_id:
         return {"kind": "stop", "stop_id": payload.stop_id}
     if payload.road_segment_id:
         return {"kind": "segment", "segment_ids": [payload.road_segment_id]}
-    return {"kind": "overview"}
+    return {"kind": "clarify", "detail": _CLARIFY[None]}
+
+
+async def _dispatch_scope_ex(db: AsyncSession, payload: "ChatRequest") -> tuple[dict, bool]:
+    """Decide which context to retrieve for a chat turn.
+
+    Precedence: halte quality ranking -> selected/named halte -> whole-grid
+    activity potential -> whole-dataset corridor overview -> named corridor ->
+    active map selection -> overview. Referential wording ("ini", "itu",
+    "tersebut") resolves to the active selection instead of name matching, since
+    the user is pointing at the visualization.
+
+    The second value is ``True`` when the current message itself resolved the
+    scope. It is ``False`` for the silent fallbacks to the active selection or a
+    bare overview, which is the signal that question-driven retrieval (the LLM
+    planner) should run instead.
+    """
+    message = payload.message
+    referential = bool(_REFERENTIAL.search(message))
+
+    if _is_bus_stop_ranking(message):
+        return {"kind": "bus_stops"}, True
+    if _is_bus_stop_query(message) and payload.stop_id and (referential or not _is_ranking_query(message)):
+        return {"kind": "stop", "stop_id": payload.stop_id}, True
+    if _is_bus_stop_query(message):
+        named_stop = await _resolve_stop(db, message)
+        if named_stop:
+            return {"kind": "stop", "stop_id": named_stop}, True
+    if _is_activity_query(message):
+        return {"kind": "hex_activity"}, True
+    if _is_overview_query(message):
+        return {"kind": "overview"}, True
+
+    if referential:
+        return await _dispatch_referential(db, payload), True
+
+    ids, candidates, method = await _resolve_segment_cascade(db, message)
+    if ids:
+        return {"kind": "segment", "segment_ids": ids}, True
+    if method == "ambiguous" and candidates:
+        return {"kind": "ambiguous", "candidates": candidates}, True
+
+    if payload.hex_id is not None:
+        return {"kind": "hex", "hex_id": payload.hex_id}, False
+    if payload.stop_id:
+        return {"kind": "stop", "stop_id": payload.stop_id}, False
+    if payload.road_segment_id:
+        return {"kind": "segment", "segment_ids": [payload.road_segment_id]}, False
+    return {"kind": "overview"}, False
+
+
+async def _dispatch_scope(db: AsyncSession, payload: "ChatRequest") -> dict:
+    scope, _ = await _dispatch_scope_ex(db, payload)
+    return scope
+
+
+async def _build_scope_context(
+    db: AsyncSession, scope: dict, payload: "ChatRequest"
+) -> tuple[dict | None, str | None, dict | None]:
+    """Build the prompt context + label for a resolved scope.
+
+    Returns ``(context, label, None)`` on success, or ``(None, None, response)``
+    when the requested object does not exist (caller returns ``response`` as-is).
+    Shared by the deterministic router and the LLM planner so both paths narrate
+    the exact same evidence.
+    """
+    hour = _parse_hour(payload.hour)
+    live = payload.time_mode == "live"
+    kind = scope["kind"]
+    if kind == "overview":
+        context = overview_payload(await build_overview_context(db))
+        label = f"Ringkasan {context.get('jumlah_koridor')} koridor"
+    elif kind == "bus_stops":
+        context = bus_stop_payload(await build_bus_stop_overview_context(db))
+        label = f"Ringkasan {context.get('jumlah_dinilai')} halte dinilai"
+    elif kind == "hex_activity":
+        context = activity_overview_payload(await build_activity_overview_context(db, None if live else hour, live))
+        label = f"Ringkasan potensi aktivitas {context.get('jumlah_sel_dinilai')} sel"
+    elif kind == "hex":
+        built = await build_hex_context(db, scope["hex_id"], None if live else hour, live=live)
+        if built is None:
+            return None, None, {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
+                                "detail": f"Hex {scope['hex_id']} tidak ditemukan pada grid aktivitas.",
+                                "blocked": False, "message": None}
+        corridors = _merge_contexts(built["corridor_contexts"]) if built["corridor_contexts"] else None
+        context = {
+            "subject": {"type": "hex", "id": scope["hex_id"]},
+            "data_mode": "live" if live else None,
+            "displayed_hour_label": None if live else payload.hour_label,
+            "observed_hour": built.get("observed_hour"),
+            "hex_cell": built["hex_cell"],
+            "corridors": corridors,
+        }
+        label = f"grid Hex {scope['hex_id']}"
+        if payload.hour_label and not live:
+            label += f" · {payload.hour_label}"
+        if corridors:
+            label += f" · {corridors['segment']['name']}"
+    elif kind == "stop":
+        context = await build_stop_context(db, scope["stop_id"])
+        if context is None:
+            return None, None, {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
+                                "detail": f"Halte '{scope['stop_id']}' tidak ditemukan.",
+                                "blocked": False, "message": None}
+        label = f"{context['stop']['title']} ({scope['stop_id']})"
+    else:
+        segment_ids = scope["segment_ids"]
+        contexts = [context for context in [await build_context(db, sid) for sid in segment_ids] if context]
+        if not contexts:
+            return None, None, {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
+                                "detail": f"Segmen '{segment_ids[0]}' tidak ditemukan.",
+                                "blocked": False, "message": None}
+        context = _merge_contexts(contexts)
+        chunk_count = context["segment"]["chunk_count"]
+        label = (f"{context['segment']['name']} ({chunk_count} segmen)" if chunk_count > 1
+                 else f"{context['segment']['name']} ({segment_ids[0]})")
+    return context, label, None
 
 
 async def _cache_get(key: str) -> str | None:
@@ -764,6 +960,148 @@ async def _ask_llm(
     raise BangJoLLMError(reason)
 
 
+# --- question-driven retrieval (tool-calling planner) -----------------------
+# When the deterministic router falls through to the active map selection (a
+# stale object from the previous turn), the model picks what to fetch based on
+# the latest question. It only selects a retrieval target; the existing context
+# builders still produce every number, so numeric grounding is unchanged.
+
+_PLANNER_SYSTEM = (
+    "Anda adalah router pengambilan data untuk Bang Jo (WebGIS EcoTraffic Yogyakarta). "
+    "Panggil TEPAT SATU fungsi yang mengambil data untuk menjawab PERTANYAAN TERBARU pengguna. "
+    "Fokus HANYA pada pertanyaan terbaru: bila pengguna menyebut koridor/jalan/halte/sel yang baru, "
+    "abaikan topik sebelumnya. Gunakan riwayat hanya untuk memahami rujukan seperti 'itu', 'yang tadi', atau 'lainnya'. "
+    "get_segment dipakai untuk nama jalan ('Jalan Malioboro') maupun ID segmen ('SEG-0022'). "
+    "get_bus_stop dipakai untuk nama atau ID halte. list_corridors untuk peringkat seluruh koridor. "
+    "rank_bus_stops untuk peringkat kualitas seluruh halte. rank_activity_cells untuk peringkat potensi "
+    "seluruh sel grid. get_activity_cell untuk satu sel grid. "
+    "Jangan mengarang angka dan jangan menjawab pertanyaan; hanya panggil fungsi."
+)
+
+_PLANNER_TOOLS = [
+    {"type": "function", "function": {
+        "name": "get_segment",
+        "description": "Ambil data satu koridor/segmen jalan dari nama atau ID (contoh: 'Jalan Malioboro', 'SEG-0022').",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "Nama jalan atau ID segmen yang ditanyakan"}},
+            "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "list_corridors",
+        "description": "Ambil ringkasan peringkat seluruh koridor (emisi, kebutuhan intervensi).",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "rank_bus_stops",
+        "description": "Ambil peringkat kualitas seluruh halte.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "get_bus_stop",
+        "description": "Ambil data kualitas satu halte dari nama atau ID.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "Nama atau ID halte"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "rank_activity_cells",
+        "description": "Ambil peringkat potensi aktivitas seluruh sel grid.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "get_activity_cell",
+        "description": "Ambil data satu sel grid aktivitas dari ID sel.",
+        "parameters": {"type": "object", "properties": {
+            "hex_id": {"type": "integer", "description": "ID sel grid"}}, "required": ["hex_id"]}}},
+]
+
+
+def _parse_tool_calls(message: dict) -> list[dict]:
+    calls: list[dict] = []
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        name = function.get("name")
+        if not name:
+            continue
+        raw = function.get("arguments") or "{}"
+        try:
+            arguments = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        except (TypeError, ValueError):
+            arguments = {}
+        calls.append({"name": name, "arguments": arguments})
+    return calls
+
+
+async def _plan_retrieval(message: str, history) -> list[dict] | None:
+    """Ask the model which single dataset to fetch; ``None`` on any failure."""
+    if not settings.BANGJO_TOOL_ROUTING_ENABLED or not settings.GROQ_API_KEY:
+        return None
+    planner_turns = [
+        {"role": "system", "content": _PLANNER_SYSTEM},
+        *_history_turns(history),
+        {"role": "user", "content": message},
+    ]
+    for attempt in _llm_attempts():
+        headers = {"Authorization": f"Bearer {attempt['api_key']}", "Content-Type": "application/json"}
+        body = {
+            "model": attempt["model"],
+            "max_tokens": settings.BANGJO_PLANNER_MAX_TOKENS,
+            "messages": planner_turns,
+            "tools": _PLANNER_TOOLS,
+            "tool_choice": "auto",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=settings.BANGJO_TIMEOUT_SECONDS) as client:
+                response = await client.post(attempt["base_url"], headers=headers, json=body)
+                response.raise_for_status()
+                data = response.json()
+            choice = (data.get("choices") or [{}])[0]
+            calls = _parse_tool_calls(choice.get("message") or {})
+            if calls:
+                return calls
+            return None
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status in _RETRYABLE_LLM_STATUS:
+                continue
+            logger.warning("bangjo_planner_failed", extra={"status": status})
+            return None
+        except Exception:
+            logger.warning("bangjo_planner_failed", exc_info=True)
+            return None
+    return None
+
+
+async def _tool_calls_to_scope(db: AsyncSession, calls: list[dict], payload: "ChatRequest") -> dict | None:
+    """Resolve the planner's single tool call into a retrieval scope.
+
+    One subject per turn keeps the existing single-context prompt contract; the
+    planner prompt is explicit about calling exactly one function.
+    """
+    call = calls[0]
+    name = call["name"]
+    args = call["arguments"] or {}
+    if name in ("get_segment", "get_bus_stop"):
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return None
+        if name == "get_bus_stop":
+            stop_id = await _resolve_stop(db, query)
+            return {"kind": "stop", "stop_id": stop_id} if stop_id else None
+        ids, candidates, method = await _resolve_segment_cascade(db, query)
+        if ids:
+            return {"kind": "segment", "segment_ids": ids}
+        if method == "ambiguous" and candidates:
+            return {"kind": "ambiguous", "candidates": candidates}
+        return None
+    if name == "list_corridors":
+        return {"kind": "overview"}
+    if name == "rank_bus_stops":
+        return {"kind": "bus_stops"}
+    if name == "rank_activity_cells":
+        return {"kind": "hex_activity"}
+    if name == "get_activity_cell":
+        try:
+            return {"kind": "hex", "hex_id": int(args.get("hex_id"))}
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _merge_hourly_series(contexts: list[dict]) -> list[dict]:
     """Sum each chunk's REPLAY hours; an hour is interpolated if any chunk is."""
     merged: dict[str, dict] = {}
@@ -893,16 +1231,20 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     history = sanitize_history(payload.history)
     style = "intervention" if _classify_intent(payload.message) == "analysis" else "general"
-    scope = await _dispatch_scope(db, payload)
+    scope, confident = await _dispatch_scope_ex(db, payload)
     if scope["kind"] == "ambiguous":
         # Several corridors match by name; only a real ambiguity asks the user.
         timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
         return {"needs_selection": True, "candidates": scope["candidates"], "answer": None,
                 "context_label": None, "blocked": False, "message": None}
+    if scope["kind"] == "clarify":
+        # A referential pointed at an object the user has not selected.
+        timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
+        return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
+                "detail": scope["detail"], "blocked": False, "message": None}
     timings["resolve_ms"] = round((time.monotonic() - started) * 1000, 2)
 
-    hour = _parse_hour(payload.hour)
-    cache_scope = {**scope, "hour": payload.hour, "hour_label": payload.hour_label}
+    cache_scope = {**scope, "hour": payload.hour, "hour_label": payload.hour_label, "time_mode": payload.time_mode}
     cache_key = _chat_cache_key(payload.message, cache_scope, history)
     cached = await _cache_get(cache_key)
     if cached:
@@ -917,50 +1259,25 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
             pass
 
     context_started = time.monotonic()
-    kind = scope["kind"]
-    if kind == "overview":
-        context = overview_payload(await build_overview_context(db))
-        label = f"Ringkasan {context.get('jumlah_koridor')} koridor"
-    elif kind == "bus_stops":
-        context = bus_stop_payload(await build_bus_stop_overview_context(db))
-        label = f"Ringkasan {context.get('jumlah_dinilai')} halte dinilai"
-    elif kind == "hex":
-        built = await build_hex_context(db, scope["hex_id"], hour)
-        if built is None:
-            return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
-                    "detail": f"Hex {scope['hex_id']} tidak ditemukan pada grid aktivitas.",
-                    "blocked": False, "message": None}
-        corridors = _merge_contexts(built["corridor_contexts"]) if built["corridor_contexts"] else None
-        context = {
-            "subject": {"type": "hex", "id": scope["hex_id"]},
-            "displayed_hour_label": payload.hour_label,
-            "observed_hour": built.get("observed_hour"),
-            "hex_cell": built["hex_cell"],
-            "corridors": corridors,
-        }
-        label = f"grid Hex {scope['hex_id']}"
-        if payload.hour_label:
-            label += f" · {payload.hour_label}"
-        if corridors:
-            label += f" · {corridors['segment']['name']}"
-    elif kind == "stop":
-        context = await build_stop_context(db, scope["stop_id"])
-        if context is None:
-            return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
-                    "detail": f"Halte '{scope['stop_id']}' tidak ditemukan.",
-                    "blocked": False, "message": None}
-        label = f"{context['stop']['title']} ({scope['stop_id']})"
-    else:
-        segment_ids = scope["segment_ids"]
-        contexts = [context for context in [await build_context(db, sid) for sid in segment_ids] if context]
-        if not contexts:
-            return {"needs_selection": True, "candidates": [], "answer": None, "context_label": None,
-                    "detail": f"Segmen '{segment_ids[0]}' tidak ditemukan.",
-                    "blocked": False, "message": None}
-        context = _merge_contexts(contexts)
-        chunk_count = context["segment"]["chunk_count"]
-        label = (f"{context['segment']['name']} ({chunk_count} segmen)" if chunk_count > 1
-                 else f"{context['segment']['name']} ({segment_ids[0]})")
+    planner_used = False
+    if not confident and _classify_intent(payload.message) != "greeting":
+        # Deterministic routing only reached the active map selection, which may
+        # be the previous turn's object. Let the model choose the dataset the
+        # latest question actually asks about before narrating.
+        calls = await _plan_retrieval(payload.message, history)
+        planned_scope = await _tool_calls_to_scope(db, calls, payload) if calls else None
+        if planned_scope and planned_scope["kind"] == "ambiguous":
+            timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
+            return {"needs_selection": True, "candidates": planned_scope["candidates"], "answer": None,
+                    "context_label": None, "blocked": False, "message": None}
+        if planned_scope:
+            scope = planned_scope
+            planner_used = True
+    timings["planner_used"] = planner_used
+    context, label, error = await _build_scope_context(db, scope, payload)
+    if error is not None:
+        timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
+        return error
     timings["context_ms"] = round((time.monotonic() - context_started) * 1000, 2)
     try:
         answer = await _ask_llm(payload.message, context, history, timings, style=style)
@@ -979,6 +1296,7 @@ class AutoInsightRequest(BaseModel):
     stop_id: str | None = None
     hour: str | None = None
     hour_label: str | None = None
+    time_mode: str | None = None
 
 
 async def _entity_segment_ids(db: AsyncSession, payload: AutoInsightRequest) -> tuple[list[str], dict | None]:
@@ -1005,7 +1323,8 @@ async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = De
                 "cached": False, "detail": "Pilih segmen, sel grid, atau halte terlebih dahulu."}
 
     hour = _parse_hour(payload.hour)
-    cache_key = f"bangjo:autoinsight:{entity['type']}:{entity['id']}:{payload.hour or ''}"
+    live = payload.time_mode == "live"
+    cache_key = f"bangjo:autoinsight:{entity['type']}:{entity['id']}:{payload.hour or ''}:{payload.time_mode or ''}"
     cached = await _cache_get(cache_key)
     if cached:
         try:
@@ -1016,7 +1335,7 @@ async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = De
             pass
 
     if entity["type"] == "hex":
-        built = await build_hex_context(db, entity["id"], hour)
+        built = await build_hex_context(db, entity["id"], None if live else hour, live=live)
         if built is None:
             return {"needs_selection": True, "answer": None, "context_label": None, "entity": entity,
                     "cached": False, "detail": f"Hex {entity['id']} tidak ditemukan pada grid aktivitas."}
@@ -1024,14 +1343,15 @@ async def bangjo_auto_insight(payload: AutoInsightRequest, db: AsyncSession = De
         corridors = _merge_contexts(corridor_contexts) if corridor_contexts else None
         context = {
             "subject": entity,
-            "displayed_hour_label": payload.hour_label,
+            "data_mode": "live" if live else None,
+            "displayed_hour_label": None if live else payload.hour_label,
             "observed_hour": built.get("observed_hour"),
             "hex_cell": built["hex_cell"],
             "corridors": corridors,
         }
         prompt = AUTO_INSIGHT_PROMPT_CORRIDOR if corridors else AUTO_INSIGHT_PROMPT_HEX_ONLY
         label = f"grid Hex {entity['id']}"
-        if payload.hour_label:
+        if payload.hour_label and not live:
             label += f" · {payload.hour_label}"
         if corridors:
             label += f" · {corridors['segment']['name']}"
