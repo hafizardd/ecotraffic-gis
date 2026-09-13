@@ -26,7 +26,8 @@ _WORDS = re.compile(r"[a-zA-Z]+")
 _TOPIC = re.compile(
     r"\b(lalu ?lintas|traffic|emisi|emission|koridor|segmen|segment|halte|bus ?stop|"
     r"asi|avoid|shift|improve|intervensi|dashboard|volume|kendaraan|vkt|polusi|polutan|"
-    r"co2|nox|so2|pm|malioboro|jalan|jl|gang|gg|peta|wilayah)\b",
+    r"co2|nox|so2|pm|malioboro|jalan|jl|gang|gg|peta|wilayah|"
+    r"aktivitas|activity|potensi|daerah|kawasan|zona|grid|sel|hex|ruas)\b",
     re.IGNORECASE,
 )
 _GREETING = re.compile(

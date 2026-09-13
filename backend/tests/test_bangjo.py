@@ -18,6 +18,8 @@ import app.services.bangjo_guardrails as guardrails
 import app.services.bangjo_retrieval as bangjo_retrieval
 from app.api.routes.bangjo import BangJoLLMError, _validate_markdown
 from app.services.bangjo_context import (
+    activity_overview_payload,
+    build_activity_overview_context,
     build_bus_stop_overview_context,
     build_context,
     build_hex_context,
@@ -327,6 +329,57 @@ def test_overview_payload_is_compact_and_bounded():
     assert len(json.dumps(payload)) < 8000
 
 
+def _hex_cell_row(hex_id, score, poi_total=10, poi=None, pop=900, volume=50.0):
+    return SimpleNamespace(
+        hex_id=hex_id, luas_km2=0.4, poi_total=poi_total, poi_breakdown=poi or {"kantor": 4, "toko": 2},
+        penduduk=pop, volume_mean=volume, skor_total_ahp=score, ranking=hex_id,
+        klasifikasi_potensi="Tinggi" if score >= 75 else "Rendah", ahp_weight_version="v1", source="ahp",
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_activity_overview_context_ranks_cells_with_corridors():
+    cells = [_hex_cell_row(1, 90.0), _hex_cell_row(2, 20.0), _hex_cell_row(3, 55.0)]
+    db = _FakeDB([
+        _FakeResult(rows=cells),
+        _FakeResult(rows=[(1, "Jalan A"), (1, "Jalan B"), (3, "Jalan C")]),
+    ])
+
+    context = await build_activity_overview_context(db)
+
+    assert context["scope"] == "hex_activity"
+    assert context["cell_count"] == 3
+    assert context["cells"][0]["koridor"] == ["Jalan A", "Jalan B"]
+    assert context["cells"][1]["koridor"] == []
+
+
+def test_activity_overview_payload_is_compact_and_bounded():
+    cells = [
+        {"hex_id": index, "skor_total_ahp": float(100 - index), "klasifikasi_potensi": "Tinggi",
+         "poi_total": index, "poi_breakdown": {"kantor": index}, "penduduk": 1000, "volume_mean": 10.0,
+         "koridor": [f"Jalan {index}"]}
+        for index in range(40)
+    ]
+
+    payload = activity_overview_payload({"scope": "hex_activity", "cell_count": 40, "cells": cells})
+
+    assert payload["scope"] == "hex_activity"
+    assert payload["jumlah_sel"] == 40
+    assert payload["jumlah_sel_dinilai"] == 40
+    assert payload["ringkasan"]["tertinggi"]["sel"] == 0
+    assert payload["ringkasan"]["terendah"]["sel"] == 39
+    assert len(payload["potensi_tertinggi"]) == bangjo_context.ACTIVITY_OVERVIEW_TOP_LIMIT
+    assert len(payload["potensi_terendah"]) == bangjo_context.ACTIVITY_OVERVIEW_BOTTOM_LIMIT
+    # Lowest potential comes first in the bottom list.
+    assert payload["potensi_terendah"][0]["sel"] == 39
+    assert payload["dipotong"] is True
+    # Cells with no score are excluded from the ranking, not fabricated.
+    unscored = [*cells, {"hex_id": 999, "skor_total_ahp": None, "koridor": []}]
+    lean = activity_overview_payload({"scope": "hex_activity", "cell_count": 41, "cells": unscored})
+    assert lean["jumlah_sel_dinilai"] == 40
+    assert all(row["sel"] != 999 for row in [lean["ringkasan"]["tertinggi"], lean["ringkasan"]["terendah"]])
+
+
 def test_merge_contexts_aggregates_chunks():
     base = {
         "generated_at": "2026-01-01T00:00:00+00:00",
@@ -439,6 +492,7 @@ def test_screen_query_rejects_out_of_scope():
 def test_screen_query_accepts_in_scope_and_greetings():
     assert guardrails.screen_query("berapa emisi koridor ini?")["blocked"] is False
     assert guardrails.screen_query("halo")["blocked"] is False
+    assert guardrails.screen_query("Di mana daerah dengan potensi aktivitas tertinggi")["blocked"] is False
 
 
 def test_screen_query_blocks_injection_and_overlong():
@@ -1144,6 +1198,21 @@ async def test_dispatch_scope_routes_halte_ranking_to_bus_stops():
     assert scope == {"kind": "bus_stops"}
     english = await bangjo._dispatch_scope(None, bangjo.ChatRequest(message="which is the best halte?"))
     assert english == {"kind": "bus_stops"}
+
+
+def test_activity_query_detection():
+    assert bangjo._is_activity_query("Di mana daerah dengan potensi aktivitas tertinggi?") is True
+    assert bangjo._is_activity_query("sel grid mana dengan aktivitas terbesar?") is True
+    assert bangjo._is_activity_query("aktivitas koridor ini") is False
+    assert bangjo._is_activity_query("berapa emisi jalan malioboro?") is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_routes_activity_potential_to_hex_activity():
+    scope = await bangjo._dispatch_scope(
+        None, bangjo.ChatRequest(message="Di mana daerah dengan potensi aktivitas tertinggi?")
+    )
+    assert scope == {"kind": "hex_activity"}
 
 
 @pytest.mark.asyncio

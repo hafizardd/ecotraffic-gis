@@ -24,6 +24,8 @@ from app.core.database import get_db
 from app.models.road_segment import RoadSegment
 from app.models.spatial_sources import SurveyStopObservation
 from app.services.bangjo_context import (
+    activity_overview_payload,
+    build_activity_overview_context,
     build_bus_stop_overview_context,
     build_context,
     build_hex_context,
@@ -48,7 +50,12 @@ SYSTEM_PROMPT = (
     "dengan scope='overview' (field ringkasan, emisi_tertinggi, emisi_terendah, butuh_intervensi, pita_emisi), "
     "atau (c) peringkat kualitas halte dengan scope='bus_stops' (field ringkasan, halte_terbaik, halte_terburuk; "
     "satuan skor 0-100 dan MAKIN TINGGI MAKIN BAIK), atau (d) satu halte pada field 'stop' (skor_total, aksesibilitas, "
-    "kondisi, lingkungan, jumlah_fasilitas, jumlah_kerusakan) beserta koridor terdekatnya. "
+    "kondisi, lingkungan, jumlah_fasilitas, jumlah_kerusakan) beserta koridor terdekatnya, "
+    "atau (e) peringkat potensi aktivitas sel grid dengan scope='hex_activity' (field ringkasan, potensi_tertinggi, "
+    "potensi_terendah; satuan skor 0-100 dan MAKIN TINGGI MAKIN TINGGI POTENSI AKTIVITAS). "
+    "Untuk pertanyaan 'daerah dengan potensi aktivitas tertinggi/terendah', jawab dari ringkasan pada scope='hex_activity': "
+    "sebut sel beserta koridor yang melintasinya dan poi_utama sebagai pemicu; jangan menyebut angka sel sebagai nama tempat. "
+    "Daftar potensi_tertinggi/potensi_terendah hanya sebagian (lihat 'dipotong'); gunakan ringkasan untuk jawaban pasti. "
     "Jika konteks memuat 'displayed_hour_label', itu adalah jam/tanggal yang sedang dilihat pengguna pada peta; "
     "sebut waktu itu apa adanya saat menjelaskan sel grid, dan gunakan nilai hex_cell (skor_total_ahp, ranking, "
     "klasifikasi_potensi, data_status) sebagai nilai pada jam tersebut (field 'static' hanyalah snapshot offline). "
@@ -164,6 +171,18 @@ _OVERVIEW_QUERY = re.compile(
 # "koridor ini/itu/tersebut" points at the current map selection, not the whole dataset.
 _REFERENTIAL = re.compile(r"\b(ini|itu|tersebut)\b", re.IGNORECASE)
 
+# Whole-grid activity-potential questions ("daerah dengan potensi aktivitas
+# tertinggi"). Kept separate from corridor emission overview so the answer can
+# rank hex cells, where the POI/population/volume AHP score actually lives.
+_ACTIVITY_QUERY = re.compile(r"\b(potensi|aktivitas|activity)\b", re.IGNORECASE)
+_SPATIAL_QUERY = re.compile(
+    r"\b(daerah|wilayah|kawasan|zona|area|lokasi|sel|grid|hex)\b|\bdi\s+mana\b",
+    re.IGNORECASE,
+)
+
+# A named/selected road wins over the whole-grid activity ranking.
+_SEGMENT_NOUN = re.compile(r"\b(koridor|jalan|segmen|segment|ruas)\b", re.IGNORECASE)
+
 # Requests that should get the structured ASI recommendation format.
 _INTERVENTION_QUERY = re.compile(
     r"\b(intervensi|prioritas|asi|avoid|shift|improve|rekomendasi|saran|solusi|atasi|mengatasi|"
@@ -239,6 +258,21 @@ def _is_overview_query(message: str) -> bool:
     if _REFERENTIAL.search(text):
         return False
     return bool(_OVERVIEW_QUERY.search(text) or _RANKING_QUERY.search(text))
+
+
+def _is_activity_query(message: str) -> bool:
+    """Whole-grid activity-potential question ("daerah dengan potensi aktivitas tertinggi").
+
+    A road noun ("koridor", "jalan", ...) points at a corridor instead, and a
+    referential ("ini/itu") must resolve to the active selection, so both are
+    excluded here.
+    """
+    text = message or ""
+    if _REFERENTIAL.search(text) or _SEGMENT_NOUN.search(text):
+        return False
+    if not _ACTIVITY_QUERY.search(text):
+        return False
+    return bool(_SPATIAL_QUERY.search(text) or _RANKING_QUERY.search(text) or "potensi" in text.casefold())
 
 
 def _is_intervention_query(message: str) -> bool:
@@ -348,11 +382,11 @@ async def _resolve_segment_cascade(
 async def _dispatch_scope(db: AsyncSession, payload: "ChatRequest") -> dict:
     """Decide which context to retrieve for a chat turn.
 
-    Precedence: halte quality ranking -> selected/named halte -> whole-dataset
-    corridor overview -> named corridor -> active map selection -> overview.
-    Referential wording ("ini", "itu", "tersebut") resolves to the active
-    selection instead of name matching, since the user is pointing at the
-    visualization.
+    Precedence: halte quality ranking -> selected/named halte -> whole-grid
+    activity potential -> whole-dataset corridor overview -> named corridor ->
+    active map selection -> overview. Referential wording ("ini", "itu",
+    "tersebut") resolves to the active selection instead of name matching, since
+    the user is pointing at the visualization.
     """
     message = payload.message
     referential = bool(_REFERENTIAL.search(message))
@@ -365,6 +399,8 @@ async def _dispatch_scope(db: AsyncSession, payload: "ChatRequest") -> dict:
         named_stop = await _resolve_stop(db, message)
         if named_stop:
             return {"kind": "stop", "stop_id": named_stop}
+    if _is_activity_query(message):
+        return {"kind": "hex_activity"}
     if _is_overview_query(message):
         return {"kind": "overview"}
 
@@ -930,6 +966,9 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     elif kind == "bus_stops":
         context = bus_stop_payload(await build_bus_stop_overview_context(db))
         label = f"Ringkasan {context.get('jumlah_dinilai')} halte dinilai"
+    elif kind == "hex_activity":
+        context = activity_overview_payload(await build_activity_overview_context(db, None if live else hour, live))
+        label = f"Ringkasan potensi aktivitas {context.get('jumlah_sel_dinilai')} sel"
     elif kind == "hex":
         built = await build_hex_context(db, scope["hex_id"], None if live else hour, live=live)
         if built is None:
