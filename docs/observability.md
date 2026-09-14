@@ -47,6 +47,7 @@ APP_ENV=production
 CORS_ORIGINS=https://eco.example.com
 PUBLIC_API_URL=https://api.eco.example.com
 PUBLIC_WS_URL=wss://api.eco.example.com
+NEXT_PUBLIC_GEOMAPID_API_KEY=<public-basemap-key>
 BROWSER_SAMPLE_RATE=0.1
 ```
 
@@ -54,6 +55,8 @@ BROWSER_SAMPLE_RATE=0.1
 origin dipisahkan koma tanpa spasi. `PUBLIC_API_URL` adalah alamat API yang bisa
 diakses browser, bukan hostname Docker. Rate `0.1` memilih sekitar 10% page session;
 untuk verifikasi awal gunakan `1`, kemudian turunkan kembali dan rebuild frontend.
+`NEXT_PUBLIC_GEOMAPID_API_KEY` adalah key publik untuk style basemap; nilainya
+harus tersedia saat image frontend dibuild, bukan hanya saat container berjalan.
 Jangan menaruh secret di variabel `PUBLIC_*`/`NEXT_PUBLIC_*`.
 
 ```bash
