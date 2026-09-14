@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import BrowserTelemetry from "@/components/BrowserTelemetry";
 
 export const metadata: Metadata = {
   title: "EcoTraffic GIS",
@@ -13,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body><BrowserTelemetry />{children}</body>
     </html>
   );
 }

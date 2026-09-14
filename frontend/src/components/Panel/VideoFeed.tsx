@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { API_BASE } from "@/services/api"
+import { reportTelemetry } from "@/services/telemetry"
 import Skeleton from "@/components/ui/Skeleton"
 
 interface VideoFeedProps {
@@ -22,6 +23,8 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
     const [isVisible, setIsVisible] = useState(() =>
         typeof document === "undefined" || !document.hidden
     );
+    const attemptStarted = useRef(0);
+    const attemptReported = useRef(false);
     const backoffRef = useRef(INITIAL_BACKOFF);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,6 +33,16 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
             reloadKey > 0 ? `?_t=${reloadKey}` : ""
         }`
         : null;
+
+    useEffect(() => {
+        if (!streamUrl) return;
+        attemptStarted.current = performance.now();
+        attemptReported.current = false;
+        const timeout = setTimeout(() => {
+            if (!attemptReported.current) reportTelemetry('video_loading_timeout', 'video', 'timeout', performance.now() - attemptStarted.current);
+        }, 15000);
+        return () => clearTimeout(timeout);
+    }, [streamUrl]);
 
     const scheduleRetry = useCallback(() => {
         if (timerRef.current) clearTimeout(timerRef.current);
@@ -55,12 +68,18 @@ export default function VideoFeed({ cameraId, onStatusChange }: VideoFeedProps) 
     }, [cameraId, onStatusChange]);
 
     const handleLoad = useCallback(() => {
+        if (!attemptReported.current) {
+            reportTelemetry("video_load_event", "video", "ok", performance.now() - attemptStarted.current);
+            attemptReported.current = true;
+        }
         setStatus("streaming");
         onStatusChange?.("streaming");
         backoffRef.current = INITIAL_BACKOFF;
     }, [onStatusChange]);
 
     const handleError = useCallback(() => {
+        reportTelemetry("video_error", "video", "error", performance.now() - attemptStarted.current);
+        attemptReported.current = true;
         onStatusChange?.("error");
         setStatus((prev) => {
             if (prev !== "error") scheduleRetry();
