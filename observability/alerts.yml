@@ -1,0 +1,46 @@
+groups:
+  - name: ecotraffic
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Scrape target {{ $labels.job }} unavailable'
+      - alert: ApiSlow
+        expr: histogram_quantile(0.95, sum by (le, route) (rate(eco_http_duration_seconds_bucket[5m]))) > 2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'API p95 above 2s for {{ $labels.route }}'
+      - alert: ApiErrors
+        expr: sum(rate(eco_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(eco_http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'API 5xx rate above 5%'}
+      - alert: TrackerFrameStale
+        expr: time() - eco_tracker_last_frame_timestamp_seconds > 60
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Tracker frame stale: {{ $labels.camera }}'
+      - alert: VideoDependencyErrors
+        expr: sum(rate(eco_video_errors_total[5m])) > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: 'Video dependency errors persist'}
+      - alert: WorkerInactive
+        expr: time() - eco_worker_last_task_timestamp_seconds > 300
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'No completed task for over 5 minutes'}
+      - alert: HostMemoryPressure
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Host available RAM below 10%'}
+      - alert: DiskAlmostFull
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs",mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Root filesystem free space below 15%'}

@@ -350,3 +350,12 @@ Vehicle CO₂ factors used (derived from IPCC/EMEP emission factor databases):
 | Bus / large truck | ~300–400 g CO₂/min |
 
 Total emission per camera per minute = Σ (vehicle count × factor). These are static baseline factors; speed estimation would refine them further.
+
+## Production observability
+
+Logs, metrics API/video/tracker/Celery/server, dan sampled browser telemetry
+tersedia melalui overlay `docker-compose.observability.yml` dengan Grafana,
+Prometheus, Loki, Alloy, dan exporters. Tidak menggunakan traces.
+Lihat [panduan setup dan diagnosis production](docs/observability.md) untuk
+konfigurasi domain/password, production build frontend, akses Grafana, retensi,
+validasi, dan batas interpretasi metrics.

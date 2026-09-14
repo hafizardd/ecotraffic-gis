@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import time
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -12,6 +14,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.observability import metrics
 from app.core.database import get_db
 from app.models.camera import Camera
 from app.services.data_freshness import FreshnessPolicy, classify_freshness
@@ -21,6 +24,8 @@ from app.schemas.camera import (
     CameraProperties,
     GeoJSONPoint,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/cameras", tags=["cameras"])
 
@@ -149,10 +154,13 @@ async def get_live_playlist(camera_id: str, db: AsyncSession = Depends(get_db)):
     stream_url, referer = await _get_live_source(camera_id, db)
     headers = {"Referer": referer} if referer else {}
     try:
-        resp = await _get_http_client().get(stream_url, headers=headers)
+        with metrics.VIDEO_UPSTREAM.time():
+            resp = await _get_http_client().get(stream_url, headers=headers)
     except httpx.HTTPError:
+        metrics.VIDEO_ERRORS.labels("hls", "playlist_error").inc()
         raise HTTPException(status_code=503, detail=f"Upstream stream unavailable for '{camera_id}'.")
     if resp.status_code != 200 or not resp.text:
+        metrics.VIDEO_ERRORS.labels("hls", "playlist_status").inc()
         raise HTTPException(status_code=503, detail=f"Upstream stream unavailable for '{camera_id}'.")
     body = _rewrite_playlist(resp.text, camera_id)
     return Response(content=body, media_type="application/vnd.apple.mpegurl",
@@ -177,10 +185,13 @@ async def get_live_segment(camera_id: str, filename: str, db: AsyncSession = Dep
         # The master playlist is rewritten, but its child media playlist also
         # contains relative segment names and must be rewritten here.
         try:
-            resp = await _get_http_client().get(upstream, headers=headers)
+            with metrics.VIDEO_UPSTREAM.time():
+                resp = await _get_http_client().get(upstream, headers=headers)
         except httpx.HTTPError:
+            metrics.VIDEO_ERRORS.labels("hls", "playlist_error").inc()
             raise HTTPException(status_code=503, detail=f"Upstream segment unavailable for '{camera_id}'.")
         if resp.status_code != 200:
+            metrics.VIDEO_ERRORS.labels("hls", "playlist_status").inc()
             raise HTTPException(status_code=resp.status_code if resp.status_code in (403, 404) else 503,
                                 detail="Upstream segment unavailable.")
         body = _rewrite_playlist(resp.text, camera_id)
@@ -188,14 +199,22 @@ async def get_live_segment(camera_id: str, filename: str, db: AsyncSession = Dep
                         headers={"Cache-Control": "no-cache"})
 
     async def _stream_upstream():
+        metrics.STREAMS.labels("hls").inc()
         try:
             async with _get_http_client().stream("GET", upstream, headers=headers) as resp:
                 if resp.status_code != 200:
+                    metrics.VIDEO_ERRORS.labels("hls", "upstream_status").inc()
+                    logger.warning("video_upstream_status", extra={"camera_id": camera_id, "status": resp.status_code})
                     return
                 async for chunk in resp.aiter_bytes(64 * 1024):
+                    metrics.VIDEO_BYTES.labels("hls").inc(len(chunk))
                     yield chunk
         except httpx.HTTPError:
+            metrics.VIDEO_ERRORS.labels("hls", "upstream_error").inc()
+            logger.warning("video_upstream_error", extra={"camera_id": camera_id})
             return
+        finally:
+            metrics.STREAMS.labels("hls").dec()
 
     return StreamingResponse(_stream_upstream(), media_type=media_type,
                              headers={"Cache-Control": "max-age=2"})
@@ -218,21 +237,37 @@ async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db))
     interval = 1.0 / float(settings.STREAM_FPS)
 
     async def _generate():
+        started = time.monotonic()
+        first = True
+        last_warning = float("-inf")
         client = redis.Redis.from_url(
             settings.REDIS_URL, socket_connect_timeout=5, socket_timeout=5
         )
+        metrics.STREAMS.labels("mjpeg").inc()
         try:
             last_payload: bytes | None = None
             while True:
                 try:
-                    payload = await asyncio.to_thread(
-                        client.get, f"tracks:snapshot:{camera_id}"
-                    )
+                    with metrics.REDIS_TIME.time():
+                        payload = await asyncio.to_thread(
+                            client.get, f"tracks:snapshot:{camera_id}"
+                        )
                 except Exception:
+                    metrics.VIDEO_ERRORS.labels("mjpeg", "redis").inc()
+                    if time.monotonic() - last_warning >= 30:
+                        logger.warning("video_redis_unavailable", extra={"camera_id": camera_id}, exc_info=True)
+                        last_warning = time.monotonic()
                     await asyncio.sleep(interval)
                     continue
+                if payload is None:
+                    metrics.VIDEO_MISSING.inc()
                 if payload is not None and payload != last_payload:
                     last_payload = bytes(payload)
+                    if first:
+                        metrics.VIDEO_FIRST.observe(time.monotonic() - started)
+                        first = False
+                    metrics.VIDEO_FRAMES.inc()
+                    metrics.VIDEO_BYTES.labels("mjpeg").inc(len(last_payload))
                     yield (
                         b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n"
@@ -244,6 +279,7 @@ async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db))
             # Browser disconnected; tracker keeps running untouched.
             raise
         finally:
+            metrics.STREAMS.labels("mjpeg").dec()
             try:
                 client.close()
             except Exception:
