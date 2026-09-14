@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
+from app.observability.database import instrument_engine
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session as SyncSession
@@ -31,6 +32,7 @@ def get_sync_engine():
             settings.DATABASE_URL_SYNC,
             pool_pre_ping=True,
         )
+        instrument_engine(_sync_engine, "sync")
     return _sync_engine
 
 @contextmanager
@@ -64,6 +66,7 @@ def get_engine():
             echo=settings.DEBUG,
             pool_pre_ping=True,
         )
+        instrument_engine(_engine.sync_engine, "async")
     return _engine
 
 

@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import cameras, emissions, segment_emissions, spatial_layers, analytics_emissions, activity_grid, bangjo
 from app.api.routes.websocket import router as websocket_router, redis_subscriber
 from app.core.config import settings
+from app.observability.logging import configure_logging
+from app.observability.http import MetricsMiddleware
+from app.observability.metrics import start_exporter
+from app.observability.browser import router as telemetry_router
+
+configure_logging()
  
 app = FastAPI(
     title="EcoTraffic GIS",
@@ -18,11 +25,11 @@ app = FastAPI(
 # ------------------------------------------------------------------
 # CORS - allow the React frontend (localhost:3000) to call the API
 # ------------------------------------------------------------------
+app.add_middleware(MetricsMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",   
-    ],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    expose_headers=["X-Request-ID"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +38,7 @@ app.add_middleware(
 # ------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------
+app.include_router(telemetry_router)
 app.include_router(cameras.router)
 app.include_router(emissions.router)
 app.include_router(analytics_emissions.router)
@@ -44,6 +52,7 @@ _background_tasks = set()
 
 @app.on_event("startup")
 async def startup_event():
+    start_exporter()
     task = asyncio.create_task(redis_subscriber())
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)

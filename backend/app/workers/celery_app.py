@@ -27,3 +27,6 @@ celery_app.conf.beat_schedule = {
         "schedule": settings.SEGMENT_OBSERVATION_WINDOW_SECONDS,
     },
 }
+
+# Register telemetry signal handlers in parent and prefork children.
+import app.observability.celery  # noqa: E402,F401

@@ -33,3 +33,6 @@ aiohttp==3.9.5
 
 # --- Environment ---
 python-dotenv==1.0.1
+
+# Production observability
+prometheus-client==0.22.1
