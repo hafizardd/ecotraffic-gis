@@ -249,8 +249,9 @@ async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db))
             while True:
                 try:
                     with metrics.REDIS_TIME.time():
-                        payload = await asyncio.to_thread(
-                            client.get, f"tracks:snapshot:{camera_id}"
+                        payload, published_at = await asyncio.to_thread(
+                            client.mget, [f"tracks:snapshot:{camera_id}",
+                                          f"tracks:snapshot:{camera_id}:published_at"]
                         )
                 except Exception:
                     metrics.VIDEO_ERRORS.labels("mjpeg", "redis").inc()
@@ -261,18 +262,20 @@ async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db))
                     continue
                 if payload is None:
                     metrics.VIDEO_MISSING.inc()
-                if payload is not None and payload != last_payload:
-                    last_payload = bytes(payload)
+                if payload is not None and published_at is not None and published_at != last_payload:
+                    last_payload = published_at
                     if first:
                         metrics.VIDEO_FIRST.observe(time.monotonic() - started)
                         first = False
                     metrics.VIDEO_FRAMES.inc()
-                    metrics.VIDEO_BYTES.labels("mjpeg").inc(len(last_payload))
+                    metrics.VIDEO_BYTES.labels("mjpeg").inc(len(payload))
                     yield (
                         b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n"
-                        b"Content-Length: " + str(len(last_payload)).encode() + b"\r\n"
-                        b"\r\n" + last_payload + b"\r\n"
+                        b"Content-Length: " + str(len(payload)).encode() + b"\r\n"
+                        b"X-Frame-Id: " + published_at + b"\r\n"
+                        b"X-Frame-Age-Ms: " + str(max(0, int((time.time() - float(published_at)) * 1000))).encode() + b"\r\n"
+                        b"\r\n" + payload + b"\r\n"
                     )
                 await asyncio.sleep(interval)
         except asyncio.CancelledError:
@@ -288,7 +291,7 @@ async def get_tracked_stream(camera_id: str, db: AsyncSession = Depends(get_db))
     return StreamingResponse(
         _generate(),
         media_type="multipart/x-mixed-replace; boundary=frame",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 

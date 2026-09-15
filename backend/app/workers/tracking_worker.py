@@ -213,8 +213,10 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
         while not stop.is_set():
             if cap is None:
                 # Reconnect with bounded exponential backoff.
-                delay = min(30.0, 2.0 ** min(consecutive_misses, 5))
-                time.sleep(delay)
+                delay = min(10.0, 2.0 ** min(consecutive_misses, 4))
+                logger.info("tracking_reconnecting", extra={"camera_id": camera_id, "retry_seconds": delay})
+                if stop.wait(delay):
+                    break
                 # Referer can rotate in DB; refresh without restarting the thread.
                 fresh = get_active_camera_source(camera_id)
                 url = fresh.stream_url if fresh else camera.stream_url
@@ -224,7 +226,6 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                     metrics.TRACK_ERRORS.labels(camera_id, "open").inc()
                     consecutive_misses += 1
                     continue
-                consecutive_misses = 0
                 continue
             # Read the newest available frame instead of allowing a decoder
             # buffer to turn inference into a delayed replay.
@@ -237,14 +238,13 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                 consecutive_misses += 1
                 metrics.TRACK_ERRORS.labels(camera_id, "capture").inc()
                 logger.warning("tracking_frame_missed", extra={"camera_id": camera_id})
-                if consecutive_misses >= 10:
-                    try:
-                        cap.release()
-                    except Exception:
-                        pass
-                    cap = None
-                    continue
-                time.sleep(min(interval, 0.1))
+                # A failed read may already have consumed the full read timeout.
+                # Reopen immediately instead of spending ten timeout cycles here.
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                cap = None
                 continue
             consecutive_misses = 0
             try:
@@ -317,7 +317,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
             # Annotated snapshot: filled ROI + dimmed outside boxes, IDs on labels.
             _, annotated = detector._parse_result(frame, result, annotate=True)
             try:
-                snapshots.store(camera_id, annotated)
+                snapshots.store(camera_id, annotated, published_at=time.time())
                 metrics.TRACK_FRAMES.labels(camera_id).inc()
                 metrics.TRACK_LAST.labels(camera_id).set(time.time())
             except Exception:
