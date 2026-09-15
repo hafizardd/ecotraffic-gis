@@ -534,6 +534,19 @@ export default function MapView() {
                 </Popup>
               )}
               <MapLegend
+                availableCameraIds={cameras.map(camera => camera.properties.camera_id)}
+                onCameraSelect={cameraId => {
+                    const camera = cameras.find(item => item.properties.camera_id === cameraId);
+                    if (!camera) return;
+                    setSelectedCamera(camera);
+                    setSelectedSegmentId(null); setSelectedHexId(null); setSelectedStopId(null);
+                    setHoveredCamera(null); setHoveredPoint(null); setHoveredSegmentId(null);
+                    mapRef.current?.flyTo({
+                        center: camera.geometry.coordinates as [number, number],
+                        zoom: 16,
+                        duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1000,
+                    });
+                }}
                 mode={mode}
                 segmentBuckets={SEGMENT_BUCKET_COLORS}
                 cameraHistorical={hoverCounts.historical}

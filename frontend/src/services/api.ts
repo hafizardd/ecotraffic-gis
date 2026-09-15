@@ -1,3 +1,4 @@
+import { observedFetch } from "./telemetry";
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
@@ -6,7 +7,7 @@ import type { GridLod } from "@/utils/activityGrid";
 import type { AnalyticsQuery, AnalyticsResponse, AnalyticsSegmentOption, EmissionHistoryDeleteResponse, EmissionHistoryResponse, EmissionTrendPoint, HistoricalCameraResponse, LatestSegmentEmissionsResponse, PollutantComposition, PollutantKey, TopEmissionCorridor, VehicleAnalyticsResponse } from "@/types";
 
 export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL" | "REPLAY"): Promise<CameraFeatureCollection> {
-    const response = await fetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
+    const response = await observedFetch(`${API_BASE}/api/cameras${dataSource ? `?data_source=${dataSource}` : ""}`)
 
     if(!response.ok) {
         throw new Error(`Failed to fetch cameras: ${response.statusText}`)
@@ -16,13 +17,13 @@ export async function fetchCameras(dataSource?: "LIVE" | "HISTORICAL" | "REPLAY"
 }
 
 export async function fetchSegmentsGeoJSON(): Promise<SegmentFeatureCollection> {
-    const response = await fetch(`${API_BASE}/api/segments/geojson`);
+    const response = await observedFetch(`${API_BASE}/api/segments/geojson`);
     if (!response.ok) throw new Error(`Failed to fetch segments: ${response.statusText}`);
     return response.json();
 }
 
 export async function fetchSegmentEmission(segmentId: string): Promise<SegmentEmissionDetail> {
-    const response = await fetch(`${API_BASE}/api/emissions/${encodeURIComponent(segmentId)}`);
+    const response = await observedFetch(`${API_BASE}/api/emissions/${encodeURIComponent(segmentId)}`);
     if (!response.ok) throw new Error(`Failed to fetch segment emission: ${response.statusText}`);
     return response.json();
 }
@@ -31,7 +32,7 @@ export async function fetchCameraEmissions(
     camera_id: string,
     limit: number = 1
 ): Promise<CameraEmissionsResponse> {
-    const response = await fetch(`${API_BASE}/api/cameras/${camera_id}/emissions?limit=${limit}`);
+    const response = await observedFetch(`${API_BASE}/api/cameras/${camera_id}/emissions?limit=${limit}`);
 
     if (!response.ok) throw new Error('Failed to fetch emissions');
     
@@ -39,7 +40,7 @@ export async function fetchCameraEmissions(
 }
 
 async function fetchSpatial(path: string): Promise<SpatialFeatureCollection> {
-    const response = await fetch(`${API_BASE}${path}`);
+    const response = await observedFetch(`${API_BASE}${path}`);
     if (!response.ok) throw new Error(`Failed to fetch spatial layer: ${response.statusText}`);
     return response.json();
 }
@@ -55,7 +56,7 @@ export async function fetchActivityGrid(bbox?: string, hour?: string | null, lod
     else if (hour) params.set("hour", hour);
     if (lod !== "fine") params.set("lod", lod);
     const query = params.toString();
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`,
+    const response = await observedFetch(`${API_BASE}/api/spatial/activity-grid${query ? `?${query}` : ""}`,
         { signal, cache: mode === "live" ? "no-store" : undefined });
     if (!response.ok) throw new Error(`Failed to fetch activity grid: ${response.statusText}`);
     return response.json();
@@ -71,7 +72,7 @@ export interface ActivityGridAvailableHours {
 }
 
 export async function fetchActivityGridAvailableHours(): Promise<ActivityGridAvailableHours> {
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/available-hours`);
+    const response = await observedFetch(`${API_BASE}/api/spatial/activity-grid/available-hours`);
     if (!response.ok) throw new Error(`Failed to fetch activity grid hours: ${response.statusText}`);
     return response.json();
 }
@@ -81,7 +82,7 @@ export async function fetchActivityGridHex(hexId: number, hour?: string | null, 
     if (mode === "live") params.set("mode", "live");
     else if (hour) params.set("hour", hour);
     const query = params.toString();
-    const response = await fetch(`${API_BASE}/api/spatial/activity-grid/${hexId}${query ? `?${query}` : ""}`,
+    const response = await observedFetch(`${API_BASE}/api/spatial/activity-grid/${hexId}${query ? `?${query}` : ""}`,
         { cache: mode === "live" ? "no-store" : undefined });
     if (!response.ok) throw new Error(`Failed to fetch activity grid hex: ${response.statusText}`);
     return response.json();
@@ -89,14 +90,14 @@ export async function fetchActivityGridHex(hexId: number, hour?: string | null, 
 
 // null = segment is outside the imported grid coverage (normal empty state).
 export async function fetchSegmentActivityGrid(segmentId: string): Promise<ActivityGridFeature | null> {
-    const response = await fetch(`${API_BASE}/api/spatial/segments/${encodeURIComponent(segmentId)}/activity-grid`);
+    const response = await observedFetch(`${API_BASE}/api/spatial/segments/${encodeURIComponent(segmentId)}/activity-grid`);
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`Failed to fetch segment activity grid: ${response.statusText}`);
     return response.json();
 }
 
 export async function fetchBusStopDetail(sourceId: string): Promise<BusStopDetail> {
-    const response = await fetch(`${API_BASE}/api/spatial/survey-stops/${encodeURIComponent(sourceId)}`);
+    const response = await observedFetch(`${API_BASE}/api/spatial/survey-stops/${encodeURIComponent(sourceId)}`);
     if (!response.ok) throw new Error(`Failed to fetch bus stop: ${response.statusText}`);
     return response.json();
 }
@@ -106,7 +107,7 @@ export async function fetchBangJoReply(
     focus: BangJoChatFocus,
     history: { role: string; content: string }[],
 ): Promise<BangJoReply> {
-    const response = await fetch(`${API_BASE}/api/chat/bangjo`, {
+    const response = await observedFetch(`${API_BASE}/api/chat/bangjo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, ...focus, history }),
@@ -119,7 +120,7 @@ export async function fetchBangJoReply(
 }
 
 export async function fetchBangJoAutoInsight(entity: BangJoAutoInsightRequest): Promise<BangJoAutoInsightReply> {
-    const response = await fetch(`${API_BASE}/api/chat/bangjo/auto-insight`, {
+    const response = await observedFetch(`${API_BASE}/api/chat/bangjo/auto-insight`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entity),
@@ -138,7 +139,7 @@ function analyticsUrl(path: string, query: Partial<AnalyticsQuery> = {}, extra: 
 }
 
 async function analyticsFetch<T>(path: string, query: Partial<AnalyticsQuery>, signal?: AbortSignal, extra?: Record<string, string>): Promise<T> {
-    const response = await fetch(analyticsUrl(path, query, extra), { signal, cache: "no-store" }).catch((error: Error) => {
+    const response = await observedFetch(analyticsUrl(path, query, extra), { signal, cache: "no-store" }).catch((error: Error) => {
         if (signal?.aborted) throw error;
         throw new Error("Tidak dapat menghubungi backend analitik.");
     });
@@ -181,7 +182,7 @@ export async function deleteEmissionHistory(
         page: String(page), page_size: String(page_size), sort, order, scope, dry_run: String(dry_run),
     });
     for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
-    const response = await fetch(`${API_BASE ?? ""}/api/analytics/emissions/history?${params}`, { method: "DELETE", cache: "no-store" });
+    const response = await observedFetch(`${API_BASE ?? ""}/api/analytics/emissions/history?${params}`, { method: "DELETE", cache: "no-store" });
     if (!response.ok) {
         const body: { detail?: unknown } = await response.json().catch(() => ({}));
         throw new Error(typeof body.detail === "string" ? body.detail : `Gagal menghapus riwayat (${response.status})`);
@@ -194,7 +195,7 @@ export const fetchVehicleAnalytics = (query: AnalyticsQuery, signal?: AbortSigna
     analyticsFetch<VehicleAnalyticsResponse>("vehicles", query, signal);
 
 export async function exportEmissionHistory(query: AnalyticsQuery, format: "csv" | "json"): Promise<void> {
-    const response = await fetch(analyticsUrl("export", query, { format }), { cache: "no-store" });
+    const response = await observedFetch(analyticsUrl("export", query, { format }), { cache: "no-store" });
     if (!response.ok) {
         const body: { detail?: unknown } = await response.json().catch(() => ({}));
         throw new Error(typeof body.detail === "string" ? body.detail : `Ekspor gagal (${response.status})`);

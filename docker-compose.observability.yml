@@ -1,0 +1,145 @@
+# Overlay: docker compose --env-file backend/.env --env-file observability/.env -f docker-compose.yml -f docker-compose.observability.yml up -d --build
+x-app-logging: &app-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  backend:
+    ports: !override ['127.0.0.1:8080:8000']
+    environment:
+      METRICS_PORT: '9101'
+      SERVICE_NAME: backend
+      APP_ENV: ${APP_ENV:-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      BROWSER_TELEMETRY_ENABLED: 'true'
+    labels: {observability.logs: 'true'}
+    logging: *app-logging
+  tracker:
+    environment:
+      SERVICE_NAME: tracker
+      APP_ENV: ${APP_ENV:-production}
+      METRICS_PORT: '9101'
+    labels: {observability.logs: 'true'}
+    logging: *app-logging
+  segment-worker:
+    command: python -m app.observability.worker_entrypoint
+    environment:
+      SERVICE_NAME: segment-worker
+      APP_ENV: ${APP_ENV:-production}
+      METRICS_PORT: '9101'
+    labels: {observability.logs: 'true'}
+    logging: *app-logging
+  beat:
+    environment:
+      SERVICE_NAME: beat
+      APP_ENV: ${APP_ENV:-production}
+    labels: {observability.logs: 'true'}
+    logging: *app-logging
+  frontend:
+    ports: !override ['127.0.0.1:3000:3000']
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:-ws://localhost:8080}
+        NEXT_PUBLIC_GEOMAPID_API_KEY: ${NEXT_PUBLIC_GEOMAPID_API_KEY:?Set NEXT_PUBLIC_GEOMAPID_API_KEY from frontend/.env}
+        NEXT_PUBLIC_TELEMETRY_ENABLED: 'true'
+        NEXT_PUBLIC_TELEMETRY_SAMPLE_RATE: ${BROWSER_SAMPLE_RATE:-0.1}
+    environment:
+      NODE_ENV: production
+    labels: {observability.logs: 'true'}
+    logging: *app-logging
+  postgres:
+    ports: !reset []
+    logging: *app-logging
+  redis:
+    ports: !reset []
+    logging: *app-logging
+
+  grafana:
+    image: grafana/grafana:13.2.1
+    restart: unless-stopped
+    ports: ['127.0.0.1:${GRAFANA_PORT:-3001}:3000']
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in observability/.env}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    logging: *app-logging
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=14d
+      - --storage.tsdb.retention.size=5GB
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    logging: *app-logging
+
+  loki:
+    image: grafana/loki:3.7.7
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./observability/loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    logging: *app-logging
+
+  alloy:
+    image: grafana/alloy:v1.19.2
+    restart: unless-stopped
+    user: '0'
+    command: ['run', '--storage.path=/var/lib/alloy', '/etc/alloy/config.alloy']
+    volumes:
+      - ./observability/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy
+    logging: *app-logging
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    pid: host
+    command: ['--path.rootfs=/host', '--path.procfs=/host/proc', '--path.sysfs=/host/sys']
+    volumes:
+      - /:/host:ro,rslave
+    logging: *app-logging
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.60.5
+    restart: unless-stopped
+    privileged: true
+    command: ['--docker_only=true', '--housekeeping_interval=15s', '--store_container_labels=false', '--whitelisted_container_labels=com.docker.compose.service,com.docker.compose.project']
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    logging: *app-logging
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.91.1
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: ${REDIS_URL:?Set REDIS_URL using backend/.env}
+      REDIS_EXPORTER_CHECK_SINGLE_KEYS: 'db0=inference'
+    logging: *app-logging
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  loki-data:
+  alloy-data:

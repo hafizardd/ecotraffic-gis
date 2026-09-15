@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 import redis
 
 from app.core.config import settings
+from app.observability import metrics
+from app.observability.logging import configure_logging
 from app.core.database import get_sync_db
 from app.models.camera_road_segment import CameraRoadSegment
 from app.models.road_segment import RoadSegment
@@ -168,6 +170,7 @@ def _parse_tracks(detector: VehicleDetector, frame, result) -> list[dict]:
 def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
     import cv2
 
+    metrics.TRACK_LAST.labels(camera_id).set(0)
     camera = get_active_camera_source(camera_id)
     if camera is None:
         logger.warning("tracking_camera_missing", extra={"camera_id": camera_id})
@@ -203,23 +206,26 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
 
     cap = _open_capture(cv2, camera.stream_url, camera.referer)
     if cap is None:
+        metrics.TRACK_ERRORS.labels(camera_id, "open").inc()
         logger.warning("tracking_open_failed", extra={"camera_id": camera_id})
     consecutive_misses = 0
     try:
         while not stop.is_set():
             if cap is None:
                 # Reconnect with bounded exponential backoff.
-                delay = min(30.0, 2.0 ** min(consecutive_misses, 5))
-                time.sleep(delay)
+                delay = min(10.0, 2.0 ** min(consecutive_misses, 4))
+                logger.info("tracking_reconnecting", extra={"camera_id": camera_id, "retry_seconds": delay})
+                if stop.wait(delay):
+                    break
                 # Referer can rotate in DB; refresh without restarting the thread.
                 fresh = get_active_camera_source(camera_id)
                 url = fresh.stream_url if fresh else camera.stream_url
                 ref = fresh.referer if fresh else camera.referer
                 cap = _open_capture(cv2, url, ref)
                 if cap is None:
+                    metrics.TRACK_ERRORS.labels(camera_id, "open").inc()
                     consecutive_misses += 1
                     continue
-                consecutive_misses = 0
                 continue
             # Read the newest available frame instead of allowing a decoder
             # buffer to turn inference into a delayed replay.
@@ -230,22 +236,24 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                 frame = None
             if not ok or frame is None:
                 consecutive_misses += 1
+                metrics.TRACK_ERRORS.labels(camera_id, "capture").inc()
                 logger.warning("tracking_frame_missed", extra={"camera_id": camera_id})
-                if consecutive_misses >= 10:
-                    try:
-                        cap.release()
-                    except Exception:
-                        pass
-                    cap = None
-                    continue
-                time.sleep(min(interval, 0.1))
+                # A failed read may already have consumed the full read timeout.
+                # Reopen immediately instead of spending ten timeout cycles here.
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                cap = None
                 continue
             consecutive_misses = 0
             try:
                 # Ultralytics validates tracking-only arguments in model.track;
                 # passing persist to model(...) raises on current releases.
-                results = list(detector.model.track(frame, **options))
+                with metrics.INFERENCE.labels(camera_id).time():
+                    results = list(detector.model.track(frame, **options))
             except Exception:
+                metrics.TRACK_ERRORS.labels(camera_id, "inference").inc()
                 logger.exception("tracking_inference_failed", extra={"camera_id": camera_id})
                 time.sleep(interval)
                 continue
@@ -299,6 +307,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
                 )
                 redis_client.publish(f"emissions:{camera_id}", json.dumps(latest))
             except Exception:
+                metrics.TRACK_ERRORS.labels(camera_id, "emission_publish").inc()
                 logger.exception("tracking_emission_publish_failed", extra={"camera_id": camera_id})
             for completed in current.completed:
                 try:
@@ -308,8 +317,11 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
             # Annotated snapshot: filled ROI + dimmed outside boxes, IDs on labels.
             _, annotated = detector._parse_result(frame, result, annotate=True)
             try:
-                snapshots.store(camera_id, annotated)
+                snapshots.store(camera_id, annotated, published_at=time.time())
+                metrics.TRACK_FRAMES.labels(camera_id).inc()
+                metrics.TRACK_LAST.labels(camera_id).set(time.time())
             except Exception:
+                metrics.TRACK_ERRORS.labels(camera_id, "snapshot").inc()
                 logger.warning("tracking_snapshot_store_failed", extra={"camera_id": camera_id})
             payload = {
                 "type": "track_update",
@@ -324,6 +336,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
             try:
                 redis_client.publish(f"{TRACK_CHANNEL_PREFIX}{camera_id}", json.dumps(payload))
             except Exception:
+                metrics.TRACK_ERRORS.labels(camera_id, "publish").inc()
                 logger.warning("tracking_publish_failed", extra={"camera_id": camera_id})
             next_deadline += interval
             delay = next_deadline - time.monotonic()
@@ -340,6 +353,8 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
 
 
 def main() -> None:
+    configure_logging()
+    metrics.start_exporter()
     stop = threading.Event()
     threads = [
         threading.Thread(target=run_camera_loop, args=(cam, stop), daemon=True)
@@ -355,5 +370,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     main()

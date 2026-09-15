@@ -42,7 +42,7 @@ class RedisFrameStore:
         self._numpy_module = numpy_module
         self.key_prefix = key_prefix
 
-    def store(self, job_id: str, frame: Any) -> StoredFrame:
+    def store(self, job_id: str, frame: Any, *, published_at: float | None = None) -> StoredFrame:
         cv2 = self._get_cv2()
         ok, encoded = cv2.imencode(
             ".jpg",
@@ -60,7 +60,14 @@ class RedisFrameStore:
             )
 
         key = f"{self.key_prefix}{job_id}"
-        self.redis.setex(key, self.ttl_seconds, payload)
+        if published_at is None:
+            self.redis.setex(key, self.ttl_seconds, payload)
+        else:
+            # Publish JPEG and its identity atomically; readers use MGET.
+            with self.redis.pipeline(transaction=True) as pipe:
+                pipe.setex(key, self.ttl_seconds, payload)
+                pipe.setex(f"{key}:published_at", self.ttl_seconds, str(published_at))
+                pipe.execute()
         return StoredFrame(key=key, size_bytes=size_bytes)
 
     def load(self, key: str) -> Any:
