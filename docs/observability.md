@@ -60,16 +60,16 @@ harus tersedia saat image frontend dibuild, bukan hanya saat container berjalan.
 Jangan menaruh secret di variabel `PUBLIC_*`/`NEXT_PUBLIC_*`.
 
 ```bash
-dc() {
-  docker compose --env-file backend/.env --env-file observability/.env \
-    -f docker-compose.yml -f docker-compose.observability.yml "$@"
-}
-
-dc config --quiet
-dc up -d --build
-dc ps
-dc exec -T backend python -m app.observability.verify
+./tools/production-compose config --quiet
+./tools/production-compose up -d --build
+./tools/production-compose ps
+./tools/production-compose exec -T backend python -m app.observability.verify
 ```
+
+`tools/production-compose` adalah wrapper permanen; tidak perlu mendefinisikan fungsi
+shell setiap login. Script memakai lokasi repository sendiri sehingga dapat dipanggil
+melalui path absolut dari direktori lain. Wrapper lama `tools/vm-compose` memakai
+`compose.vm.yaml`; gunakan wrapper production ini untuk stack observability.
 
 `up --build` merekreasi service aplikasi yang berubah; jalankan saat jendela
 rollout yang sesuai. Migrasi/seed database tetap mengikuti prosedur deployment
@@ -77,7 +77,7 @@ aplikasi yang sudah ada; observability tidak menambah tabel atau migrasi.
 
 Overlay mengubah frontend menjadi `next build` + `next start`, bukan dev server.
 Variabel browser ditanam **saat build**. Mengubah environment saat runtime saja
-tidak memperbarui URL/rate telemetry di bundle; jalankan `dc up -d --build frontend`.
+tidak memperbarui URL/rate telemetry di bundle; jalankan `./tools/production-compose up -d --build frontend`.
 
 Port host setelah overlay:
 
@@ -209,14 +209,14 @@ host; dashboard container menggabungkan nama service yang sama lintas project.
 ## Verifikasi konfigurasi dan perubahan
 
 ```bash
-dc run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
-dc run --rm --no-deps alloy validate /etc/alloy/config.alloy
-dc run --rm --no-deps loki -config.file=/etc/loki/config.yml -verify-config=true
+./tools/production-compose run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
+./tools/production-compose run --rm --no-deps alloy validate /etc/alloy/config.alloy
+./tools/production-compose run --rm --no-deps loki -config.file=/etc/loki/config.yml -verify-config=true
 ```
 
-Restart setelah mengubah config: `dc restart prometheus loki alloy`.
+Restart setelah mengubah config: `./tools/production-compose restart prometheus loki alloy`.
 Grafana membaca dashboard provisioning berkala; perubahan datasource memerlukan
-restart Grafana. `dc exec -T backend python -m app.observability.verify` memeriksa
+restart Grafana. `./tools/production-compose exec -T backend python -m app.observability.verify` memeriksa
 kesiapan Grafana, tujuh target scrape, dan keberadaan backend logs di Loki.
 Untuk memverifikasi browser, set sampling `1`, rebuild, buka aplikasi lalu cek
 `eco_browser_events_total`; kembalikan sampling setelah pemeriksaan.
