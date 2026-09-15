@@ -317,7 +317,7 @@ def run_camera_loop(camera_id: str, stop: threading.Event) -> None:
             # Annotated snapshot: filled ROI + dimmed outside boxes, IDs on labels.
             _, annotated = detector._parse_result(frame, result, annotate=True)
             try:
-                snapshots.store(camera_id, annotated)
+                snapshots.store(camera_id, annotated, published_at=time.time())
                 metrics.TRACK_FRAMES.labels(camera_id).inc()
                 metrics.TRACK_LAST.labels(camera_id).set(time.time())
             except Exception:
