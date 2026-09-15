@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MapPin, X } from "lucide-react";
 import { CameraFeature, HistoricalCameraEmission } from "@/types";
-import VideoFeed from "./VideoFeed";
+import VideoFeed, { type StreamStatus } from "./VideoFeed";
 import EmissionStats from "./EmissionStats";
 import VehicleCount from "./VehicleCount";
 import HistoricalCameraStats from "./HistoricalCameraStats";
@@ -23,7 +23,7 @@ interface SidePanelProps {
 
 export default function SidePanel({ camera, historical = null, estimate = null, onClose }: SidePanelProps) {
     const { emissionMap } = useEmissionsContext();
-    const [trackingStatus, setTrackingStatus] = useState<"loading" | "streaming" | "error">("loading");
+    const [trackingStatus, setTrackingStatus] = useState<StreamStatus>("loading");
     const liveEmission = camera
         ? emissionMap.get(camera.properties.camera_id) ?? null
         : null;
@@ -38,7 +38,7 @@ export default function SidePanel({ camera, historical = null, estimate = null, 
                 <div className={PANEL_ICON_CLASS}><MapPin aria-hidden="true" /></div>
                 <div className={PANEL_TITLE_CLASS}><span>CCTV terpilih</span><h2>{camera.properties.name}</h2></div>
                 {isTrackingSource && <div className={`hidden items-center gap-1.5 pr-1 text-[9px] font-bold tracking-[0.08em] uppercase min-[980px]:flex ${trackingStatus === "error" ? "text-[#fca5a5]" : "text-(--brand-strong)"}`} role="status">
-                    <i className={`h-1.5 w-1.5 rounded-full ${trackingStatus === "error" ? "bg-(--danger)" : "bg-(--green)"}`} /> {trackingStatus === "error" ? "Terputus" : "Visual live"}
+                    <i className={`h-1.5 w-1.5 rounded-full ${trackingStatus === "streaming" ? "bg-(--green)" : "bg-amber-400"}`} /> {{error: "Terputus", loading: "Menghubungkan", delayed: "Video tertunda", streaming: "Visual live"}[trackingStatus]}
                 </div>}
                 <button
                     onClick={onClose}
