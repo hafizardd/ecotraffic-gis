@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_dir"
+
+for env_file in backend/.env frontend/.env observability/.env; do
+  if [[ ! -f "$repo_dir/$env_file" ]]; then
+    printf 'Missing %s. Copy %s.example and configure production values.\n' "$env_file" "$env_file" >&2
+    exit 1
+  fi
+done
+
+# Keep the existing project directory/name so deployments reuse their volumes.
+# This overlay replaces compose.vm.yaml; do not combine both frontend commands.
+exec sudo docker compose \
+  --env-file "$repo_dir/backend/.env" \
+  --env-file "$repo_dir/observability/.env" \
+  -f "$repo_dir/docker-compose.yml" \
+  -f "$repo_dir/docker-compose.observability.yml" \
+  "$@"
