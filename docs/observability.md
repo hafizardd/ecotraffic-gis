@@ -152,10 +152,13 @@ host; dashboard container menggabungkan nama service yang sama lintas project.
   selesai. Headers metric tersedia lebih awal.
 - `eco_video_first_frame_seconds` adalah waktu dari mulai generator sampai
   frame pertama di-yield. Bukan waktu gambar terlihat di perangkat pengguna.
-- `video_load_event` memakai event `img.onload` native. Perilaku MJPEG bergantung
-  browser dan tidak selalu merepresentasikan frame pertama. Timeout 15 detik
-  berarti belum menerima load/error event, bukan bukti kamera mati. Implementasi
-  ini belum mengukur per-frame render FPS atau freeze video di browser.
+- `video_load_event` dicatat setelah JPEG beranotasi pertama selesai didecode dan
+  digambar ke canvas. Ini belum mengukur waktu compositing layar perangkat.
+  Player menampilkan status tertunda setelah 3 detik tanpa frame lengkap baru,
+  mengirim `video_loading_timeout` setelah 15 detik, dan mencoba koneksi ulang
+  setelah 30 detik tanpa frame. Angka jeda memperhitungkan umur sejak publikasi frame oleh tracker,
+  bukan timestamp asli CCTV; frame yang sama tidak mereset penghitung saat reconnect.
+  Modal video menggunakan canvas dan koneksi yang sama dengan panel inline.
 - Freshness tracker mengukur waktu frame berhasil disimpan, bukan timestamp asli
   CCTV sebelum decoder. Delay upstream masih mungkin terjadi meskipun angka ini kecil.
 - Browser `fetch_body` mencakup pembacaan body dan JSON parsing, belum React render.
@@ -245,3 +248,22 @@ Pada branch `feat/observability-stack`:
   dan kapasitas beban production belum diuji.
 
 Stack smoke test tidak memakai database aplikasi yang sedang berjalan.
+
+
+### Pemulihan CCTV beranotasi
+
+Timeout OpenCV diberikan sebagai parameter `VideoCapture.open` (open-only),
+bukan `cap.set`: https://docs.opencv.org/4.13.0/d4/d15/group__videoio__flags__base.html.
+`FRAME_CAPTURE_OPEN_TIMEOUT_SECONDS` dan `FRAME_CAPTURE_READ_TIMEOUT_SECONDS`
+berlaku saat membuka capture (default masing-masing 10 detik). Setelah pembacaan
+gagal, tracker membuka ulang dengan backoff 2–10 detik, reset setelah frame berhasil.
+Log `tracking_reconnecting` mencatat kamera dan jeda retry. Gangguan sumber tetap
+bisa menyebabkan jeda; timeout bukan jaminan waktu sampai frame pulih.
+
+JPEG dan waktu publikasinya disimpan atomik di Redis. MJPEG menyertakan
+`X-Frame-Id` dan `X-Frame-Age-Ms`; browser mengabaikan identitas yang sama setelah
+reconnect dan mempertahankan umur frame. Umur ini dihitung sejak publikasi tracker,
+bukan timestamp asli kamera (tidak mengukur buffering pada sumber).
+Backend dan tracker harus diperbarui bersama karena snapshot lama tanpa metadata
+tidak dikirim. Build ulang `backend tracker frontend` untuk menerapkan perubahan;
+`segment-worker` juga perlu build ulang bila ingin memakai perbaikan capture bersama.
