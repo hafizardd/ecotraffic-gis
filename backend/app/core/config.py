@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     # before narrating. Off = keep the old regex-only routing.
     BANGJO_TOOL_ROUTING_ENABLED: bool = True
     BANGJO_PLANNER_MAX_TOKENS: int = Field(default=300, gt=0)
+    # Kill-switch for the new project-knowledge scope: off = revert to the old
+    # strict guardrail path for on-topic-but-not-data questions.
+    BANGJO_META_SCOPE_ENABLED: bool = True
 
     # Groq reasoning controls. Leave both unset for a plain instruct model (the
     # recommended default): there is no chain-of-thought to leak. For a

@@ -8,6 +8,8 @@ rejected. Any internal error also fails open.
 
 import re
 
+from app.services.bangjo_project_knowledge import is_meta_query
+
 MAX_QUERY_CHARS = 500
 MAX_HISTORY_TURNS = 10
 MAX_TURN_CHARS = 1000
@@ -19,6 +21,18 @@ REJECT_MESSAGE = (
     "Maaf, saya hanya bisa membantu pertanyaan seputar lalu lintas, emisi, koridor, "
     "halte, dan intervensi pada dashboard EcoTraffic."
 )
+
+# The last-resort decline, used only when even the project-knowledge and planner
+# fallbacks found nothing: on-topic but unanswerable, not clearly off-topic.
+DECLINE_MESSAGE = (
+    "Aku belum bisa menjawab itu. Aku bisa bantu soal emisi, koridor, halte, "
+    "potensi aktivitas, atau cara kerja dashboard ini."
+)
+
+# A hard reject ends the turn immediately. ``no_scope_match`` is on-topic but not
+# a data lookup (e.g. "apa itu EcoTraffic") and is routed to meta/planner first.
+HARD_REJECT_REASONS = ("empty", "too_long", "injection", "out_of_scope")
+NO_SCOPE_MATCH = "no_scope_match"
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _WORDS = re.compile(r"[a-zA-Z]+")
@@ -93,7 +107,13 @@ def screen_query(message: str) -> dict:
             or bool(_GREETING.search(text))
             or (bool(_FOLLOWUP.search(text)) and bool(_REFERENTIAL.search(text)))
         )
-        if in_scope or len(_WORDS.findall(text)) < MIN_SCOPE_WORDS:
+        if in_scope:
+            return {"blocked": False, "reason": None, "message": None}
+        if is_meta_query(text):
+            # Project-shaped but not a data query: let routing answer it from
+            # static knowledge or the planner instead of rejecting up front.
+            return {"blocked": False, "reason": NO_SCOPE_MATCH, "message": None}
+        if len(_WORDS.findall(text)) < MIN_SCOPE_WORDS:
             return {"blocked": False, "reason": None, "message": None}
         return {"blocked": True, "reason": "out_of_scope", "message": REJECT_MESSAGE}
     except Exception:

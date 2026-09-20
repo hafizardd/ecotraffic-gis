@@ -36,7 +36,14 @@ from app.services.bangjo_context import (
     segment_for_stop,
     segments_for_hex,
 )
-from app.services.bangjo_guardrails import _GREETING, sanitize_history, screen_query
+from app.services.bangjo_guardrails import (
+    NO_SCOPE_MATCH,
+    _GREETING,
+    DECLINE_MESSAGE,
+    sanitize_history,
+    screen_query,
+)
+from app.services.bangjo_project_knowledge import build_meta_context, is_meta_query
 from app.services.bangjo_retrieval import resolve_by_embedding
 
 logger = logging.getLogger(__name__)
@@ -177,8 +184,10 @@ _OVERVIEW_QUERY = re.compile(
     re.IGNORECASE,
 )
 
-# "koridor ini/itu/tersebut" points at the current map selection, not the whole dataset.
-_REFERENTIAL = re.compile(r"\b(ini|itu|tersebut)\b", re.IGNORECASE)
+# "koridor ini/itu/tersebut" points at the current map selection, not the whole
+# dataset. "apa itu X" is a definition question, not a referential, so it is
+# excluded here.
+_REFERENTIAL = re.compile(r"(?<!\bapa\s)(?<!\bapakah\s)\b(ini|itu|tersebut)\b", re.IGNORECASE)
 
 # Whole-grid activity-potential questions ("daerah dengan potensi aktivitas
 # tertinggi"). Kept separate from corridor emission overview so the answer can
@@ -330,6 +339,11 @@ def _classify_intent(message: str) -> str:
     if _GREETING.search(text):
         return "greeting"
     return "general"
+
+
+def _is_meta_query(message: str) -> bool:
+    """Project-knowledge question, gated by the rollout kill-switch."""
+    return bool(settings.BANGJO_META_SCOPE_ENABLED and is_meta_query(message or ""))
 
 
 def _parse_hour(value: str | None) -> datetime | None:
@@ -488,6 +502,8 @@ async def _dispatch_scope_ex(db: AsyncSession, payload: "ChatRequest") -> tuple[
         return {"kind": "hex_activity"}, True
     if _is_overview_query(message):
         return {"kind": "overview"}, True
+    if _is_meta_query(message):
+        return {"kind": "meta"}, True
 
     if referential:
         return await _dispatch_referential(db, payload), True
@@ -528,6 +544,9 @@ async def _build_scope_context(
     if kind == "overview":
         context = overview_payload(await build_overview_context(db))
         label = f"Ringkasan {context.get('jumlah_koridor')} koridor"
+    elif kind == "meta":
+        context = build_meta_context(payload.message)
+        label = "Pengetahuan proyek"
     elif kind == "bus_stops":
         context = bus_stop_payload(await build_bus_stop_overview_context(db))
         label = f"Ringkasan {context.get('jumlah_dinilai')} halte dinilai"
@@ -975,6 +994,8 @@ _PLANNER_SYSTEM = (
     "get_bus_stop dipakai untuk nama atau ID halte. list_corridors untuk peringkat seluruh koridor. "
     "rank_bus_stops untuk peringkat kualitas seluruh halte. rank_activity_cells untuk peringkat potensi "
     "seluruh sel grid. get_activity_cell untuk satu sel grid. "
+    "get_project_info untuk pertanyaan tentang proyek/dashboard itu sendiri (apa itu EcoTraffic, cara "
+    "kerja skor aktivitas atau emisi, sumber data, beda live vs replay, kemampuan Bang Jo). "
     "Jangan mengarang angka dan jangan menjawab pertanyaan; hanya panggil fungsi."
 )
 
@@ -1007,6 +1028,10 @@ _PLANNER_TOOLS = [
         "description": "Ambil data satu sel grid aktivitas dari ID sel.",
         "parameters": {"type": "object", "properties": {
             "hex_id": {"type": "integer", "description": "ID sel grid"}}, "required": ["hex_id"]}}},
+    {"type": "function", "function": {
+        "name": "get_project_info",
+        "description": "Ambil penjelasan tentang proyek EcoTraffic-GIS: apa itu, cara kerja skor aktivitas/emisi, sumber data, mode live vs replay, dan kemampuan Bang Jo.",
+        "parameters": {"type": "object", "properties": {}}}},
 ]
 
 
@@ -1099,6 +1124,8 @@ async def _tool_calls_to_scope(db: AsyncSession, calls: list[dict], payload: "Ch
             return {"kind": "hex", "hex_id": int(args.get("hex_id"))}
         except (TypeError, ValueError):
             return None
+    if name == "get_project_info":
+        return {"kind": "meta"}
     return None
 
 
@@ -1273,6 +1300,13 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         if planned_scope:
             scope = planned_scope
             planner_used = True
+    if not confident and not planner_used and gate.get("reason") == NO_SCOPE_MATCH:
+        # On-topic but neither the data scopes nor the planner found anything:
+        # decline as a last resort instead of narrating an unrelated fallback.
+        timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
+        logger.info("bangjo_llm_call", extra={**timings, "source": "declined"})
+        return {"needs_selection": False, "answer": None, "context_label": None,
+                "blocked": True, "message": DECLINE_MESSAGE}
     timings["planner_used"] = planner_used
     context, label, error = await _build_scope_context(db, scope, payload)
     if error is not None:

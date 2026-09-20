@@ -15,6 +15,7 @@ from sqlalchemy.sql import compiler as sql_compiler
 import app.api.routes.bangjo as bangjo
 import app.services.bangjo_context as bangjo_context
 import app.services.bangjo_guardrails as guardrails
+import app.services.bangjo_project_knowledge as project_knowledge
 import app.services.bangjo_retrieval as bangjo_retrieval
 from app.api.routes.bangjo import BangJoLLMError, _validate_markdown
 from app.services.bangjo_context import (
@@ -1609,3 +1610,90 @@ async def test_chat_uses_planner_when_router_falls_back(monkeypatch):
 
     assert captured["scope"] == {"kind": "segment", "segment_ids": ["SEG-0002"]}
     assert response["context_label"] == "Jalan Solo (SEG-0002)"
+
+
+# --- project knowledge / meta scope ------------------------------------------
+
+def test_screen_query_routes_project_questions_instead_of_rejecting():
+    meta = guardrails.screen_query("Apa itu EcoTraffic?")
+    assert meta["blocked"] is False
+    assert meta["reason"] == guardrails.NO_SCOPE_MATCH
+    assert guardrails.screen_query("Data ini dari mana?")["blocked"] is False
+    # Genuinely unrelated questions are still hard-rejected.
+    hard = guardrails.screen_query("apa resep rendang yang enak sekali")
+    assert hard["blocked"] is True
+    assert hard["reason"] in guardrails.HARD_REJECT_REASONS
+
+
+def test_build_meta_context_selects_relevant_topic():
+    context = project_knowledge.build_meta_context("Apa bedanya mode live dan replay?")
+
+    assert context["scope"] == "meta"
+    assert "live_replay" in context["pengetahuan"]
+    assert context["pengetahuan"]["live_replay"]
+    assert "emisi" not in context["pengetahuan"]
+
+
+def test_build_meta_context_falls_back_when_no_topic_matches():
+    context = project_knowledge.build_meta_context("EcoTraffic")
+
+    assert context["scope"] == "meta"
+    assert context["pengetahuan"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scope_routes_project_question_to_meta():
+    scope = await bangjo._dispatch_scope(None, bangjo.ChatRequest(message="Apa itu EcoTraffic?"))
+
+    assert scope == {"kind": "meta"}
+
+
+@pytest.mark.asyncio
+async def test_bangjo_chat_meta_question_answers_from_project_knowledge(monkeypatch):
+    captured = {}
+
+    async def fake_ask_llm(message, context, history, *args, **kwargs):
+        captured["context"] = context
+        return {"content": "**EcoTraffic-GIS** adalah dasbor perencanaan transportasi.", "source": "llm"}
+
+    async def fake_get(key):
+        return None
+
+    async def fake_set(key, value, ttl):
+        return None
+
+    monkeypatch.setattr(bangjo, "_ask_llm", fake_ask_llm)
+    monkeypatch.setattr(bangjo, "_cache_get", fake_get)
+    monkeypatch.setattr(bangjo, "_cache_set", fake_set)
+
+    response = await bangjo.bangjo_chat(bangjo.ChatRequest(message="Apa itu EcoTraffic?"), None)
+
+    assert response["needs_selection"] is False
+    assert response["context_label"] == "Pengetahuan proyek"
+    assert captured["context"]["scope"] == "meta"
+
+
+@pytest.mark.asyncio
+async def test_bangjo_chat_meta_disabled_declines_as_last_resort(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_META_SCOPE_ENABLED", False)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", None)
+
+    async def fake_resolve(db, message):
+        return None, [], "string"
+
+    monkeypatch.setattr(bangjo, "_resolve_segment_cascade", fake_resolve)
+
+    response = await bangjo.bangjo_chat(bangjo.ChatRequest(message="Apa itu EcoTraffic?"), None)
+
+    assert response["blocked"] is True
+    assert response["message"] == guardrails.DECLINE_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_to_scope_maps_project_info():
+    scope = await bangjo._tool_calls_to_scope(
+        None, [{"name": "get_project_info", "arguments": {}}], bangjo.ChatRequest(message="x")
+    )
+    assert scope == {"kind": "meta"}
+
+
