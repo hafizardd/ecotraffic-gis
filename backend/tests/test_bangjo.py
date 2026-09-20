@@ -27,6 +27,7 @@ from app.services.bangjo_context import (
     build_overview_context,
     bus_stop_payload,
     overview_payload,
+    verify_context_result,
 )
 
 
@@ -1697,3 +1698,148 @@ async def test_tool_calls_to_scope_maps_project_info():
     assert scope == {"kind": "meta"}
 
 
+# --- self-verifying retrieval -------------------------------------------------
+
+def test_verify_context_result_flags_empty_and_degenerate():
+    assert verify_context_result(None) == "empty"
+    assert verify_context_result({"scope": "meta"}) == "ok"
+    assert verify_context_result({"scope": "hex_activity", "jumlah_sel_dinilai": 0}) == "empty"
+    assert verify_context_result({"scope": "hex_activity", "jumlah_sel_dinilai": 5}) == "ok"
+    assert verify_context_result({"scope": "bus_stops", "jumlah_dinilai": 0}) == "empty"
+    assert verify_context_result({
+        "scope": "overview", "jumlah_koridor": 2, "emisi_tertinggi": [{"total_emisi": None}],
+    }) == "degenerate"
+    assert verify_context_result({
+        "scope": "overview", "jumlah_koridor": 2, "emisi_tertinggi": [{"total_emisi": 1.2}],
+    }) == "ok"
+    assert verify_context_result({"segment": {"pollutant_totals": {"co2": 0.0}}}) == "degenerate"
+    assert verify_context_result({"segment": {"pollutant_totals": {"co2": 1.0}}}) == "ok"
+
+
+def test_deterministic_repair_only_rescues_empty_ranked_scopes():
+    assert bangjo._deterministic_repair({"kind": "bus_stops"}, "empty") == {"kind": "overview"}
+    assert bangjo._deterministic_repair({"kind": "hex_activity"}, "empty") == {"kind": "overview"}
+    assert bangjo._deterministic_repair({"kind": "hex_activity"}, "degenerate") is None
+    assert bangjo._deterministic_repair({"kind": "segment"}, "empty") is None
+
+
+class _CapturingToolClient:
+    def __init__(self):
+        self.calls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.calls.append(json)
+        return _ToolResponse()
+
+
+@pytest.mark.asyncio
+async def test_plan_retrieval_repair_prompt_carries_failure_reason(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    client = _CapturingToolClient()
+    monkeypatch.setattr(bangjo.httpx, "AsyncClient", lambda *args, **kwargs: client)
+
+    await bangjo._plan_repair(
+        "berapa emisi?", [], failure_reason="degenerate", candidates=["Jalan A", "Jalan B"]
+    )
+
+    system = client.calls[0]["messages"][0]["content"]
+    assert "degenerate" in system
+    assert "Jalan A" in system
+
+
+@pytest.mark.asyncio
+async def test_bangjo_chat_repairs_once_when_context_degenerate(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    plan_calls = {"count": 0}
+
+    async def fake_dispatch(db, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0001"]}, True
+
+    async def fake_plan(message, history, failure_reason=None, candidates=None):
+        plan_calls["count"] += 1
+        return [{"name": "list_corridors", "arguments": {}}]
+
+    async def fake_scope(db, calls, payload):
+        return {"kind": "overview"}
+
+    async def fake_build(db, scope, payload):
+        if scope["kind"] == "segment":
+            return {"segment": {"name": "Jalan X", "pollutant_totals": {"co2": 0.0}}}, "Jalan X", None
+        return ({"scope": "overview", "jumlah_koridor": 3, "emisi_tertinggi": [{"total_emisi": 5.0}]},
+                "Ringkasan 3 koridor", None)
+
+    async def fake_ask(message, context, history, *args, **kwargs):
+        return {"content": "**Ringkasan** hasil perbaikan.", "source": "llm"}
+
+    async def fake_get(key):
+        return None
+
+    async def fake_set(key, value, ttl):
+        return None
+
+    monkeypatch.setattr(bangjo, "_dispatch_scope_ex", fake_dispatch)
+    monkeypatch.setattr(bangjo, "_plan_repair", fake_plan)
+    monkeypatch.setattr(bangjo, "_tool_calls_to_scope", fake_scope)
+    monkeypatch.setattr(bangjo, "_build_scope_context", fake_build)
+    monkeypatch.setattr(bangjo, "_ask_llm", fake_ask)
+    monkeypatch.setattr(bangjo, "_cache_get", fake_get)
+    monkeypatch.setattr(bangjo, "_cache_set", fake_set)
+
+    response = await bangjo.bangjo_chat(bangjo.ChatRequest(message="berapa emisi jalan x?"), None)
+
+    assert plan_calls["count"] == 1
+    assert response["context_label"] == "Ringkasan 3 koridor"
+
+
+@pytest.mark.asyncio
+async def test_bangjo_chat_caps_retrieval_at_two_planner_calls(monkeypatch):
+    monkeypatch.setattr(bangjo.settings, "BANGJO_TOOL_ROUTING_ENABLED", True)
+    monkeypatch.setattr(bangjo.settings, "GROQ_API_KEY", "test-key")
+    plan_calls = {"count": 0}
+
+    async def fake_dispatch(db, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0001"]}, False
+
+    async def fake_plan(message, history):
+        plan_calls["count"] += 1
+        return [{"name": "get_segment", "arguments": {"query": "SEG-0001"}}]
+
+    async def fake_repair(message, history, failure_reason, candidates):
+        plan_calls["count"] += 1
+        return [{"name": "get_segment", "arguments": {"query": "SEG-0001"}}]
+
+    async def fake_scope(db, calls, payload):
+        return {"kind": "segment", "segment_ids": ["SEG-0001"]}
+
+    async def fake_build(db, scope, payload):
+        return {"segment": {"name": "Jalan X", "pollutant_totals": {}}}, "Jalan X", None
+
+    async def fake_ask(message, context, history, *args, **kwargs):
+        return {"content": "**Ringkasan** tetap dijawab.", "source": "llm"}
+
+    async def fake_get(key):
+        return None
+
+    async def fake_set(key, value, ttl):
+        return None
+
+    monkeypatch.setattr(bangjo, "_dispatch_scope_ex", fake_dispatch)
+    monkeypatch.setattr(bangjo, "_plan_retrieval", fake_plan)
+    monkeypatch.setattr(bangjo, "_plan_repair", fake_repair)
+    monkeypatch.setattr(bangjo, "_tool_calls_to_scope", fake_scope)
+    monkeypatch.setattr(bangjo, "_build_scope_context", fake_build)
+    monkeypatch.setattr(bangjo, "_ask_llm", fake_ask)
+    monkeypatch.setattr(bangjo, "_cache_get", fake_get)
+    monkeypatch.setattr(bangjo, "_cache_set", fake_set)
+
+    await bangjo.bangjo_chat(bangjo.ChatRequest(message="berapa emisinya?"), None)
+
+    assert plan_calls["count"] == 2

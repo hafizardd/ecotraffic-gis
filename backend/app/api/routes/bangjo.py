@@ -35,6 +35,7 @@ from app.services.bangjo_context import (
     overview_payload,
     segment_for_stop,
     segments_for_hex,
+    verify_context_result,
 )
 from app.services.bangjo_guardrails import (
     NO_SCOPE_MATCH,
@@ -380,8 +381,11 @@ def _candidate_list(groups: list[list[dict]]) -> list[dict]:
     ]
 
 
-async def _resolve_segment(db: AsyncSession, message: str) -> tuple[list[str] | None, list[dict]]:
-    rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
+async def _resolve_segment(
+    db: AsyncSession, message: str, rows=None
+) -> tuple[list[str] | None, list[dict]]:
+    if rows is None:
+        rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
     lower = _normalize_name(message)
     groups: dict[str, list[dict]] = {}
     for rid, name in rows:
@@ -434,7 +438,7 @@ async def _resolve_segment_cascade(
     embedded = await resolve_by_embedding(db, message)
     if embedded:
         return embedded, [], "embedding"
-    ids, candidates = await _resolve_segment(db, message)
+    ids, candidates = await _resolve_segment(db, message, rows)
     return ids, candidates, "string"
 
 
@@ -1053,10 +1057,32 @@ def _parse_tool_calls(message: dict) -> list[dict]:
 
 async def _plan_retrieval(message: str, history) -> list[dict] | None:
     """Ask the model which single dataset to fetch; ``None`` on any failure."""
+    return await _planner_call(message, history, _PLANNER_SYSTEM)
+
+
+async def _plan_repair(
+    message: str, history, failure_reason: str, candidates: list[str] | None
+) -> list[dict] | None:
+    """The single bounded re-pick: tell the planner what failed and why.
+
+    Kept separate from :func:`_plan_retrieval` so the normal path stays a plain
+    two-argument call and test doubles keep working.
+    """
+    hint = f"Percobaan sebelumnya gagal ({failure_reason}). "
+    if candidates:
+        hint += f"Kandidat yang mungkin: {', '.join(candidates)}. "
+    hint += (
+        "Pilih ulang fungsi yang paling tepat, atau get_project_info bila pertanyaannya "
+        "tentang proyek/dashboard."
+    )
+    return await _planner_call(message, history, f"{_PLANNER_SYSTEM}\n{hint}")
+
+
+async def _planner_call(message: str, history, system: str) -> list[dict] | None:
     if not settings.BANGJO_TOOL_ROUTING_ENABLED or not settings.GROQ_API_KEY:
         return None
     planner_turns = [
-        {"role": "system", "content": _PLANNER_SYSTEM},
+        {"role": "system", "content": system},
         *_history_turns(history),
         {"role": "user", "content": message},
     ]
@@ -1240,6 +1266,31 @@ def _merge_contexts(contexts: list[dict]) -> dict:
     }
 
 
+def _repair_candidates(context: dict) -> list[str]:
+    """Short, context-derived name list for the one bounded repair re-pick."""
+    names: list[str] = []
+    for key in ("emisi_tertinggi", "emisi_terendah", "halte_terbaik", "halte_terburuk"):
+        for row in context.get(key) or []:
+            name = row.get("nama")
+            if name and name not in names:
+                names.append(name)
+    return names[:5]
+
+
+def _deterministic_repair(scope: dict, verdict: str) -> dict | None:
+    """Free fallback scope for an empty result, tried before any repair LLM call.
+
+    Only a whole-dataset overview can rescue an empty ranked scope; a degenerate
+    per-entity result is left to the bounded LLM repair, since guessing another
+    entity would silently answer a different question.
+    """
+    if verdict != "empty":
+        return None
+    if scope.get("kind") in ("hex_activity", "bus_stops", "hex"):
+        return {"kind": "overview"}
+    return None
+
+
 @router.post("/bangjo")
 async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     started = time.monotonic()
@@ -1287,11 +1338,15 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     context_started = time.monotonic()
     planner_used = False
+    # Retrieval-side LLM calls (initial plan + one repair) are capped at two per
+    # question; answer generation is separate and unchanged.
+    planner_calls = 0
     if not confident and _classify_intent(payload.message) != "greeting":
         # Deterministic routing only reached the active map selection, which may
         # be the previous turn's object. Let the model choose the dataset the
         # latest question actually asks about before narrating.
         calls = await _plan_retrieval(payload.message, history)
+        planner_calls += 1
         planned_scope = await _tool_calls_to_scope(db, calls, payload) if calls else None
         if planned_scope and planned_scope["kind"] == "ambiguous":
             timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
@@ -1312,6 +1367,29 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     if error is not None:
         timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
         return error
+    verdict = verify_context_result(context, scope)
+    timings["verify"] = verdict
+    if verdict != "ok":
+        # Deterministic repair first (free): a whole-dataset overview can rescue
+        # an empty ranked scope without another LLM call.
+        fallback = _deterministic_repair(scope, verdict)
+        if fallback and fallback != scope:
+            fallback_context, fallback_label, fallback_error = await _build_scope_context(db, fallback, payload)
+            if fallback_error is None:
+                context, label, scope, planner_used = fallback_context, fallback_label, fallback, True
+                verdict = verify_context_result(context, scope)
+    if verdict != "ok" and planner_calls < 2:
+        # One bounded repair: re-pick a scope once, then stop. Never loops.
+        calls = await _plan_repair(
+            payload.message, history, failure_reason=verdict, candidates=_repair_candidates(context)
+        )
+        planner_calls += 1
+        repaired = await _tool_calls_to_scope(db, calls, payload) if calls else None
+        if repaired and repaired.get("kind") != "ambiguous" and repaired != scope:
+            repaired_context, repaired_label, repaired_error = await _build_scope_context(db, repaired, payload)
+            if repaired_error is None:
+                context, label, scope, planner_used = repaired_context, repaired_label, repaired, True
+    timings["planner_calls"] = planner_calls
     timings["context_ms"] = round((time.monotonic() - context_started) * 1000, 2)
     try:
         answer = await _ask_llm(payload.message, context, history, timings, style=style)
