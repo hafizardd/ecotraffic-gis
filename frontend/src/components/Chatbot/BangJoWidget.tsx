@@ -59,6 +59,7 @@ export default function BangJoWidget() {
                     isTyping={isTyping}
                     minimized={minimized}
                     quickTarget={quickTarget}
+                    timeMode={selection?.activityTimeMode ?? "replay"}
                     onSend={sendMessage}
                     onMinimize={() => setMinimized((value) => !value)}
                     onClose={() => {

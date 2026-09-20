@@ -35,16 +35,32 @@ from app.services.bangjo_context import (
     overview_payload,
     segment_for_stop,
     segments_for_hex,
+    verify_context_result,
 )
-from app.services.bangjo_guardrails import _GREETING, sanitize_history, screen_query
+from app.services.bangjo_guardrails import (
+    NO_SCOPE_MATCH,
+    _GREETING,
+    DECLINE_MESSAGE,
+    sanitize_history,
+    screen_query,
+)
+from app.services.bangjo_project_knowledge import build_meta_context, is_meta_query
 from app.services.bangjo_retrieval import resolve_by_embedding
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 SYSTEM_PROMPT = (
-    "Anda adalah Bang Jo, asisten WebGIS EcoTraffic Yogyakarta. "
+    "Anda adalah Bang Jo, asisten ramah di dalam EcoTraffic-GIS (dasbor emisi lalu lintas "
+    "dan potensi aktivitas Yogyakarta). Anda membantu pengguna memahami peta, data, dan "
+    "proyeknya - bukan sekadar membacakan angka. "
     "Jawab berdasarkan objek konteks JSON yang diberikan; jangan mengarang angka di luar konteks. "
+    "Jika konteks memuat scope='meta', itu adalah PENGETAHUAN PROYEK statis: jawab pertanyaan "
+    "tentang proyek (apa itu EcoTraffic, cara kerja skor aktivitas/emisi, sumber data, beda live "
+    "vs replay, kemampuan Bang Jo) dari bagian 'pengetahuan' itu, walaupun tidak ada data live. "
+    "Pertanyaan tentang proyek seperti itu WAJIB dijawab, bukan ditolak. "
+    "Jika pertanyaan benar-benar di luar transportasi/emisi/proyek ini, tolak singkat dan arahkan "
+    "ke topik yang bisa dibantu; jangan beri ceramah dan jangan minta maaf berlebihan. "
     "Jika sebuah dimensi memang tidak ada di konteks, katakan datanya belum tersedia pada konteks ini "
     "lalu sebutkan dimensi yang tersedia. "
     "Konteks bisa berbentuk (a) satu koridor pada field 'segment', atau (b) ringkasan seluruh koridor "
@@ -99,8 +115,14 @@ SYSTEM_PROMPT = (
     "'tambah frekuensi layanan', add_new_stop menjadi 'tambah halte baru', improve_existing_stop menjadi "
     "'perbaiki halte yang ada'. "
     "Salin semua angka persis dari konteks; jangan membulatkan, menambah, atau mengarang angka/ambang batas. "
-    "Balas memakai markdown ringan saja: teks tebal **teks**, daftar '- ' di awal baris, dan paragraf. "
-    "Jangan pakai heading, tabel, tautan, blok kode, JSON, atau HTML mentah. "
+    "Balas memakai markdown ringan saja. Struktur yang diminta: baris pembuka berisi jawaban "
+    "langsung satu kalimat, lalu daftar poin '- ' atau tabel markdown ringan ('| ... |') untuk "
+    "perbandingan/peringkat, lalu paling banyak satu kalimat penutup singkat. "
+    "Tebalkan angka atau nama yang paling penting (**seperti ini**). "
+    "Untuk status gunakan penanda konsisten: potensi aktivitas Tinggi/Sedang/Rendah dan "
+    "kebaruan data segar/menua/basi (boleh satu emoji penanda, jangan berlebihan). "
+    "Maksimal sekitar dua paragraf pendek ditambah satu daftar atau tabel; jangan menumpuk. "
+    "Jangan pakai heading (#, ##), tautan, blok kode, JSON, atau HTML mentah; tabel ringan boleh. "
     "Jangan pernah mengisi jawaban dengan kata 'str', '...', atau placeholder; tulis kalimat sebenarnya. "
     "Keluarkan HANYA jawaban markdown itu sendiri, tanpa kalimat pembuka atau penutup."
 )
@@ -177,8 +199,10 @@ _OVERVIEW_QUERY = re.compile(
     re.IGNORECASE,
 )
 
-# "koridor ini/itu/tersebut" points at the current map selection, not the whole dataset.
-_REFERENTIAL = re.compile(r"\b(ini|itu|tersebut)\b", re.IGNORECASE)
+# "koridor ini/itu/tersebut" points at the current map selection, not the whole
+# dataset. "apa itu X" is a definition question, not a referential, so it is
+# excluded here.
+_REFERENTIAL = re.compile(r"(?<!\bapa\s)(?<!\bapakah\s)\b(ini|itu|tersebut)\b", re.IGNORECASE)
 
 # Whole-grid activity-potential questions ("daerah dengan potensi aktivitas
 # tertinggi"). Kept separate from corridor emission overview so the answer can
@@ -332,6 +356,11 @@ def _classify_intent(message: str) -> str:
     return "general"
 
 
+def _is_meta_query(message: str) -> bool:
+    """Project-knowledge question, gated by the rollout kill-switch."""
+    return bool(settings.BANGJO_META_SCOPE_ENABLED and is_meta_query(message or ""))
+
+
 def _parse_hour(value: str | None) -> datetime | None:
     """Parse the client's active grid hour; unparseable input falls back to the anchor."""
     if not value:
@@ -366,8 +395,11 @@ def _candidate_list(groups: list[list[dict]]) -> list[dict]:
     ]
 
 
-async def _resolve_segment(db: AsyncSession, message: str) -> tuple[list[str] | None, list[dict]]:
-    rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
+async def _resolve_segment(
+    db: AsyncSession, message: str, rows=None
+) -> tuple[list[str] | None, list[dict]]:
+    if rows is None:
+        rows = (await db.execute(select(RoadSegment.road_segment_id, RoadSegment.name))).all()
     lower = _normalize_name(message)
     groups: dict[str, list[dict]] = {}
     for rid, name in rows:
@@ -420,7 +452,7 @@ async def _resolve_segment_cascade(
     embedded = await resolve_by_embedding(db, message)
     if embedded:
         return embedded, [], "embedding"
-    ids, candidates = await _resolve_segment(db, message)
+    ids, candidates = await _resolve_segment(db, message, rows)
     return ids, candidates, "string"
 
 
@@ -488,6 +520,8 @@ async def _dispatch_scope_ex(db: AsyncSession, payload: "ChatRequest") -> tuple[
         return {"kind": "hex_activity"}, True
     if _is_overview_query(message):
         return {"kind": "overview"}, True
+    if _is_meta_query(message):
+        return {"kind": "meta"}, True
 
     if referential:
         return await _dispatch_referential(db, payload), True
@@ -528,6 +562,9 @@ async def _build_scope_context(
     if kind == "overview":
         context = overview_payload(await build_overview_context(db))
         label = f"Ringkasan {context.get('jumlah_koridor')} koridor"
+    elif kind == "meta":
+        context = build_meta_context(payload.message)
+        label = "Pengetahuan proyek"
     elif kind == "bus_stops":
         context = bus_stop_payload(await build_bus_stop_overview_context(db))
         label = f"Ringkasan {context.get('jumlah_dinilai')} halte dinilai"
@@ -975,6 +1012,8 @@ _PLANNER_SYSTEM = (
     "get_bus_stop dipakai untuk nama atau ID halte. list_corridors untuk peringkat seluruh koridor. "
     "rank_bus_stops untuk peringkat kualitas seluruh halte. rank_activity_cells untuk peringkat potensi "
     "seluruh sel grid. get_activity_cell untuk satu sel grid. "
+    "get_project_info untuk pertanyaan tentang proyek/dashboard itu sendiri (apa itu EcoTraffic, cara "
+    "kerja skor aktivitas atau emisi, sumber data, beda live vs replay, kemampuan Bang Jo). "
     "Jangan mengarang angka dan jangan menjawab pertanyaan; hanya panggil fungsi."
 )
 
@@ -1007,6 +1046,10 @@ _PLANNER_TOOLS = [
         "description": "Ambil data satu sel grid aktivitas dari ID sel.",
         "parameters": {"type": "object", "properties": {
             "hex_id": {"type": "integer", "description": "ID sel grid"}}, "required": ["hex_id"]}}},
+    {"type": "function", "function": {
+        "name": "get_project_info",
+        "description": "Ambil penjelasan tentang proyek EcoTraffic-GIS: apa itu, cara kerja skor aktivitas/emisi, sumber data, mode live vs replay, dan kemampuan Bang Jo.",
+        "parameters": {"type": "object", "properties": {}}}},
 ]
 
 
@@ -1028,10 +1071,32 @@ def _parse_tool_calls(message: dict) -> list[dict]:
 
 async def _plan_retrieval(message: str, history) -> list[dict] | None:
     """Ask the model which single dataset to fetch; ``None`` on any failure."""
+    return await _planner_call(message, history, _PLANNER_SYSTEM)
+
+
+async def _plan_repair(
+    message: str, history, failure_reason: str, candidates: list[str] | None
+) -> list[dict] | None:
+    """The single bounded re-pick: tell the planner what failed and why.
+
+    Kept separate from :func:`_plan_retrieval` so the normal path stays a plain
+    two-argument call and test doubles keep working.
+    """
+    hint = f"Percobaan sebelumnya gagal ({failure_reason}). "
+    if candidates:
+        hint += f"Kandidat yang mungkin: {', '.join(candidates)}. "
+    hint += (
+        "Pilih ulang fungsi yang paling tepat, atau get_project_info bila pertanyaannya "
+        "tentang proyek/dashboard."
+    )
+    return await _planner_call(message, history, f"{_PLANNER_SYSTEM}\n{hint}")
+
+
+async def _planner_call(message: str, history, system: str) -> list[dict] | None:
     if not settings.BANGJO_TOOL_ROUTING_ENABLED or not settings.GROQ_API_KEY:
         return None
     planner_turns = [
-        {"role": "system", "content": _PLANNER_SYSTEM},
+        {"role": "system", "content": system},
         *_history_turns(history),
         {"role": "user", "content": message},
     ]
@@ -1099,6 +1164,8 @@ async def _tool_calls_to_scope(db: AsyncSession, calls: list[dict], payload: "Ch
             return {"kind": "hex", "hex_id": int(args.get("hex_id"))}
         except (TypeError, ValueError):
             return None
+    if name == "get_project_info":
+        return {"kind": "meta"}
     return None
 
 
@@ -1213,6 +1280,31 @@ def _merge_contexts(contexts: list[dict]) -> dict:
     }
 
 
+def _repair_candidates(context: dict) -> list[str]:
+    """Short, context-derived name list for the one bounded repair re-pick."""
+    names: list[str] = []
+    for key in ("emisi_tertinggi", "emisi_terendah", "halte_terbaik", "halte_terburuk"):
+        for row in context.get(key) or []:
+            name = row.get("nama")
+            if name and name not in names:
+                names.append(name)
+    return names[:5]
+
+
+def _deterministic_repair(scope: dict, verdict: str) -> dict | None:
+    """Free fallback scope for an empty result, tried before any repair LLM call.
+
+    Only a whole-dataset overview can rescue an empty ranked scope; a degenerate
+    per-entity result is left to the bounded LLM repair, since guessing another
+    entity would silently answer a different question.
+    """
+    if verdict != "empty":
+        return None
+    if scope.get("kind") in ("hex_activity", "bus_stops", "hex"):
+        return {"kind": "overview"}
+    return None
+
+
 @router.post("/bangjo")
 async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     started = time.monotonic()
@@ -1260,11 +1352,15 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     context_started = time.monotonic()
     planner_used = False
+    # Retrieval-side LLM calls (initial plan + one repair) are capped at two per
+    # question; answer generation is separate and unchanged.
+    planner_calls = 0
     if not confident and _classify_intent(payload.message) != "greeting":
         # Deterministic routing only reached the active map selection, which may
         # be the previous turn's object. Let the model choose the dataset the
         # latest question actually asks about before narrating.
         calls = await _plan_retrieval(payload.message, history)
+        planner_calls += 1
         planned_scope = await _tool_calls_to_scope(db, calls, payload) if calls else None
         if planned_scope and planned_scope["kind"] == "ambiguous":
             timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
@@ -1273,11 +1369,41 @@ async def bangjo_chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         if planned_scope:
             scope = planned_scope
             planner_used = True
+    if not confident and not planner_used and gate.get("reason") == NO_SCOPE_MATCH:
+        # On-topic but neither the data scopes nor the planner found anything:
+        # decline as a last resort instead of narrating an unrelated fallback.
+        timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
+        logger.info("bangjo_llm_call", extra={**timings, "source": "declined"})
+        return {"needs_selection": False, "answer": None, "context_label": None,
+                "blocked": True, "message": DECLINE_MESSAGE}
     timings["planner_used"] = planner_used
     context, label, error = await _build_scope_context(db, scope, payload)
     if error is not None:
         timings["retrieval_ms"] = round((time.monotonic() - started) * 1000, 2)
         return error
+    verdict = verify_context_result(context, scope)
+    timings["verify"] = verdict
+    if verdict != "ok":
+        # Deterministic repair first (free): a whole-dataset overview can rescue
+        # an empty ranked scope without another LLM call.
+        fallback = _deterministic_repair(scope, verdict)
+        if fallback and fallback != scope:
+            fallback_context, fallback_label, fallback_error = await _build_scope_context(db, fallback, payload)
+            if fallback_error is None:
+                context, label, scope, planner_used = fallback_context, fallback_label, fallback, True
+                verdict = verify_context_result(context, scope)
+    if verdict != "ok" and planner_calls < 2:
+        # One bounded repair: re-pick a scope once, then stop. Never loops.
+        calls = await _plan_repair(
+            payload.message, history, failure_reason=verdict, candidates=_repair_candidates(context)
+        )
+        planner_calls += 1
+        repaired = await _tool_calls_to_scope(db, calls, payload) if calls else None
+        if repaired and repaired.get("kind") != "ambiguous" and repaired != scope:
+            repaired_context, repaired_label, repaired_error = await _build_scope_context(db, repaired, payload)
+            if repaired_error is None:
+                context, label, scope, planner_used = repaired_context, repaired_label, repaired, True
+    timings["planner_calls"] = planner_calls
     timings["context_ms"] = round((time.monotonic() - context_started) * 1000, 2)
     try:
         answer = await _ask_llm(payload.message, context, history, timings, style=style)
