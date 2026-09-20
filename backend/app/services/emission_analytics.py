@@ -36,17 +36,22 @@ class AnalyticsFilter:
     search: str | None = None
     quality_status: str | None = None
     source_mode: str | None = None
+    newest: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, "start", utc(self.start))
         object.__setattr__(self, "end", utc(self.end))
         if self.start >= self.end:
             raise ValueError("from must be earlier than to")
-        if self.end - self.start > timedelta(days=31):
+        if not self.newest and self.end - self.start > timedelta(days=31):
             raise ValueError("Maximum date range is 31 days")
 
     def bucket(self, requested: str | None = None) -> tuple[str, int]:
         hours = (self.end - self.start).total_seconds() / 3600
+        if self.newest and requested is None and hours > 2000:
+            from math import ceil
+            width = ceil(hours / 2000)
+            return f"{width}h", width * 3600
         name = requested or ("1m" if hours <= 1 else "5m" if hours <= 3 else "15m" if hours <= 12 else "1h")
         if name not in BUCKETS:
             raise ValueError("bucket must be one of: " + ", ".join(BUCKETS))
@@ -73,6 +78,23 @@ def source_mode_expression():
     ), "HISTORICAL")
 
 
+def source_scope(mode):
+    """Source provenance is independent from observation quality and date."""
+    from app.models.camera import Camera
+    from app.models.camera_road_segment import CameraRoadSegment
+    active_segments = select(CameraRoadSegment.road_segment_id).join(
+        Camera, Camera.id == CameraRoadSegment.camera_id
+    ).where(CameraRoadSegment.is_active.is_(True), Camera.is_active.is_(True), Camera.data_source == "LIVE")
+    live = (source_mode_expression() == "LIVE") & SegmentEmission.road_segment_id.in_(active_segments)
+    if mode == "ACTIVE_LIVE":
+        return live
+    if mode == "CSV_AND_LIVE":
+        return (source_mode_expression() == "CSV_HISTORY") | live
+    if mode == "HISTORICAL":
+        return source_mode_expression() == "CSV_HISTORY"
+    return source_mode_expression() == mode
+
+
 def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: bool = False):
     corridor_id, corridor_name = corridor_columns()
     stmt = select(
@@ -95,7 +117,7 @@ def fact_query(filters: AnalyticsFilter, *, latest: bool = False, exclude_live: 
         estimated = func.coalesce(SegmentEmission.vehicle_count_semantics, "") == "snapshot_occupancy"
         stmt = stmt.where(estimated if filters.quality_status == "estimated" else ~estimated)
     if filters.source_mode:
-        stmt = stmt.where(source_mode_expression() == filters.source_mode)
+        stmt = stmt.where(source_scope(filters.source_mode))
     if exclude_live:
         # Runs before the latest-per-segment DISTINCT so a segment whose newest
         # fact is LIVE still resolves to its newest static/REPLAY fact.

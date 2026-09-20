@@ -12,7 +12,7 @@ interface AnalyticsContextValue {
 const AnalyticsContext = createContext<AnalyticsContextValue | null>(null);
 
 export function EmissionAnalyticsProvider({ children }: { children: ReactNode }) {
-    const [filter, updateFilter] = useState<EmissionAnalyticsFilter>({ timeRange: "24h", segmentId: null, corridorId: null, from: null, to: null });
+    const [filter, updateFilter] = useState<EmissionAnalyticsFilter>({ timeRange: "newest", segmentId: null, corridorId: null, from: null, to: null });
     const [anchor, setAnchor] = useState(() => new Date().toISOString());
     const [options, setOptions] = useState<AnalyticsSegmentOption[]>([]);
     const [optionsError, setOptionsError] = useState<string | null>(null);

@@ -20,6 +20,7 @@ export default function AnalyticsFilters() {
     const corridorLabels = numberDuplicateNames(corridorRows.map((segment) => segment.corridor_name));
     const corridors = corridorRows.map((segment, index) => ({ id: segment.corridor_id, name: corridorLabels[index] }));
     const periodOptions = [
+        { value: "newest", label: "Terbaru · semua data" },
         ...(filter.from ? [{ value: "custom", label: "Rentang khusus", disabled: true }] : []),
         ...["1h", "3h", "12h", "24h"].map((value) => ({ value, label: value.replace("h", " jam") })),
     ];
@@ -55,7 +56,7 @@ export default function AnalyticsFilters() {
             <label>Sampai (waktu lokal)<input className={DATE_INPUT_CLASS} required type="datetime-local" name="to" /></label>
             <button className={ANALYTICS_BUTTON_CLASS} type="submit">Terapkan</button>
         </form></details>
-        <p className={ANALYTICS_NOTE_CLASS}>Periode: {fmtDateTimeId(query.from)} – {fmtDateTimeId(query.to)}</p>
+        <p className={ANALYTICS_NOTE_CLASS}>{query.newest ? "Semua data tersedia · historis CSV dan CCTV aktif" : `Periode: ${fmtDateTimeId(query.from)} – ${fmtDateTimeId(query.to)}`}</p>
         {(rangeError || optionsError) && <p role="alert" className={ANALYTICS_ERROR_CLASS}>{rangeError || optionsError}</p>}
         </div>
     </section>;

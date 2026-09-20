@@ -134,7 +134,7 @@ export async function fetchBangJoAutoInsight(entity: BangJoAutoInsightRequest): 
 
 function analyticsUrl(path: string, query: Partial<AnalyticsQuery> = {}, extra: Record<string, string> = {}) {
     const params = new URLSearchParams(extra);
-    for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
+    for (const [key, value] of Object.entries(query)) if (value) params.set(key, String(value));
     return `${API_BASE ?? ""}/api/analytics/emissions/${path}?${params}`;
 }
 
@@ -181,7 +181,7 @@ export async function deleteEmissionHistory(
     const params = new URLSearchParams({
         page: String(page), page_size: String(page_size), sort, order, scope, dry_run: String(dry_run),
     });
-    for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
+    for (const [key, value] of Object.entries(query)) if (value) params.set(key, String(value));
     const response = await observedFetch(`${API_BASE ?? ""}/api/analytics/emissions/history?${params}`, { method: "DELETE", cache: "no-store" });
     if (!response.ok) {
         const body: { detail?: unknown } = await response.json().catch(() => ({}));
