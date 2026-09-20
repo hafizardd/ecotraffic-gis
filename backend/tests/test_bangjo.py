@@ -1368,6 +1368,13 @@ def test_system_prompt_documents_halte_quality_and_hour_alignment():
     assert "halte terbaik/terburuk" in prompt
 
 
+def test_system_prompt_allows_light_tables_but_forbids_headers():
+    prompt = bangjo._system_prompt("general")
+
+    assert "tabel markdown ringan" in prompt
+    assert "Jangan pakai heading" in prompt
+
+
 # --- prompt budgeting / context compaction ----------------------------------
 
 def test_compact_context_summarizes_series_unless_trend_question():
