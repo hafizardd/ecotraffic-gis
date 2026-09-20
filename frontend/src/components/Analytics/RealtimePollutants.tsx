@@ -27,7 +27,7 @@ export default function RealtimePollutants() {
         const controller = new AbortController();
         const load = async () => {
             try {
-                const value = await fetchLatestSegmentEmissions({ segment_id: segmentId ?? undefined, corridor_id: corridorId ?? undefined }, controller.signal);
+                const value = await fetchLatestSegmentEmissions({ source_mode: "CSV_AND_LIVE", segment_id: segmentId ?? undefined, corridor_id: corridorId ?? undefined }, controller.signal);
                 if (!controller.signal.aborted) setResult({ key, value });
             } catch (error) {
                 if (!controller.signal.aborted) setResult({ key, error: error instanceof Error ? error.message : "Gagal memuat emisi terkini" });

@@ -5,7 +5,6 @@ import Drawer from "@/components/ui/Drawer";
 import Select from "@/components/ui/Select";
 import { useEmissionAnalytics } from "@/context/EmissionAnalyticsContext";
 import { numberDuplicateNames } from "@/utils/emissionAnalytics";
-import { formatSourceMode } from "@/utils/format";
 import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS } from "@/styles/tailwind";
 
 export interface HistoryFilters {
@@ -17,14 +16,8 @@ export interface HistoryFilters {
 }
 export const EMPTY_HISTORY_FILTERS: HistoryFilters = { corridorId: null, segmentId: null, sourceMode: null, from: null, to: null };
 
-// SYNTHETIC is excluded server-side (dev seed only), so it is intentionally absent.
-// REPLAY is the precomputed 54-camera dataset and is selectable.
 const SOURCE_OPTIONS = [
-    { value: "", label: "Semua sumber" },
-    { value: "LIVE", label: formatSourceMode("LIVE") },
-    { value: "HISTORICAL", label: formatSourceMode("HISTORICAL") },
-    { value: "SNAPSHOT_REAL", label: formatSourceMode("SNAPSHOT_REAL") },
-    { value: "REPLAY", label: formatSourceMode("REPLAY") },
+    { value: "", label: "CCTV aktif · Live" },
 ];
 
 function toLocalInput(value: string | null): string {
