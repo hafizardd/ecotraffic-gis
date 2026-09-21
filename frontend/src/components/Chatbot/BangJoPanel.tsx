@@ -6,6 +6,8 @@ import { BangJoMessage } from "@/types";
 import BangJoMessageBubble from "./BangJoMessage";
 import BangJoComposer from "./BangJoComposer";
 import BangJoQuickQuestions, { type QuickQuestionTarget } from "./BangJoQuickQuestions";
+import BangJoSuggestedQuestions from "./BangJoSuggestedQuestions";
+import type { SuggestedTimeMode } from "@/utils/bangjoSuggestedQuestions";
 import { PANEL_CLOSE_CLASS, PANEL_HEADER_CLASS, PANEL_ICON_CLASS, PANEL_TITLE_CLASS } from "@/styles/tailwind";
 
 interface BangJoPanelProps {
@@ -13,12 +15,13 @@ interface BangJoPanelProps {
     isTyping: boolean;
     minimized: boolean;
     quickTarget: QuickQuestionTarget;
+    timeMode: SuggestedTimeMode;
     onSend: (text: string) => void;
     onMinimize: () => void;
     onClose: () => void;
 }
 
-export default function BangJoPanel({ messages, isTyping, minimized, quickTarget, onSend, onMinimize, onClose }: BangJoPanelProps) {
+export default function BangJoPanel({ messages, isTyping, minimized, quickTarget, timeMode, onSend, onMinimize, onClose }: BangJoPanelProps) {
     const panelRef = useRef<HTMLDivElement>(null);
     const started = messages.length > 0;
 
@@ -78,11 +81,12 @@ export default function BangJoPanel({ messages, isTyping, minimized, quickTarget
                             <span className="mb-1 block text-[9px] font-bold tracking-widest text-(--selection) uppercase">Konteks spasial</span>
                             <p className="m-0 text-[11px] leading-[1.65] text-(--secondary)">Pilih objek di peta atau tanyakan tentang data lalu lintas, emisi, dan prioritas intervensi.</p>
                         </div>}
-                        {!started && <BangJoQuickQuestions target={quickTarget} onSelect={onSend} />}
+                        {!started && <BangJoSuggestedQuestions target={quickTarget} timeMode={timeMode} onSelect={onSend} />}
                         <div className="flex flex-col gap-3" aria-live="polite">
                             {messages.map((message) => <BangJoMessageBubble key={message.id} message={message} />)}
                             {isTyping && <div className="flex self-start gap-1 rounded-sm border border-(--border) bg-(--surface-raised) px-3 py-2.5" role="status" aria-label="Bang Jo sedang menyusun jawaban"><i className="h-1 w-1 animate-[bangjo-pulse_1.1s_ease-in-out_infinite] rounded-full bg-(--muted) motion-reduce:animate-none" /><i className="h-1 w-1 animate-[bangjo-pulse_1.1s_ease-in-out_infinite] rounded-full bg-(--muted) [animation-delay:0.18s] motion-reduce:animate-none" /><i className="h-1 w-1 animate-[bangjo-pulse_1.1s_ease-in-out_infinite] rounded-full bg-(--muted) [animation-delay:0.36s] motion-reduce:animate-none" /></div>}
                         </div>
+                        {started && !isTyping && <BangJoQuickQuestions target={quickTarget} onSelect={onSend} />}
                     </div>
                     <BangJoComposer disabled={isTyping} onSend={onSend} />
                     <p className="m-0 px-4 pt-0 pb-3 text-[9px] leading-4 text-(--muted)">Jawaban mengikuti data dan konteks pilihan yang tersedia di dashboard.</p>

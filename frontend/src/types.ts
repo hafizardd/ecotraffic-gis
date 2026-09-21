@@ -189,14 +189,14 @@ export type PollutantRates = Record<PollutantKey, number | null>;
 export type VehicleRates = Record<"car" | "motorcycle" | "bus" | "truck", number>;
 
 export interface EmissionAnalyticsFilter {
-    timeRange: "1h" | "3h" | "12h" | "24h";
+    timeRange: "newest" | "1h" | "3h" | "12h" | "24h";
     segmentId: string | null;
     corridorId: string | null;
     from: string | null;
     to: string | null;
 }
 export interface AnalyticsQuery {
-    from: string; to: string; segment_id?: string; corridor_id?: string;
+    from?: string; to?: string; newest?: boolean; segment_id?: string; corridor_id?: string;
     search?: string; quality_status?: "observed" | "estimated"; source_mode?: string;
 }
 export type EmissionTrendPoint = Record<`${PollutantKey}_kg_h`, number | null> & {
@@ -211,7 +211,7 @@ export interface PollutantComposition { pollutant: string; key: PollutantKey; kg
 export interface RealtimeSegmentEmission {
     id: string; segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
     period_start: string; period_end: string; observed_at: string; processed_at: string;
-    calculation_version: number; source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY" | "SNAPSHOT_REAL";
+    calculation_version: number; source_mode: "CSV_HISTORY" | "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY" | "SNAPSHOT_REAL";
     vehicle_count_semantics: "interval_count" | "snapshot_occupancy" | "vehicles_per_hour" | "unknown";
     calculation_mode: "flow_based_segment" | "live_occupancy_estimate";
     quality_status: "observed" | "estimated";
@@ -235,7 +235,7 @@ export interface EmissionHistoryRecord {
     id: string;
     period_start: string; period_end: string; observed_at: string; processed_at: string;
     segment_id: string; segment_name: string; corridor_id: string; corridor_name: string;
-    source_mode: "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY" | "SNAPSHOT_REAL";
+    source_mode: "CSV_HISTORY" | "LIVE" | "HISTORICAL" | "SYNTHETIC" | "REPLAY" | "SNAPSHOT_REAL";
     quality_status: "observed" | "estimated";
     freshness_status: "fresh" | "stale";
     vehicle_count_semantics: string;
@@ -259,7 +259,7 @@ export interface EmissionHistoryDeleteResponse {
 export interface LatestSegmentEmissionsResponse {    timestamp: string; segments: RealtimeSegmentEmission[];
     summary: { emissions_kg_h: PollutantRates; segment_count: number; estimated_segment_count: number;
         freshness_seconds: number | null; stale_after_seconds: number; observed_at: string | null;
-        processed_at: string | null; source_mode: "LIVE" | "HISTORICAL";
+        processed_at: string | null; source_mode: "CSV_HISTORY" | "LIVE" | "HISTORICAL";
     };
 }
 // Historical CCTV point value borrowed from the camera's mapped segment fact

@@ -1,9 +1,11 @@
 import type { AnalyticsQuery, EmissionAnalyticsFilter, RealtimeSegmentEmission } from "../types";
 
 export function analyticsQuery(filter: EmissionAnalyticsFilter, now: string): AnalyticsQuery {
+    const scope = { source_mode: "CSV_AND_LIVE", ...(filter.segmentId ? { segment_id: filter.segmentId } : {}), ...(filter.corridorId ? { corridor_id: filter.corridorId } : {}) };
+    if (filter.timeRange === "newest" && !filter.from && !filter.to) return { ...scope, newest: true };
     const to = filter.to ?? now;
     const from = filter.from ?? new Date(Date.parse(to) - parseInt(filter.timeRange) * 3600000).toISOString();
-    return { from, to, ...(filter.segmentId ? { segment_id: filter.segmentId } : {}), ...(filter.corridorId ? { corridor_id: filter.corridorId } : {}) };
+    return { ...scope, from, to };
 }
 
 export function isNewerSegment(incoming: Pick<RealtimeSegmentEmission, "observed_at" | "processed_at">, current?: Pick<RealtimeSegmentEmission, "observed_at" | "processed_at">): boolean {

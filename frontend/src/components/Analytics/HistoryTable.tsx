@@ -16,8 +16,8 @@ import type { AnalyticsQuery, EmissionHistoryRecord, VehicleRates } from "@/type
 import { ANALYTICS_BUTTON_CLASS, ANALYTICS_ERROR_CLASS, ANIMATE_IN_CLASS, PAGE_CARD_CLASS, PRIORITY_TABLE_CLASS, TABLE_WRAP_CLASS, UNAVAILABLE_STATE_CLASS } from "@/styles/tailwind";
 
 type SortKey = "period_start" | "segment_name";
-type Tab = "observed" | "estimated";
-const TABS: { key: Tab; label: string }[] = [{ key: "observed", label: "Terukur" }, { key: "estimated", label: "Perkiraan" }];
+type Tab = "all" | "observed" | "estimated";
+const TABS: { key: Tab; label: string }[] = [{ key: "all", label: "Semua data Live" }, { key: "observed", label: "Terukur" }, { key: "estimated", label: "Perkiraan" }];
 const VEHICLES: { key: keyof VehicleRates; label: string }[] = [
     { key: "car", label: "Mobil" }, { key: "motorcycle", label: "Motor" },
     { key: "bus", label: "Bus" }, { key: "truck", label: "Truk" },
@@ -65,14 +65,14 @@ function DetailPanel({ record }: { record: EmissionHistoryRecord }) {
 
 export default function HistoryTable() {
     const { query, filter, setFilter, refresh } = useEmissionAnalytics();
-    const [tab, setTab] = useState<Tab>("observed");
+    const [tab, setTab] = useState<Tab>("all");
     const [searchInput, setSearchInput] = useState("");
     const [search, setSearch] = useState("");
     const [sourceMode, setSourceMode] = useState<string | null>(null);
     const [pageSize, setPageSize] = useState(25);
     const [sort, setSort] = useState<SortKey>("period_start");
     const [order, setOrder] = useState<"asc" | "desc">("desc");
-    const [pages, setPages] = useState<{ key: string; values: Record<Tab, number> }>({ key: "", values: { observed: 1, estimated: 1 } });
+    const [pages, setPages] = useState<{ key: string; values: Record<Tab, number> }>({ key: "", values: { all: 1, observed: 1, estimated: 1 } });
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [reload, setReload] = useState(0);
     const [expanded, setExpanded] = useState<string | null>(null);
@@ -87,16 +87,16 @@ export default function HistoryTable() {
     const sourceQuery: AnalyticsQuery = useMemo(() => ({
         ...query,
         ...(search ? { search } : {}),
-        ...(sourceMode ? { source_mode: sourceMode } : {}),
-    }), [query, search, sourceMode]);
-    const effectiveQuery: AnalyticsQuery = useMemo(() => ({ ...sourceQuery, quality_status: tab }), [sourceQuery, tab]);
+        source_mode: "ACTIVE_LIVE",
+    }), [query, search]);
+    const effectiveQuery: AnalyticsQuery = useMemo(() => ({ ...sourceQuery, quality_status: tab === "all" ? undefined : tab }), [sourceQuery, tab]);
 
     // Totals are learned from each response so a tab's page can be clamped to
     // its own page count. Set from the fetch promise (not an effect) to keep the
     // render pure; pages are keyed to sourceKey, so any shared input change
     // derives page 1 while switching tabs keeps each tab's own page.
-    const [totals, setTotals] = useState<Record<Tab, number>>({ observed: 0, estimated: 0 });
-    const tabPages = pages.key === sourceKey ? pages.values : { observed: 1, estimated: 1 };
+    const [totals, setTotals] = useState<Record<Tab, number>>({ all: 0, observed: 0, estimated: 0 });
+    const tabPages = pages.key === sourceKey ? pages.values : { all: 1, observed: 1, estimated: 1 };
     const knownPages = Math.max(1, Math.ceil((totals[tab] || 1) / pageSize));
     const requestedPage = Math.min(tabPages[tab], knownPages);
     const load = useCallback((signal: AbortSignal) =>
@@ -114,7 +114,7 @@ export default function HistoryTable() {
 
     const goPage = useCallback((next: number) => {
         setPages((current) => {
-            const values = current.key === sourceKey ? current.values : { observed: 1, estimated: 1 };
+            const values = current.key === sourceKey ? current.values : { all: 1, observed: 1, estimated: 1 };
             return { key: sourceKey, values: { ...values, [tab]: next } };
         });
         setExpanded(null);
@@ -140,7 +140,7 @@ export default function HistoryTable() {
         tabRefs.current[nextTab]?.focus();
     }
     function handleDeleted() {
-        setPages({ key: sourceKey, values: { observed: 1, estimated: 1 } });
+        setPages({ key: sourceKey, values: { all: 1, observed: 1, estimated: 1 } });
         setReload((value) => value + 1);
         refresh();
         setExpanded(null);

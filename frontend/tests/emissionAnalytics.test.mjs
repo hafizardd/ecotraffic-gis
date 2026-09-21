@@ -87,3 +87,11 @@ test("chart ticks add calendar context when an analytical range spans days", () 
     assert.match(month, /10\s+Sep/i);
     assert.equal(fmtChartTickId("invalid"), "Data tidak tersedia");
 });
+
+test("newest includes CSV and live without an implicit date cutoff", () => {
+    const query = analyticsQuery({ ...filter, timeRange: "newest" }, now);
+    assert.equal(query.newest, true);
+    assert.equal(query.source_mode, "CSV_AND_LIVE");
+    assert.equal(query.from, undefined);
+    assert.equal(query.to, undefined);
+});

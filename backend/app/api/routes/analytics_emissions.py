@@ -7,7 +7,7 @@ import logging
 from tempfile import SpooledTemporaryFile
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,7 +23,7 @@ from app.services.emission_analytics import (
     AnalyticsFilter, EXPORT_FIELDS, HISTORY_SORTS, POLLUTANTS, UNITS, VEHICLE_KEYS, composition_query,
     corridor_columns, export_row, fact_query, history_id_query, history_query, serialize_fact,
     serialize_history, top_query, trend_query, vehicle_composition, vehicle_ranking_query,
-    vehicle_series_query, vehicle_totals_query,
+    vehicle_series_query, vehicle_totals_query, source_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,17 +43,34 @@ async def analytics_db():
 
 
 async def get_filters(
+    request: Request,
     from_: datetime | None = Query(None, alias="from"), to: datetime | None = Query(None),
     segment_id: str | None = Query(None, max_length=100), corridor_id: str | None = Query(None, max_length=255),
     search: str | None = Query(None, max_length=100),
     quality_status: Literal["observed", "estimated"] | None = Query(None),
     source_mode: str | None = Query(None, max_length=40),
+    newest: bool = Query(True),
     db=Depends(analytics_db),
 ):
+    if request.url.path.endswith(("/history", "/export")):
+        source_mode = "ACTIVE_LIVE"
+    elif source_mode is None and not request.url.path.endswith("/historical-cameras"):
+        source_mode = "CSV_AND_LIVE"
+    automatic = newest and from_ is None and to is None
+    if automatic:
+        bounds = select(func.min(SegmentEmission.period_start), func.max(SegmentEmission.period_end)).join(RoadSegment)
+        if source_mode:
+            bounds = bounds.where(source_scope(source_mode))
+        if segment_id:
+            bounds = bounds.where(RoadSegment.road_segment_id == segment_id)
+        if corridor_id:
+            bounds = bounds.where(corridor_columns()[0] == corridor_id)
+        first, last = (await db.execute(bounds)).one()
+        from_, to = first, last
     end = to or datetime.now(timezone.utc)
     try:
         filters = AnalyticsFilter(from_ or end - timedelta(hours=24), end, segment_id, corridor_id,
-            search, quality_status, source_mode)
+            search, quality_status, source_mode, newest=automatic)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if segment_id and not (await db.execute(select(RoadSegment.id).where(RoadSegment.road_segment_id == segment_id).limit(1))).first():
@@ -61,6 +78,11 @@ async def get_filters(
     if corridor_id and not (await db.execute(select(RoadSegment.id).where(corridor_columns()[0] == corridor_id).limit(1))).first():
         raise HTTPException(404, "Corridor not found")
     return filters
+
+
+async def get_history_filters(filters: AnalyticsFilter = Depends(get_filters)):
+    from dataclasses import replace
+    return replace(filters, source_mode="ACTIVE_LIVE")
 
 
 def envelope(filters: AnalyticsFilter):
@@ -202,7 +224,7 @@ async def vehicles(ranking_limit: int = Query(8, ge=1, le=50), bucket: str | Non
 @router.get("/history")
 async def history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=200),
     sort: str = Query("period_start"), order: Literal["asc", "desc"] = "desc",
-    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    filters: AnalyticsFilter = Depends(get_history_filters), db=Depends(analytics_db)):
     if sort not in HISTORY_SORTS:
         raise HTTPException(422, "sort must be one of: " + ", ".join(HISTORY_SORTS))
     query = history_query(filters, sort, order)
@@ -237,7 +259,7 @@ async def _evict_segment_latest_states(segment_ids):
 async def delete_history(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=200),
     sort: str = Query("period_start"), order: Literal["asc", "desc"] = "desc",
     scope: Literal["beyond", "page"] = "beyond", dry_run: bool = False,
-    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    filters: AnalyticsFilter = Depends(get_history_filters), db=Depends(analytics_db)):
     if sort not in HISTORY_SORTS:
         raise HTTPException(422, "sort must be one of: " + ", ".join(HISTORY_SORTS))
     query = history_id_query(filters, sort, order)
@@ -269,7 +291,7 @@ async def delete_history(page: int = Query(1, ge=1), page_size: int = Query(25, 
 
 @router.get("/export")
 async def export(format: Literal["csv", "json"] = "csv",
-    filters: AnalyticsFilter = Depends(get_filters), db=Depends(analytics_db)):
+    filters: AnalyticsFilter = Depends(get_history_filters), db=Depends(analytics_db)):
     # Spool while the request's DB dependency is open. FastAPI versions that
     # close yielded dependencies before streaming must not close our cursor.
     output = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+", encoding="utf-8", newline="")

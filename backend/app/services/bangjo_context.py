@@ -813,3 +813,49 @@ def activity_overview_payload(context: dict) -> dict:
         ),
     }
 
+
+VERIFY_OK = "ok"
+VERIFY_EMPTY = "empty"
+VERIFY_DEGENERATE = "degenerate"
+
+
+def verify_context_result(context: dict | None, scope: dict | None = None) -> str:
+    """Cheap, non-LLM sanity check on a built context before answering.
+
+    Returns ``ok``, ``empty`` (nothing retrieved for the resolved scope), or
+    ``degenerate`` (scope resolved but every metric is null/zero, which usually
+    means the entity misresolved rather than a genuine "nothing here" answer).
+    A result that carries real evidence is never flagged.
+    """
+    if not context:
+        return VERIFY_EMPTY
+    kind = (scope or {}).get("kind") or context.get("scope")
+    if kind is None and "segment" in context:
+        kind = "segment"
+    if kind == "meta":
+        return VERIFY_OK
+    if kind == "overview":
+        if not context.get("jumlah_koridor"):
+            return VERIFY_EMPTY
+        ranked = context.get("emisi_tertinggi") or context.get("emisi_terendah") or []
+        if any(row.get("total_emisi") is not None for row in ranked):
+            return VERIFY_OK
+        return VERIFY_DEGENERATE
+    if kind == "hex_activity":
+        return VERIFY_OK if context.get("jumlah_sel_dinilai") else VERIFY_EMPTY
+    if kind == "bus_stops":
+        return VERIFY_OK if context.get("jumlah_dinilai") else VERIFY_EMPTY
+    if kind == "segment":
+        segment = context.get("segment") or {}
+        totals = segment.get("pollutant_totals") or {}
+        if any(isinstance(value, (int, float)) and value for value in totals.values()):
+            return VERIFY_OK
+        if context.get("hourly_series"):
+            return VERIFY_OK
+        return VERIFY_DEGENERATE
+    if kind == "hex":
+        return VERIFY_OK if context.get("hex_cell") else VERIFY_EMPTY
+    if kind == "stop":
+        return VERIFY_OK if context.get("stop") else VERIFY_EMPTY
+    return VERIFY_OK
+
